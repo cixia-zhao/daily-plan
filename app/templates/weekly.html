@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+{% block title %}七日复盘 · 今日航线{% endblock %}
+{% block page %}weekly{% endblock %}
+{% block content %}
+<section class="hero compact"><div><p class="eyebrow">SEVEN ACTUAL DAYS</p><h1>七日复盘</h1><p>看真实发生了什么，不拿理想状态审判自己。</p></div></section>
+<section class="metrics" id="weekly-metrics">
+  <article><span>完成率</span><strong id="metric-rate">—</strong><small>已确认任务</small></article>
+  <article><span>完成任务</span><strong id="metric-completed">—</strong><small id="metric-total">共 — 项</small></article>
+  <article><span>实际投入</span><strong id="metric-time">—</strong><small id="metric-planned">计划 —</small></article>
+  <article><span>复盘天数</span><strong id="metric-days">—</strong><small>最近 7 个自然日</small></article>
+</section>
+<section class="panel"><p class="step">本周建议</p><h2 id="weekly-advice">正在读取数据…</h2><p class="muted">系统不会自动加量或减量。建议只是给你审阅的参考。</p></section>
+{% endblock %}

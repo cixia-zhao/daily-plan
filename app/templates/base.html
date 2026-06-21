@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}今日航线{% endblock %}</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body data-page="{% block page %}today{% endblock %}">
+  <header class="site-header">
+    <a class="brand" href="/"><span class="brand-mark">✓</span><span>今日航线</span></a>
+    <nav aria-label="主导航">
+      <a href="/" data-nav="today">今天</a>
+      <a href="/weekly" data-nav="weekly">七日复盘</a>
+      <a href="/settings" data-nav="settings">设置</a>
+    </nav>
+  </header>
+  <main>{% block content %}{% endblock %}</main>
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  <script src="/static/app.js" defer></script>
+</body>
+</html>

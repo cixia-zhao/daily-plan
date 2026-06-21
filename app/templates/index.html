@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% block title %}今天 · 今日航线{% endblock %}
+{% block page %}today{% endblock %}
+{% block content %}
+<section class="hero">
+  <div><p class="eyebrow">DAILY REVIEW</p><h1>先看清今天，再决定做什么。</h1><p>AI 只给草稿，最后的决定永远在你手里。</p></div>
+  <label class="date-chip">日期 <input id="plan-date" type="date"></label>
+</section>
+
+<section id="carryover-section" class="panel hidden">
+  <div class="section-heading"><div><p class="step">先处理昨天</p><h2>待审池</h2></div><span id="carryover-count" class="count">0</span></div>
+  <p class="muted">未完成不是债务。选择重排、拆小，或者干脆放下。</p>
+  <div id="carryover-list" class="stack"></div>
+</section>
+
+<section class="panel checkin-panel">
+  <div class="section-heading"><div><p class="step">01 · 晨间校准</p><h2>今天是什么手感？</h2></div></div>
+  <form id="checkin-form">
+    <fieldset><legend>精力档</legend><div class="segmented">
+      <label><input type="radio" name="energy" value="minimum"><span>保底<small>只求不断线</small></span></label>
+      <label><input type="radio" name="energy" value="normal" checked><span>普通<small>稳稳推进</small></span></label>
+      <label><input type="radio" name="energy" value="ample"><span>充足<small>可以多走一步</small></span></label>
+    </div></fieldset>
+    <div class="form-grid">
+      <label>可用时间<select id="available-minutes"><option value="90">约 1.5 小时</option><option value="180" selected>约 3 小时</option><option value="240">约 4 小时</option><option value="300">5 小时以上</option></select></label>
+      <label>当天类型<select id="day-type"><option value="normal">普通日</option><option value="early_class">早课日</option></select></label>
+    </div>
+    <label class="alert-check"><input id="knee-alert" type="checkbox"><span><strong>今天膝盖有异常</strong><small>疼痛、卡住、打软、肿胀或明显不稳</small></span></label>
+    <button class="primary wide" type="submit"><span>生成今天的草稿</span><span aria-hidden="true">→</span></button>
+  </form>
+</section>
+
+<section id="plan-section" class="panel hidden">
+  <div class="section-heading"><div><p class="step">02 · 人工审阅</p><h2 id="plan-title">任务草稿</h2></div><span id="plan-status" class="status">草稿</span></div>
+  <div id="safety-notice" class="notice warning hidden"></div>
+  <div id="degraded-notice" class="notice hidden">AI 暂时没有成功响应，当前使用稳定的本地规则版。</div>
+  <div id="task-list" class="task-list"></div>
+  <div id="draft-actions" class="actions"><button id="save-draft" class="secondary">保存修改</button><button id="approve-plan" class="primary">确认今日清单</button></div>
+  <div class="methods"><h3>今天的执行方法</h3><ul id="method-list"></ul></div>
+</section>
+
+<section id="review-section" class="panel">
+  <div class="section-heading"><div><p class="step">03 · 晚间收束</p><h2>三句话就够了</h2></div></div>
+  <form id="review-form" class="review-form">
+    <label>今天最容易分心的点<input name="distraction" maxlength="300" placeholder="例如：等 AI 时想刷视频"></label>
+    <label>今天有效的办法<input name="effective_method" maxlength="300" placeholder="例如：把手机放进书包"></label>
+    <label>明天继续保持的一条<input name="tomorrow_focus" maxlength="300" placeholder="例如：每块开始前先写目标"></label>
+    <button class="secondary" type="submit">保存今天的复盘</button>
+  </form>
+</section>
+{% endblock %}
