@@ -132,9 +132,16 @@ bash ./termux-install.sh
 
 - 安装 `python`
 - 安装 `git`
-- 升级 `pip`
 - 安装项目依赖
 - 初始化 `.env`
+
+注意：Termux 自带的 `python-pip` 不能用 `pip install --upgrade pip` 直接升级，所以如果你以前见过这条报错：
+
+```text
+ERROR: Installing pip is forbidden, this will break the python-pip package (termux).
+```
+
+那不是你操作错了，而是旧脚本不兼容。更新后的 `termux-install.sh` 已经去掉了这一步。
 
 这一段第一次可能会比较久，属于正常现象。
 

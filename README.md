@@ -63,6 +63,14 @@ cd ~/daily-plan
 bash ./termux-install.sh
 ```
 
+如果你之前卡在：
+
+```text
+ERROR: Installing pip is forbidden, this will break the python-pip package (termux).
+```
+
+那是旧版安装脚本里的兼容性问题，不是手机环境本身坏了；现在仓库里的 `termux-install.sh` 已经修复。
+
 ### 每次启动
 
 ```bash

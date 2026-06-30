@@ -7,8 +7,8 @@ echo "[1/4] 安装 Python 和 Git"
 pkg update -y
 pkg install -y python git
 
-echo "[2/4] 升级 pip"
-python -m pip install --upgrade pip
+echo "[2/4] 检查 pip"
+python -m pip --version >/dev/null
 
 echo "[3/4] 安装项目依赖"
 python -m pip install -e ".[dev]"
