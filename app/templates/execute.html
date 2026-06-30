@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+{% block title %}执行台 · 今日航线{% endblock %}
+{% block page %}execute{% endblock %}
+{% block content %}
+<section class="hero compact">
+  <div><p class="eyebrow">EXECUTION DESK</p><h1>执行台</h1><p>白天只管切换任务、标签和中断，晚上再回头看结构。</p></div>
+  <div class="date-actions">
+    <button id="execute-stop" class="ghost-button" type="button">停止当前计时</button>
+    <div class="date-chip date-chip-button">
+      <span>日期</span>
+      <button id="execute-date-button" class="date-trigger" type="button"></button>
+      <input id="execute-date" type="hidden">
+    </div>
+  </div>
+</section>
+
+<section id="execute-empty-state" class="panel">
+  <div class="section-heading"><div><p class="step">01 · 执行前检查</p><h2>先确认今日清单</h2></div></div>
+  <p id="execute-empty-message" class="muted">当前日期还没有可执行的已确认清单。</p>
+</section>
+
+<section id="execute-panel" class="panel hidden">
+  <div class="section-heading">
+    <div><p class="step">01 · 白天执行</p><h2>一次只追踪一个激活项</h2></div>
+    <span id="execute-active-badge" class="status">当前空闲</span>
+  </div>
+  <div class="execute-layout">
+    <div class="execute-main">
+      <div id="execute-mobile-toolbar" class="execution-mobile-toolbar hidden">
+        <button id="mobile-counted-toggle" class="ghost-button" type="button">计总</button>
+        <button id="mobile-interrupt-toggle" class="ghost-button" type="button">中断</button>
+        <button id="mobile-return-effective" class="ghost-button" type="button" disabled>切回有效</button>
+      </div>
+      <div id="mobile-counted-panel" class="execution-mobile-label-panel hidden">
+        <div id="mobile-counted-label-list" class="pill-list"></div>
+      </div>
+      <div id="mobile-interrupt-panel" class="execution-mobile-label-panel hidden">
+        <div id="mobile-interrupt-label-list" class="pill-list"></div>
+      </div>
+      <div id="execute-task-list" class="execution-task-list"></div>
+      <div class="execution-label-zone">
+        <div class="execution-label-group">
+          <h3>计总标签</h3>
+          <div id="counted-label-list" class="pill-list"></div>
+        </div>
+        <div class="execution-label-group">
+          <h3>中断标签</h3>
+          <div id="interrupt-label-list" class="pill-list"></div>
+        </div>
+      </div>
+    </div>
+    <aside class="execute-side">
+      <div class="panel compact-panel">
+        <h3>任务看板</h3>
+        <div id="execute-task-board" class="execution-board-grid"></div>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<section id="timeline-panel" class="panel hidden">
+  <div class="section-heading">
+    <div><p class="step">02 · 时间轴</p><h2>允许补记，也允许回头修正</h2></div>
+    <button id="add-segment" class="ghost-button" type="button">补一段</button>
+  </div>
+  <div id="timeline-list" class="timeline-list"></div>
+</section>
+
+<section id="execute-submit-panel" class="panel hidden">
+  <div class="section-heading"><div><p class="step">03 · 收尾提交</p><h2>勾完成，再交给复盘页</h2></div></div>
+  <div id="execute-submit-list" class="execution-task-list"></div>
+  <div class="actions">
+    <button id="execute-submit" class="primary" type="button">提交今日情况</button>
+  </div>
+</section>
+{% endblock %}

@@ -1,204 +1,138 @@
-# 🌟 项目交接文档
+# 项目交接文档
 
-> 最后更新：2026-06-21
-> 交接方向：Codex → Antigravity IDE
+> 最后更新：2026-06-30
+> 当前环境：Codex / 常规环境
+> 交接方向：先把“本地执行记录 + 手机实用链路”跑顺，再根据首日真实使用反馈微调
 
-## 📌 1. 项目概览与环境
+## 1. 项目概览与环境
 
-- **项目名称**：今日航线
-- **工作区路径**：`C:\Users\cixia\Desktop\daily plan`
-- **项目定位**：单用户、本地优先的每日任务审阅与执行 Web App
-- **核心流程**：晨间三项输入 → 规则候选 → 可选 DeepSeek 调整 → 人工审阅 → 确认清单 → 勾选执行 → 晚间复盘
-- **技术栈**：Python 3.11+、FastAPI、Jinja2、原生 JavaScript/CSS、SQLite、httpx、pytest
-- **运行数据**：默认保存到 `data/daily_plan.db`
-- **当前状态**：第一阶段核心闭环已实现；真实 DeepSeek 接口、PushDeer、Termux 尚未完成
-- **版本管理**：当前目录不是 Git 仓库
+- 项目名称：今日航线
+- 工作区路径：`C:\Users\cixia\Desktop\daily plan`
+- 技术栈：FastAPI + Jinja2 + SQLite + 原生 JavaScript / CSS
+- 当前产品定位：单用户、本地优先的每日任务执行与复盘 Web App
+- 当前主流程：晨间输入 → 生成草稿 → 人工确认 → 执行台记录时间段 → 晚间提交与复盘 → 需要时复制给 GPT 协作
+- Windows 启动方式：双击 `启动今日航线.cmd`，或手动运行 `uvicorn app.main:app --reload`
+- 安卓手机启动方式：Termux 进入项目目录后执行 `bash ./termux-start.sh`，浏览器访问 `http://127.0.0.1:8000`
+- 当前“传到手机”方式：电脑运行 `share-to-phone.ps1 -Serve` 打包并临时开下载地址，手机下载压缩包后解压到 `/storage/emulated/0/daily-plan`
+- 构建与部署现状：没有前端构建链，也没有正式 APK；当前最稳方案仍是“Termux 起后端 + 手机浏览器访问”
 
-### 环境切换纪律
+## 2. 本次会话已完成的工作
 
-- 当前交接目标是 Antigravity IDE；接手后应按根目录 `AGENTS.md` 判断当前环境。
-- Antigravity 环境只允许读取 `.gemini/antigravity-ide/skills/`，不要读取 `.agents/skills/`。
-- 本文记录的是项目事实，不替代 `AGENTS.md` 中的对齐、计划、审批、测试和验证流程。
+### A. 执行台与任务时间看板第一版
 
-### 首选运行方式
+**文件**：`app/main.py`、`app/api.py`、`app/database.py`、`app/models.py`、`app/schemas.py`、`app/templates/base.html`、`app/templates/index.html`、`app/templates/execute.html`、`app/templates/review.html`、`app/templates/settings.html`、`app/static/app.js`、`app/static/style.css`、`tests/test_api.py`、`tests/test_ui_and_settings.py`
 
-1. 首次安装依赖：`python -m pip install -e ".[dev]"`
-2. 如需 AI：复制 `.env.example` 为 `.env` 并填写 DeepSeek 配置。
-3. 日常启动：双击根目录 `启动今日航线.cmd`。
-4. 启动器会保留可见日志窗口，服务就绪后自动打开 `http://127.0.0.1:8000`。
-5. 停止服务：在启动窗口按 `Ctrl+C` 或关闭窗口。
+- 新增独立 `/execute` 页面，白天执行不再主要依赖今天页，而是在执行台里开始任务有效时间、切换标签、补记时间段、勾选完成并直接提交今日情况。
+- 新增 `task_execution_segments` 时间段模型，按 `effective`、`counted_label`、`interrupt_label` 三类存明细；任务总时间实时聚合为“有效时间 + 计总标签时间”。
+- 设置新增 `execution_labels`，内置“上厕所 / 走动 / 打游戏 / 吃饭 / 突发 / 手动暂停”，支持自定义；系统标签可改名不可删。
+- 单日复盘页新增任务执行看板；今天页确认后主按钮改成“进入执行台”，主任务实际分钟改为只读展示，避免出现两套数据源。
+- `POST /api/daily-plans/{date}/submit` 现在会先拦截未停止的激活段，再把主任务 `actual_minutes` 同步为有效时间；副航线仍按有效时间 `>= 30` 自动完成。
 
-### 手动排错方式
+### B. 手机落地最小链路
 
-```powershell
-python -m uvicorn app.main:app --reload
-python -m pytest -q
-python -m compileall -q app tests
-```
+**文件**：`termux-install.sh`、`termux-start.sh`、`share-to-phone.ps1`、`docs/termux-quickstart.md`、`docs/phone-transfer.md`、`README.md`、`docs/README.md`、`tests/test_launcher.py`
 
----
+- 增加 Termux 最小安装与启动脚本，手机上只需要进项目目录后运行安装脚本和启动脚本即可，不依赖电脑端启动器。
+- 新增 `share-to-phone.ps1`，会打出 `dist/daily-plan-termux.zip`，排除 `.git`、`data`、`.env` 和缓存目录，并可临时起下载服务给手机下载。
+- `termux-quickstart.md` 已重写成“只有手机也能照着走”的版本，路径默认是 `/storage/emulated/0/daily-plan`，并专门处理了 `termux-setup-storage` 的 `y/n` 提示坑。
+- 当前结论已经明确：先不要把这版说成 APK 或原生 App；明天最稳妥的真实用法就是 Termux 起本地后端，再把网页添加到主屏幕。
 
-## 🚀 2. 本次会话已完成的工作（最新会话）
+### C. 交接与模块文档同步
 
-### A. Windows 双击启动器
+**文件**：`HANDOFF.md`、`docs/README.md`、`docs/backend-api.md`、`docs/frontend.md`
 
-**文件**：`启动今日航线.cmd`、`app/launcher.py`、`tests/test_launcher.py`、`README.md`
+- 这几份文档已同步到“执行台 + 时间段 + Termux 手机链路”的当前真实状态，供明天新窗口直接恢复上下文，不必再从旧的 GPT 工作台版本脑补现状。
 
-- 在项目根目录新增可双击启动器，自动切换到脚本目录、检查 Python 和依赖、启动 Uvicorn，并保持日志窗口可见。
-- `app.launcher.wait_and_open()` 轮询本地服务，确认主页可访问后才打开默认浏览器。
-- 增加 `--check` 模式，可验证 Python、应用模块、Uvicorn 与端口 8000 状态，而不常驻启动服务。
-- 已覆盖“服务就绪后才打开浏览器”的自动化测试。
+## 3. 历史工作沉淀
 
-### B. 启动与打包问题修复
+### A. 本地草稿与人工确认主流程
 
-**文件**：`pyproject.toml`、`启动今日航线.cmd`
+- 今天页已经稳定为“晨间输入 -> 草稿 -> 手动调整 -> 审阅确认”的流程，未完成任务只进入待审池，不自动滚入下一天。
+- 主副航线仍保持五槽位心智，桌面端对齐优先；主任务是否完成仍由用户手动判断。
 
-- 修复 setuptools 平铺目录自动发现问题：明确只包含 `app*`，排除 `data*`、`docs*`、`tests*` 和规划文档。
-- 将模板、静态资源和提示词纳入包数据，`pip install -e ".[dev]"` 已验证成功。
-- Windows `cmd.exe` 会误解析 UTF-8 无 BOM 的中文批处理正文，因此启动器文件名保留中文，正文强制保持纯 ASCII。
-- 放弃脆弱的批处理括号嵌套和 Python 路径捕获，改用标签跳转与直接 `python` 命令。
+### B. GPT 手工协作与留档
 
-### C. 文档交接与模块索引
+- 单日复盘、七日复盘和 GPT 工作台都已经支持“复制提示词给 GPT -> 把回复贴回项目留档”的手工协作闭环。
+- GPT 回复原文和采用备注走独立 `gpt_collab_records` 表，不会直接污染正式复盘字段。
 
-**文件**：`HANDOFF.md`、`docs/README.md`、`docs/backend-api.md`、`docs/backend-services.md`、`docs/frontend.md`
+### C. 周视角与当前边界
 
-- 新建本交接文档，记录当前能力、真实限制、待办与红线。
-- 重新校准模块文档，补充关键函数行号、依赖关系和最新启动器信息。
-- 明确标记计划与实现的差异，避免后续代理把尚未完成的能力当成既有功能。
+- 七日复盘现在按所选日期所在自然周统计，不是最近 7 个实际执行日。
+- DeepSeek 兼容入口仍保留，但它不再是当前第一主叙事；更值得继续打磨的是本地执行闭环和手机可用性。
 
----
-
-## 🕰️ 3. 历史工作沉淀
-
-### 每日计划核心闭环
-
-- 已实现保底、普通、充足三档任务，受可用分钟数限制。
-- 晨间输入只有精力档、可用时间、普通日/早课日；膝盖异常是额外安全开关。
-- 任务必须先生成草稿并由用户确认，未经确认不能勾选。
-- 未完成项进入待审池，用户可重排、拆小或放弃，不自动形成任务债务。
-
-### AI 与安全边界
-
-- DeepSeek 使用兼容 OpenAI 的 `/chat/completions` 接口，由后端环境变量配置。
-- AI 只接收抽象晨间状态和规则候选，不接收规划原文、敏感原文或晚间自由文本复盘。
-- AI 超时、服务端错误、非法 JSON、超量任务或违反康复规则时，自动退回规则版草稿。
-- AI 不得删除数学、英语、C语言/数据结构三条每日学习主线。
-
-### 数据与页面
-
-- SQLite 保存计划、任务、待审项、每日复盘和设置。
-- 页面包括今日页、七日复盘页和设置页，使用服务端模板与原生前端资源。
-- 设置支持当前阶段文本、AI 项目每周上限、康复开关和各类别任务名称。
-- 前端动态文本通过 `esc()` 转义；不要重新引入未转义的 `innerHTML`。
-
-### 测试状态
-
-- 最近一次完整验证：`python -m pytest -q`，18 项通过。
-- 启动器自检：`启动今日航线.cmd --check`，退出码 0。
-- 已覆盖规则、API 状态机、持久化、AI 降级/重试、页面、设置和启动器。
-
----
-
-## 📂 4. 核心文件地图
+## 4. 核心文件地图
 
 ```text
 daily plan/
-├── AGENTS.md                         # 项目最高优先级协作规范
-├── HANDOFF.md                        # 当前交接上下文
-├── implementation_plan.md            # 已审批的第一阶段实施蓝图
-├── task.md                           # 已完成任务清单
-├── README.md                         # 用户安装、启动与备份说明
-├── pyproject.toml                    # 依赖、pytest 与 setuptools 配置
-├── .env.example                      # DeepSeek 和数据库配置示例
-├── 启动今日航线.cmd                  # Windows 双击启动器，正文必须纯 ASCII
+├── HANDOFF.md                     # 新窗口优先读取的交接文档
+├── README.md                      # 项目总说明与启动入口
+├── share-to-phone.ps1             # 电脑打包并临时分享给手机下载
+├── termux-install.sh              # 安卓 Termux 第一次安装依赖
+├── termux-start.sh                # 安卓 Termux 每日启动本地服务
+├── docs/
+│   ├── README.md                  # 模块文档索引
+│   ├── backend-api.md             # 后端接口、状态机、时间段模型速查
+│   ├── backend-services.md        # 本地规则、GPT 协作与兼容旧 AI 逻辑
+│   ├── frontend.md                # 页面、交互与执行台前端速查
+│   ├── termux-quickstart.md       # 只有手机时的 Termux 实操说明
+│   └── phone-transfer.md          # 电脑传到手机的最省事步骤
 ├── app/
-│   ├── main.py                       # FastAPI 工厂、页面路由、AI 初始化
-│   ├── api.py                        # 全部 JSON API 与业务编排
-│   ├── database.py                   # SQLite 连接与初始化
-│   ├── models.py                     # SQLite 建表语句
-│   ├── schemas.py                    # Pydantic 输入输出模型
-│   ├── launcher.py                   # 等待服务并打开浏览器
+│   ├── main.py                    # FastAPI 应用工厂与页面路由
+│   ├── api.py                     # JSON API、计划状态机、执行聚合
+│   ├── database.py                # SQLite 初始化与补表逻辑
+│   ├── models.py                  # 全量建表 SQL
+│   ├── schemas.py                 # Pydantic 输入输出模型
 │   ├── services/
-│   │   ├── task_rules.py             # 三档规则、预算裁剪、安全校验
-│   │   └── ai_planner.py             # DeepSeek 调用、重试、校验、降级
-│   ├── prompts/daily_planner_v1.md   # 可读提示词草案，当前未被运行时加载
-│   ├── templates/                    # 今日、复盘、设置页面
-│   └── static/                       # 原生 CSS 与 JavaScript
-├── tests/                            # 18 项后端、前端冒烟和启动器测试
-├── docs/                             # 模块速查文档
-├── data/daily_plan.db                # 本地真实数据，处理前先备份
-└── 规划文档/                         # 四部分原始长期规划，只作为方向来源
+│   │   ├── ai_planner.py          # 兼容旧 DeepSeek 日计划入口
+│   │   └── task_rules.py          # 本地规则与任务草稿生成
+│   ├── templates/
+│   │   ├── index.html             # 今天页
+│   │   ├── execute.html           # 执行台
+│   │   ├── review.html            # 单日复盘页
+│   │   ├── weekly.html            # 七日复盘页
+│   │   ├── gpt_workbench.html     # GPT 协作工作台
+│   │   └── settings.html          # 设置页与执行标签配置
+│   └── static/
+│       ├── app.js                 # 全部页面交互
+│       └── style.css              # 页面视觉与响应式布局
+└── tests/                         # API、页面资产和脚本验证
 ```
 
----
+## 5. 当前进度与待办事项
 
-## ⏳ 5. 当前进度与待办事项
+1. **首日真机试用校准**：明天按真实一天去跑执行台，重点观察“有效时间 / 计总标签 / 中断标签”的切换语义是否顺手。
+2. **手机端细节打磨**：根据真机反馈继续修表单触控、时间轴编辑、按钮文案和空态提示。
+3. **传机与启动体验补坑**：如果明天还遇到目录、端口、下载地址或浏览器入口问题，优先修文档和脚本，不急着上 APK。
+4. **复盘统计再迭代**：如果任务执行看板的数据已经足够有用，再考虑更细分类或更强图形化；当前先不要上复杂图表库。
 
-1. **最高优先级：用户手动体验与问题收集**
-   - 双击启动器，实际生成、编辑、确认和勾选一天任务。
-   - 检查任务量、文字、移动端宽度和待审池交互是否符合真实习惯。
+## 6. 不可触碰的红线
 
-2. **接入真实 DeepSeek 接口**
-   - 当前 `.env` 存在，但 `DEEPSEEK_API_KEY` 尚未配置。
-   - 配置后需验证第三方兼容接口的地址、模型名、响应结构和超时行为。
-   - 不要把真实密钥写进代码、SQLite、页面、测试或交接文档。
+- 🚫 DO NOT 绕过人工确认直接开始正式执行：今天页的草稿必须先由用户确认，不能自动变成正式清单。
+- 🚫 DO NOT 恢复“未完成任务自动顺延”：未完成任务只进待审池，不自动滚入下一天。
+- 🚫 DO NOT 把 GPT 回复自动写回正式复盘字段：GPT 回复只能留档或手动采用，不能自动当成结构化真相。
+- 🚫 DO NOT 把密钥写进前端、数据库或设置接口：`.env` 仍只由后端读取。
+- 🚫 DO NOT 覆盖或删除用户本地 `data/daily_plan.db`：这个库是真实数据，改表前要先考虑备份。
+- 🚫 DO NOT 破坏“同一时刻只有一个激活段”的前提：执行台任何开始或切换都必须先关掉旧段再开新段。
+- 🚫 DO NOT 把中断标签并入任务总时间：任务总时间只等于“有效时间 + 计总标签”，中断标签只展示不并入。
+- 🚫 DO NOT 假定手机项目目录是 `~/daily-plan`：当前文档和脚本默认以 `/storage/emulated/0/daily-plan` 为主路径。
+- 🚫 DO NOT 把当前方案宣传成 APK、PWA、离线缓存或自启动已完成：这些都还没做，现在只是浏览器壳式本地网页。
 
-3. **统一提示词运行方式**
-   - 当前 `app/prompts/daily_planner_v1.md` 只是文档草案。
-   - 运行时实际使用 `app/services/ai_planner.py` 中的 `SYSTEM_PROMPT` 常量。
-   - 后续应决定是否从 Markdown 加载，并增加提示词版本与加载失败测试。
-
-4. **修正七日复盘口径**
-   - 产品计划要求“最近 7 个实际执行日”。
-   - 当前 `weekly_review()` 实际查询最近 7 个自然日，需在修改前再次与用户确认。
-
-5. **启动器环境优化**
-   - 当前启动器使用 PATH 中的 `python`，本机已验证可用。
-   - 若要提高可移植性，可优先使用 `.venv\Scripts\python.exe`，不存在时再回退 PATH。
-
-6. **后续阶段**
-   - 用户实际使用并校准后，再单独规划 PushDeer 提醒和 Termux 常驻部署。
-   - 当前不做账号、云同步或外网公开访问。
-
-7. **工程清理**
-   - `pip install -e` 生成了 `daily_plan_webapp.egg-info/`，目前未加入 `.gitignore`。
-   - 当前没有 Git 仓库；如需版本管理，应先按用户意愿初始化并确认忽略项。
-
----
-
-## ⚠️ 6. 不可触碰的红线
-
-- **🚫 DO NOT 绕过人工审批**：AI 只能给草稿，不能直接发布或自动确认任务。
-- **🚫 DO NOT 自动顺延未完成任务**：未完成项必须进入待审池，由用户决定重排、拆小或放弃。
-- **🚫 DO NOT 向 AI 发送敏感原文**：只允许发送抽象状态、候选任务和非敏感统计。
-- **🚫 DO NOT 让 AI 修改康复安全边界**：疼痛、卡住、打软、肿胀等情况只能停止训练并提示专业评估。
-- **🚫 DO NOT 在前端或数据库保存 API 密钥**：密钥只从 `.env` 读取。
-- **🚫 DO NOT 删除或覆盖 `data/daily_plan.db`**：这是用户真实本地数据，修改模型或清理前先备份并确认。
-- **🚫 DO NOT 在 `启动今日航线.cmd` 正文加入中文**：UTF-8 无 BOM 会被 `cmd.exe` 拆成乱码命令；文件名可以保持中文。
-- **🚫 DO NOT 删除 `pyproject.toml` 的 setuptools 包发现配置**：否则会再次出现多个顶层包发现错误。
-- **🚫 DO NOT 把计划文档当成当前实现**：以代码、测试和本交接文档记录的真实差异为准。
-- **🚫 DO NOT 使用自动浏览器代理替代用户 UI 验证**：按根目录规范写明手动测试步骤，由用户亲自确认体验。
-- **务必重视环境锁定**：Antigravity 接手后只读 `.gemini/antigravity-ide/skills/`，不得跨读 `.agents/skills/`。
-
----
-
-## 🔑 7. 关键配置与外部依赖
+## 7. 关键配置与外部依赖
 
 | 配置项 | 说明 |
 |---|---|
-| `DEEPSEEK_BASE_URL` | 兼容 OpenAI API 的服务地址，默认 `https://api.deepseek.com/v1` |
-| `DEEPSEEK_API_KEY` | DeepSeek 密钥；当前未配置，严禁提交或记录到文档 |
-| `DEEPSEEK_MODEL` | 模型名称，示例值为 `deepseek-chat`，需按实际供应商确认 |
-| `DEEPSEEK_TIMEOUT` | AI 请求超时秒数，默认 20 |
-| `DATABASE_PATH` | SQLite 路径，默认 `data/daily_plan.db` |
-| Python | 要求 3.11 或更高版本 |
-| 端口 8000 | 本地网页默认端口；被占用时启动器自检会报告 |
+| `DATABASE_PATH` | 后端数据库路径；默认是 `data/daily_plan.db`，Termux 启动脚本也依赖它 |
+| `PORT` | 服务端口；Termux 默认 `8000`，需要时可临时切到别的端口 |
+| `DEEPSEEK_BASE_URL` | 兼容旧 AI 入口地址；当前不是主流程必需 |
+| `DEEPSEEK_API_KEY` | 启用兼容旧 AI 入口时才需要；为空时应用照样可本地运行 |
+| `DEEPSEEK_MODEL` | 兼容旧 AI 使用的模型名；默认 `deepseek-chat` |
+| `dist/daily-plan-termux.zip` | `share-to-phone.ps1` 生成的手机分发包，不包含真实数据库和密钥 |
 
-## 交接后的建议读取顺序
+## 8. 当前验证状态
 
-1. `AGENTS.md`
-2. `HANDOFF.md`
-3. `docs/README.md`
-4. 与下一项任务相关的单份模块文档
-5. 对应源码和测试文件
+本轮与这轮功能相关的验证已跑过：
 
+- `python -m pytest -q`
+- `python -m compileall app tests`
+- `node --check app/static/app.js`
+- 浏览器侧已做过执行台主流程验证：开始任务、切标签、停止、补记、提交、复盘页看板展示

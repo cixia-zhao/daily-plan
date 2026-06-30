@@ -71,26 +71,42 @@
 
 ## 二、核心技能使用规则
 
-本项目提供 6 个核心技能。代理必须根据“当前环境锁定规则”确定唯一的 `SKILL_ROOT`，然后只从该目录下按需读取技能。
+本项目技能已升级至 Superpowers v6 架构。代理必须根据"当前环境锁定规则"确定唯一的 `SKILL_ROOT`，然后只从该目录下按需读取技能。
 
 核心技能路径格式统一为：
 `SKILL_ROOT/[技能名称]/SKILL.md`
 
 禁止在同一轮任务中同时读取 `.gemini/antigravity-ide/skills/` 和 `.agents/skills/` 下的同名技能，除非用户明确要求进行平台同步、迁移或对比。
 
-### 核心技能映射列表：
-- **需求规划、任务拆解**：`planning-with-files`
+
+### 核心技能映射列表（v6 架构）：
+
+**核心流程技能（每次任务按需加载）：**
 - **需求不清、方案选择**：`brainstorming`
+- **任务规划、拆解步骤**：`writing-plans`（原 `planning-with-files` 已在 v6 中拆分）
+- **执行已有计划**：`executing-plans`
 - **Bug 排查、异常定位**：`systematic-debugging`
 - **新功能或重构**：`test-driven-development`
 - **完成前检查**：`verification-before-completion`
 - **本项目个人工作流**：`workflow-by-cixia`
+
+**按需调用的辅助技能：**
+- **并行多任务**：`dispatching-parallel-agents`
+- **子代理驱动开发**：`subagent-driven-development`
+- **代码审查（发起方）**：`requesting-code-review`
+- **代码审查（接收方）**：`receiving-code-review`
+- **分支合并与收尾**：`finishing-a-development-branch`
+- **Git 工作树隔离**：`using-git-worktrees`
+- **创建自定义技能**：`writing-skills`
 
 ### 强制按需加载规则：
 1. 创建或更新 `implementation_plan.md` 前，**必须**读取 `SKILL_ROOT/workflow-by-cixia/references/plan-template.md`。
 2. 处理 Bug 时，**必须**读取 `systematic-debugging` 完整的 `SKILL.md`（路径为 `SKILL_ROOT/systematic-debugging/SKILL.md`）。
 3. 涉及新增功能、重构或测试时，**必须**读取 `test-driven-development` 完整的 `SKILL.md`（路径为 `SKILL_ROOT/test-driven-development/SKILL.md`）。
 4. 完成任务前，**必须**读取或遵守 `verification-before-completion` 完整的 `SKILL.md`（路径为 `SKILL_ROOT/verification-before-completion/SKILL.md`）。
+5. 拆解多步骤计划时，**必须**读取 `writing-plans` 的 `SKILL.md` 再开始写计划。
+6. 执行已批准的计划时，**必须**读取 `executing-plans` 的 `SKILL.md`。
+
 
 ---
 

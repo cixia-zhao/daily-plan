@@ -2,14 +2,33 @@
 {% block title %}设置 · 今日航线{% endblock %}
 {% block page %}settings{% endblock %}
 {% block content %}
-<section class="hero compact"><div><p class="eyebrow">LOCAL FIRST</p><h1>任务设置</h1><p>只改真正影响每日清单的几件事。</p></div><span class="status {{ 'success' if ai_enabled else '' }}">AI {{ '已连接' if ai_enabled else '未配置' }}</span></section>
+<section class="hero compact"><div><p class="eyebrow">LOCAL FIRST</p><h1>任务设置</h1><p>只改真正影响每日清单的几件事。</p></div><span class="status success">GPT 协作偏好</span></section>
 <section class="panel">
   <form id="settings-form" class="settings-form">
-    <div class="form-grid"><label>当前阶段<input name="current_stage" required maxlength="100"></label><label>AI 项目每周上限<input name="ai_project_weekly_frequency" type="number" min="0" max="7"></label></div>
+    <div class="form-grid">
+      <label>当前阶段<input name="current_stage" required maxlength="100"></label>
+      <label>AI 项目每周上限<input name="ai_project_weekly_frequency" type="number" min="0" max="7"></label>
+      <label>项目起始日<input name="project_start_date" type="date" required></label>
+    </div>
     <label class="alert-check"><input name="rehab_enabled" type="checkbox"><span><strong>启用康复任务</strong><small>异常日仍会由本地安全规则自动停用</small></span></label>
+
+    <h2>主航线精力档预算（分钟）</h2>
+    <div class="form-grid">
+      <label>保底档总时间<input name="budget_minimum" type="number" min="30" max="720" step="15" required></label>
+      <label>普通档总时间<input name="budget_normal" type="number" min="30" max="720" step="15" required></label>
+      <label>充足档总时间<input name="budget_ample" type="number" min="30" max="720" step="15" required></label>
+    </div>
+
     <h2>任务名称</h2><div id="task-title-fields" class="form-grid"></div>
+    <h2>执行标签</h2>
+    <p class="muted">计总标签会并入任务总时间；中断标签会单独统计，但不并入任务总时间。</p>
+    <div id="execution-label-fields" class="stack"></div>
+    <div class="actions">
+      <button id="add-counted-label" class="ghost-button" type="button">新增计总标签</button>
+      <button id="add-interrupt-label" class="ghost-button" type="button">新增中断标签</button>
+    </div>
     <button class="primary" type="submit">保存设置</button>
   </form>
-  <div class="config-note"><h3>DeepSeek 连接</h3><p>密钥只从 <code>.env</code> 读取，设置页不会显示或保存它。复制 <code>.env.example</code> 后填写接口即可启用。</p></div>
+  <div class="config-note"><h3>GPT 协作工作流</h3><p>这一版优先走“项目整理上下文 -> 复制到 ChatGPT -> 把回复贴回项目”的本地闭环。模板和协作历史统一在 <a href="/gpt-workbench">GPT 工作台</a> 里管理。</p></div>
 </section>
 {% endblock %}

@@ -1,0 +1,75 @@
+{% extends "base.html" %}
+{% block title %}单日复盘 · 今日航线{% endblock %}
+{% block page %}review{% endblock %}
+{% block content %}
+<section class="hero compact">
+  <div><p class="eyebrow">DAILY WRAP-UP</p><h1>单日复盘</h1><p>看清某一天真实发生了什么，再决定下一步怎么调。</p></div>
+  <div class="date-actions">
+    <button id="reset-day" class="danger-soft" type="button">重置今日</button>
+    <div class="date-chip date-chip-button">
+      <span>日期</span>
+      <button id="review-date-button" class="date-trigger" type="button"></button>
+      <input id="review-date" type="hidden">
+    </div>
+  </div>
+</section>
+
+<section class="metrics review-metrics" id="daily-review-metrics">
+  <article><span>计划状态</span><strong id="daily-status">—</strong><small id="daily-status-note">还没有当天计划</small></article>
+  <article><span>主任务完成</span><strong id="daily-completed">—</strong><small id="daily-total">共 — 项</small></article>
+  <article><span>主任务分钟</span><strong id="daily-main-minutes">—</strong><small id="daily-main-actual">实际 —</small></article>
+  <article><span>副航线实际</span><strong id="daily-sub-minutes">—</strong><small>只统计已记录分钟</small></article>
+</section>
+
+<section class="panel execution-board-panel">
+  <div class="section-heading"><div><p class="step">01.5 · 执行看板</p><h2>把这一天的时间结构看清</h2></div></div>
+  <div id="daily-execution-board-empty" class="muted">这一天还没有执行记录，任务看板先保持折叠。</div>
+  <div id="daily-execution-board" class="execution-board-grid hidden"></div>
+</section>
+
+<section class="panel">
+  <div class="section-heading"><div><p class="step">01 · 晚间收束</p><h2>把真实感受留下来</h2></div></div>
+  <form id="daily-review-form" class="review-form">
+    <div class="form-grid">
+      <label>今天整体情绪
+        <select name="mood">
+          <option value="">先留空</option>
+          <option value="很好">很好</option>
+          <option value="平稳">平稳</option>
+          <option value="疲惫">疲惫</option>
+          <option value="烦躁">烦躁</option>
+          <option value="低落">低落</option>
+        </select>
+      </label>
+      <label>今天是否有真实推进
+        <select name="real_progress">
+          <option value="">先留空</option>
+          <option value="明显推进">明显推进</option>
+          <option value="有一点推进">有一点推进</option>
+          <option value="原地打转">原地打转</option>
+          <option value="基本没推进">基本没推进</option>
+        </select>
+      </label>
+    </div>
+    <label>今天最卡的点<input name="hardest_point" maxlength="300" placeholder="例如：起步太慢，切到数学时一直抗拒"></label>
+    <label>今天有效的办法<input name="effective_method" maxlength="300" placeholder="例如：把手机放进书包"></label>
+    <label>今天最该优化的小点<input name="optimization_note" maxlength="300" placeholder="例如：晚饭后不要直接开刷短视频"></label>
+    <label>明天继续保持的一条<input name="tomorrow_focus" maxlength="300" placeholder="例如：每块开始前先写目标"></label>
+    <label>补充复盘正文<textarea name="reflection_text" rows="7" maxlength="4000" placeholder="把今天真实的感受、波动、发现写下来。这里的内容会进入周复盘分析。"></textarea></label>
+    <button class="secondary" type="submit">保存今天的复盘</button>
+  </form>
+</section>
+<section class="panel gpt-collab-panel">
+  <div class="section-heading">
+    <div><p class="step">02 · GPT 协作</p><h2>把这一天喂给 GPT，一起深聊</h2></div>
+    <div class="action-buttons">
+      <button id="copy-daily-gpt-prompt" class="ghost-button" type="button">复制给 ChatGPT</button>
+      <a class="ghost-button link-button" href="/gpt-workbench">去 GPT 工作台</a>
+    </div>
+  </div>
+  <p class="muted">项目会先把这一天的事实整理好，你复制到 ChatGPT 后，把整段回复贴回来留档就行。</p>
+  <label class="review-form">GPT 回复全文<textarea id="daily-gpt-response" rows="8" placeholder="把 ChatGPT 的回复整段贴回这里。"></textarea></label>
+  <label class="review-form">我准备采用的内容 / 备注<textarea id="daily-gpt-adopted" rows="5" placeholder="把你真正准备采纳的动作、提醒或结论留在这里。"></textarea></label>
+  <div class="actions"><button id="save-daily-gpt-record" class="secondary" type="button">保存这次 GPT 协作</button></div>
+</section>
+{% endblock %}

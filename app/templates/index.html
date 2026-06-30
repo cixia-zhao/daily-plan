@@ -4,13 +4,28 @@
 {% block content %}
 <section class="hero">
   <div><p class="eyebrow">DAILY REVIEW</p><h1>先看清今天，再决定做什么。</h1><p>AI 只给草稿，最后的决定永远在你手里。</p></div>
-  <label class="date-chip">日期 <input id="plan-date" type="date"></label>
-</section>
-
-<section id="carryover-section" class="panel hidden">
-  <div class="section-heading"><div><p class="step">先处理昨天</p><h2>待审池</h2></div><span id="carryover-count" class="count">0</span></div>
-  <p class="muted">未完成不是债务。选择重排、拆小，或者干脆放下。</p>
-  <div id="carryover-list" class="stack"></div>
+  <div class="date-actions">
+    <button id="reset-day" class="danger-soft" type="button">重置今日</button>
+    <div class="carryover-entry">
+      <button id="carryover-button" class="ghost-button carryover-button" type="button" aria-haspopup="dialog" aria-expanded="false">
+        <span class="carryover-button-icon" aria-hidden="true">待</span>
+        <span class="carryover-button-label">待审池</span>
+        <span id="carryover-dot" class="carryover-dot hidden" aria-hidden="true"></span>
+      </button>
+      <div id="carryover-popover" class="carryover-popover hidden" aria-hidden="true">
+        <div class="carryover-popover-head">
+          <div><p class="step">先处理昨天</p><h2>待审池</h2></div><span id="carryover-count" class="count">0</span></div>
+        <p id="carryover-empty" class="muted hidden">当前没有待审项。今天可以直接开始晨间校准。</p>
+        <p id="carryover-hint" class="muted">未完成不是债务。选择重排、拆小，或者干脆放下。</p>
+        <div id="carryover-popover-list" class="stack"></div>
+      </div>
+    </div>
+    <div class="date-chip date-chip-button">
+      <span>日期</span>
+      <button id="plan-date-button" class="date-trigger" type="button"></button>
+      <input id="plan-date" type="hidden">
+    </div>
+  </div>
 </section>
 
 <section class="panel checkin-panel">
@@ -24,28 +39,34 @@
     <div class="form-grid">
       <label>可用时间<select id="available-minutes"><option value="90">约 1.5 小时</option><option value="180" selected>约 3 小时</option><option value="240">约 4 小时</option><option value="300">5 小时以上</option></select></label>
       <label>当天类型<select id="day-type"><option value="normal">普通日</option><option value="early_class">早课日</option></select></label>
+      <label class="knee-alert-label"><input id="knee-alert" type="checkbox"><span>膝盖有异常</span></label>
     </div>
-    <label class="alert-check"><input id="knee-alert" type="checkbox"><span><strong>今天膝盖有异常</strong><small>疼痛、卡住、打软、肿胀或明显不稳</small></span></label>
     <button class="primary wide" type="submit"><span>生成今天的草稿</span><span aria-hidden="true">→</span></button>
   </form>
 </section>
 
 <section id="plan-section" class="panel hidden">
-  <div class="section-heading"><div><p class="step">02 · 人工审阅</p><h2 id="plan-title">任务草稿</h2></div><span id="plan-status" class="status">草稿</span></div>
+  <div class="section-heading"><div><p class="step">02 · 人工审阅</p><h2 id="plan-title">任务草稿</h2></div><div class="plan-status-actions"><span id="plan-status" class="status">草稿</span><button id="submit-today" class="primary btn-submit hidden">进入执行台</button></div></div>
   <div id="safety-notice" class="notice warning hidden"></div>
   <div id="degraded-notice" class="notice hidden">AI 暂时没有成功响应，当前使用稳定的本地规则版。</div>
-  <div id="task-list" class="task-list"></div>
-  <div id="draft-actions" class="actions"><button id="save-draft" class="secondary">保存修改</button><button id="approve-plan" class="primary">确认今日清单</button></div>
-  <div class="methods"><h3>今天的执行方法</h3><ul id="method-list"></ul></div>
-</section>
 
-<section id="review-section" class="panel">
-  <div class="section-heading"><div><p class="step">03 · 晚间收束</p><h2>三句话就够了</h2></div></div>
-  <form id="review-form" class="review-form">
-    <label>今天最容易分心的点<input name="distraction" maxlength="300" placeholder="例如：等 AI 时想刷视频"></label>
-    <label>今天有效的办法<input name="effective_method" maxlength="300" placeholder="例如：把手机放进书包"></label>
-    <label>明天继续保持的一条<input name="tomorrow_focus" maxlength="300" placeholder="例如：每块开始前先写目标"></label>
-    <button class="secondary" type="submit">保存今天的复盘</button>
-  </form>
+  <div class="columns-layout">
+    <div class="main-column">
+      <div class="column-title"><h3>主航线</h3><span class="badge">基准/日常</span></div>
+      <div id="main-route-list" class="task-list"></div>
+    </div>
+    <div class="sub-column">
+      <div class="column-title"><h3>副航线</h3><span class="badge">低优先级</span></div>
+      <div id="sub-route-list" class="task-list"></div>
+    </div>
+  </div>
+
+  <div class="plan-footer">
+    <p id="time-summary" class="time-summary hidden">可用 0 分 / 当前计划 0 分</p>
+    <div id="draft-actions" class="actions draft-actions">
+      <div class="action-buttons"><button id="save-draft" class="secondary">保存修改</button><button id="approve-plan" class="primary">确认今日清单</button></div>
+    </div>
+  </div>
+  <div class="methods"><h3>今天的执行方法</h3><ul id="method-list"></ul></div>
 </section>
 {% endblock %}

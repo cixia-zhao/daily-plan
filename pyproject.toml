@@ -28,4 +28,4 @@ include = ["app*"]
 exclude = ["data*", "docs*", "tests*", "规划文档*"]
 
 [tool.setuptools.package-data]
-app = ["templates/*.html", "static/*.css", "static/*.js", "prompts/*.md"]
+app = ["templates/*.html", "static/*.css", "static/*.js", "prompts/*.txt"]

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 
 import httpx
 from pydantic import ValidationError
@@ -9,20 +10,32 @@ from app.schemas import AIPlanResult, MorningCheckIn, TaskDraft
 from app.services.task_rules import validate_ai_tasks
 
 
-SYSTEM_PROMPT = """You arrange a small daily task list from approved candidates.
+FALLBACK_SYSTEM_PROMPT = """You arrange a small daily task list from approved candidates.
 Return JSON only: {"tasks": [...]}. Keep every task within the supplied categories and time budget.
 Do not diagnose health conditions, increase physical intensity, or publish tasks without user review.
 Each task must contain title, category, estimated_minutes, priority, completion_criteria, reason and source.
 """
+DEFAULT_PROMPT_PATH = Path(__file__).resolve().parent.parent / "prompts" / "daily_planner_v1.txt"
+
+
+def load_system_prompt(prompt_path: Path | None = None) -> str:
+    try:
+        content = (prompt_path or DEFAULT_PROMPT_PATH).read_text(encoding="utf-8").strip()
+        if content:
+            return content
+    except OSError:
+        pass
+    return FALLBACK_SYSTEM_PROMPT
 
 
 class AIPlanner:
-    def __init__(self, base_url: str, api_key: str, model: str, timeout: float = 20, transport=None):
+    def __init__(self, base_url: str, api_key: str, model: str, timeout: float = 20, transport=None, prompt_path: Path | None = None):
         self.base_url = base_url.rstrip("/")
         self.api_key = api_key
         self.model = model
         self.timeout = timeout
         self.transport = transport
+        self.system_prompt = load_system_prompt(prompt_path)
 
     def generate(self, checkin: MorningCheckIn, candidates: list[TaskDraft]) -> AIPlanResult:
         fallback = AIPlanResult(tasks=candidates, degraded=True)
@@ -36,7 +49,7 @@ class AIPlanner:
             "model": self.model,
             "temperature": 0.2,
             "messages": [
-                {"role": "system", "content": SYSTEM_PROMPT},
+                {"role": "system", "content": self.system_prompt},
                 {"role": "user", "content": json.dumps({"state": payload_state, "candidates": [t.model_dump() for t in candidates]}, ensure_ascii=False)},
             ],
         }

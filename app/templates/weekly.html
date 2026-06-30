@@ -2,12 +2,104 @@
 {% block title %}七日复盘 · 今日航线{% endblock %}
 {% block page %}weekly{% endblock %}
 {% block content %}
-<section class="hero compact"><div><p class="eyebrow">SEVEN ACTUAL DAYS</p><h1>七日复盘</h1><p>看真实发生了什么，不拿理想状态审判自己。</p></div></section>
-<section class="metrics" id="weekly-metrics">
-  <article><span>完成率</span><strong id="metric-rate">—</strong><small>已确认任务</small></article>
-  <article><span>完成任务</span><strong id="metric-completed">—</strong><small id="metric-total">共 — 项</small></article>
-  <article><span>实际投入</span><strong id="metric-time">—</strong><small id="metric-planned">计划 —</small></article>
-  <article><span>复盘天数</span><strong id="metric-days">—</strong><small>最近 7 个自然日</small></article>
+<section class="hero compact">
+  <div><p class="eyebrow">CURRENT WEEK</p><h1>七日复盘</h1><p>看真实发生了什么，不拿理想状态审判自己。</p></div>
+  <div class="date-chip date-chip-button">
+    <span>日期</span>
+    <button id="weekly-date-button" class="date-trigger" type="button"></button>
+    <input id="weekly-anchor-date" type="hidden">
+  </div>
 </section>
-<section class="panel"><p class="step">本周建议</p><h2 id="weekly-advice">正在读取数据…</h2><p class="muted">系统不会自动加量或减量。建议只是给你审阅的参考。</p></section>
+<section class="metrics" id="weekly-metrics">
+  <article><span>完成率</span><strong id="metric-rate">—</strong><small>已确认主任务</small></article>
+  <article><span>完成任务</span><strong id="metric-completed" class="split-metric">—</strong><small id="metric-total">共 — 项</small></article>
+  <article><span>实际投入</span><strong id="metric-time" class="split-metric">—</strong><small id="metric-planned">计划 —</small></article>
+  <article><span>复盘天数</span><strong id="metric-days">—</strong><small>当前周（周一到周日）</small></article>
+</section>
+<section class="panel">
+  <div class="section-heading">
+    <div>
+      <p class="step">01 · 本周整理</p>
+      <h2 id="weekly-title"><span id="weekly-title-text">本周摘要</span> <span id="weekly-title-range" class="weekly-title-range">正在读取…</span></h2>
+    </div>
+    <div class="action-buttons">
+      <button id="refresh-weekly-report" class="secondary" type="button">刷新本周整理</button>
+      <button id="copy-chatgpt-prompt" class="ghost-button" type="button">复制给 ChatGPT</button>
+    </div>
+  </div>
+  <p class="muted" id="weekly-status-note">这里先把本周事实整理出来，再交给 ChatGPT 和你一起往下深聊。</p>
+  <div class="weekly-progress-card">
+    <div class="weekly-progress-head">
+      <strong>本周复盘进度</strong>
+      <span id="weekly-progress-summary" class="muted">本周已记录 0 / 7 天</span>
+    </div>
+    <div class="weekly-progress-track">
+      <div id="weekly-progress-fill" class="weekly-progress-fill"></div>
+      <div id="weekly-progress-days" class="weekly-progress-days"></div>
+    </div>
+  </div>
+  <div class="stack weekly-analysis-grid">
+    <article class="analysis-card"><span>调量建议</span><strong id="weekly-load-advice">—</strong></article>
+    <article class="analysis-card"><span>主要拖累因素</span><p id="weekly-drag-factors">—</p></article>
+    <article class="analysis-card"><span>有效模式</span><p id="weekly-effective-patterns">—</p></article>
+    <article class="analysis-card"><span>真实推进判断</span><p id="weekly-real-progress">—</p></article>
+    <article class="analysis-card"><span>下周聚焦点</span><p id="weekly-next-focus">—</p></article>
+  </div>
+</section>
+<section class="panel">
+  <div class="section-heading"><div><p class="step">02 · 本周当天复盘</p><h2 id="weekly-day-review-title">先从本周已保存的某一天开始</h2></div></div>
+  <form id="weekly-inline-review-form" class="review-form">
+    <div class="form-grid">
+      <label>今天整体情绪
+        <select name="mood">
+          <option value="">先留空</option>
+          <option value="很好">很好</option>
+          <option value="平稳">平稳</option>
+          <option value="疲惫">疲惫</option>
+          <option value="烦躁">烦躁</option>
+          <option value="低落">低落</option>
+        </select>
+      </label>
+      <label>今天是否有真实推进
+        <select name="real_progress">
+          <option value="">先留空</option>
+          <option value="明显推进">明显推进</option>
+          <option value="有一点推进">有一点推进</option>
+          <option value="原地打转">原地打转</option>
+          <option value="基本没推进">基本没推进</option>
+        </select>
+      </label>
+    </div>
+    <label>今天最卡的点<input name="hardest_point" maxlength="300"></label>
+    <label>今天有效的办法<input name="effective_method" maxlength="300"></label>
+    <label>今天最该优化的小点<input name="optimization_note" maxlength="300"></label>
+    <label>明天继续保持的一条<input name="tomorrow_focus" maxlength="300"></label>
+    <label>补充复盘正文<textarea name="reflection_text" rows="7" maxlength="4000"></textarea></label>
+    <div class="actions">
+      <button id="save-inline-review" class="secondary" type="submit">保存这一天的复盘</button>
+    </div>
+  </form>
+</section>
+<section class="panel">
+  <div class="section-heading"><div><p class="step">03 · 提示词管理</p><h2>自动分析与导出模板</h2></div></div>
+  <div class="gpt-collab-panel">
+    <p class="muted">周模板和单日模板统一放到 GPT 工作台里管理，这里只保留最顺手的复制与回填动作。</p>
+    <div class="actions"><a class="ghost-button link-button" href="/gpt-workbench">去 GPT 工作台管理模板与历史</a></div>
+  </div>
+</section>
+<section class="panel">
+  <div class="section-heading"><div><p class="step">04 · GPT 协作留档</p><h2>把这轮对话接回项目</h2></div></div>
+  <label class="review-form">GPT 回复全文<textarea id="weekly-gpt-response" rows="9" placeholder="把 ChatGPT 的周整理回复整段贴回这里。"></textarea></label>
+  <label class="review-form">我准备采用的内容 / 备注<textarea id="weekly-gpt-adopted" rows="6" placeholder="把你真正准备采纳的重点、提醒或下一周动作留在这里。"></textarea></label>
+  <div class="actions"><button id="save-weekly-gpt-record" class="secondary" type="button">保存这次 GPT 协作</button></div>
+</section>
+<section class="panel">
+  <div class="section-heading"><div><p class="step">05 · 最终周报</p><h2>保存你认可的这一版</h2></div></div>
+  <label class="review-form">本周最终周报<textarea id="weekly-final-report" rows="12" placeholder="你可以直接整理这里，也可以把 ChatGPT 给你的版本贴回这里保存。"></textarea></label>
+  <div class="actions"><button id="save-weekly-report" class="secondary" type="button">保存这周最终周报</button></div>
+</section>
+<section class="panel">
+  <div class="section-heading"><div><p class="step">06 · 历史周报</p><h2>回看之前的周</h2></div></div>
+  <div id="weekly-history" class="stack"></div>
+</section>
 {% endblock %}

@@ -4,19 +4,64 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block title %}今日航线{% endblock %}</title>
-  <link rel="stylesheet" href="/static/style.css">
+  <link rel="stylesheet" href="/static/style.css?v={{ static_version('style.css') }}">
 </head>
 <body data-page="{% block page %}today{% endblock %}">
   <header class="site-header">
     <a class="brand" href="/"><span class="brand-mark">✓</span><span>今日航线</span></a>
     <nav aria-label="主导航">
       <a href="/" data-nav="today">今天</a>
+      <a href="/execute" data-nav="execute">执行台</a>
+      <a href="/review" data-nav="review">单日复盘</a>
       <a href="/weekly" data-nav="weekly">七日复盘</a>
+      <a href="/gpt-workbench" data-nav="gpt-workbench">GPT 工作台</a>
       <a href="/settings" data-nav="settings">设置</a>
     </nav>
   </header>
   <main>{% block content %}{% endblock %}</main>
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
-  <script src="/static/app.js" defer></script>
+  <div id="confirm-modal" class="confirm-modal hidden" aria-hidden="true">
+    <div class="confirm-backdrop" data-confirm-dismiss></div>
+    <div class="confirm-dialog" role="dialog" aria-modal="true" aria-labelledby="confirm-title" aria-describedby="confirm-message">
+      <p id="confirm-title" class="confirm-eyebrow">请再次确认</p>
+      <h2 class="confirm-heading">清空这一天的数据？</h2>
+      <p id="confirm-message" class="confirm-message"></p>
+      <div class="confirm-actions">
+        <button id="confirm-cancel" class="ghost-button" type="button">取消</button>
+        <button id="confirm-accept" class="primary" type="button">确认清空</button>
+      </div>
+    </div>
+  </div>
+  <div id="calendar-modal" class="calendar-modal hidden" aria-hidden="true">
+    <div class="calendar-backdrop" data-calendar-dismiss></div>
+    <div class="calendar-dialog" role="dialog" aria-modal="true" aria-labelledby="calendar-title">
+      <div class="calendar-header">
+        <div>
+          <p class="confirm-eyebrow">日期导航</p>
+          <h2 id="calendar-title" class="calendar-title">选择日期</h2>
+        </div>
+        <div class="calendar-header-actions">
+          <button id="calendar-prev-month" class="ghost-button" type="button" aria-label="上一月">←</button>
+          <button id="calendar-next-month" class="ghost-button" type="button" aria-label="下一月">→</button>
+        </div>
+      </div>
+      <div id="calendar-month-label" class="calendar-month-label">正在加载…</div>
+      <div class="calendar-weekdays">
+        <span>一</span><span>二</span><span>三</span><span>四</span><span>五</span><span>六</span><span>日</span>
+      </div>
+      <div id="calendar-grid" class="calendar-grid"></div>
+      <div class="calendar-legend">
+        <span><i class="legend-dot out-of-range"></i>空白</span>
+        <span><i class="legend-dot empty"></i>未开始</span>
+        <span><i class="legend-dot planned"></i>已计划</span>
+        <span><i class="legend-dot submitted"></i>待补复盘</span>
+        <span><i class="legend-dot reviewed"></i>已复盘</span>
+      </div>
+      <div class="confirm-actions">
+        <button id="calendar-close" class="ghost-button" type="button">关闭</button>
+      </div>
+    </div>
+  </div>
+  <script src="/static/app.js?v={{ static_version('app.js') }}" defer></script>
 </body>
 </html>

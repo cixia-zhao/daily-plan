@@ -1,165 +1,80 @@
----
-RequestFeedback: true
----
+# 执行页与任务时间看板第一版
 
-# 每日任务审阅与执行 Web App
-
-将四类长期规划转换为每日可审阅、可调整、可确认和可勾选的任务系统。系统根据晨间状态生成候选任务，DeepSeek 只负责提出结构化草稿，用户确认后才形成正式清单；任务强度通过实际执行数据每周校准，不采用固定的 14 天挑战周期。
-
-## 用户审阅要点
-
-> [!WARNING]
-> **请确认本计划完整表达了已达成的产品决策；审批后进入测试先行的代码开发阶段。**
-
-- 第一阶段只在电脑本地运行，采用单用户模式，不实现账号、云同步、PushDeer 或 Termux 常驻部署。
-- 晨间只填写精力档、可用时长、当天类型；昨日未完成项必须人工选择重排、拆小或放弃。
-- DeepSeek 通过兼容 OpenAI API 的适配层调用；接口不可用或输出不合规时自动退回本地规则草稿。
-- 敏感原文只保存在本地，发送给 DeepSeek 的内容仅包含抽象状态；康复训练的安全边界由本地规则控制。
-- 核心流程稳定并完成至少 7 个实际执行日的校准后，再进入 PushDeer 和 Termux 部署阶段。
-
----
+把“确认今日清单后到提交今日情况”这一段升级成可真实日用的本地执行记录流程。完成后，白天可在独立执行页里记录任务有效时间、标签时间和中断时间；晚上在单日复盘页能直接看到每个已执行任务的数据看板。
 
 ## 变更清单
 
-### 项目基础与配置
+### 后端与数据层
 
-#### [NEW] `启动今日航线.cmd`
-- 放在项目根目录，供 Windows 用户直接双击。
-- 将工作目录固定到脚本所在目录，避免从快捷方式或资源管理器启动时找不到项目。
-- 检查 Python 与 Uvicorn 是否可用；缺失时显示清晰提示并暂停窗口。
-- 启动后端后轮询 `http://127.0.0.1:8000`，服务可访问时自动打开默认浏览器。
-- 命令窗口保持可见并显示后端日志；按 `Ctrl+C` 或关闭窗口即可停止服务。
+#### [MODIFY] [app/models.py](</C:/Users/cixia/Desktop/daily plan/app/models.py>)
+- 新增 `task_execution_segments` 表，保存任务执行时间段、标签快照和中断记录。
+- 保留原有 `tasks.actual_minutes` 字段，但改为由有效时间聚合同步。
 
-#### [NEW] `pyproject.toml`
-- 定义 FastAPI、Jinja2、SQLite、HTTP 客户端、环境配置和 pytest 等依赖。
-- 提供开发服务与自动化测试所需的统一 Python 项目配置。
+#### [MODIFY] [app/database.py](</C:/Users/cixia/Desktop/daily plan/app/database.py>)
+- 为老库补齐 `task_execution_segments` 表和索引。
+- 确保增量初始化不会破坏已有数据。
 
-#### [NEW] `.env.example` 与 `.gitignore`
-- 声明 DeepSeek 接口地址、模型名、密钥、超时和数据库路径等配置项。
-- 排除真实密钥、本地数据库、缓存和测试产物，确保密钥不进入前端、数据库或版本管理。
+#### [MODIFY] [app/schemas.py](</C:/Users/cixia/Desktop/daily plan/app/schemas.py>)
+- 新增执行标签配置、执行段创建/编辑输入模型。
+- 扩展设置结构，支持 `execution_labels`。
 
-#### [NEW] `README.md`
-- 说明 Windows 本地安装、配置、启动、测试、备份与恢复方法。
-- 记录第一阶段边界，以及后续 PushDeer 和 Termux 的升级入口。
-- 将双击 `启动今日航线.cmd` 作为 Windows 首选启动方式，同时保留手动命令用于排错。
+#### [MODIFY] [app/api.py](</C:/Users/cixia/Desktop/daily plan/app/api.py>)
+- 新增执行页聚合接口和时间段增删改查接口。
+- 在提交今日情况前校验无未结束时间段，并把任务有效时间同步到 `actual_minutes`。
+- 为单日复盘接口补充任务执行看板数据。
 
-### 数据模型与持久化
+### 前端页面与交互
 
-#### [NEW] `app/database.py` 与 `app/models.py`
-- 初始化 SQLite 连接、建表和会话生命周期。
-- 保存任务模板、晨间状态、每日计划、计划项目、未完成待审项、每日复盘和提示词版本。
-- 计划状态区分草稿与已确认；任务只有所属计划确认后才允许更新完成状态。
+#### [MODIFY] [app/main.py](</C:/Users/cixia/Desktop/daily plan/app/main.py>)
+- 新增 `/execute` 页面路由。
 
-#### [NEW] `app/schemas.py`
-- 定义晨间输入、计划草稿、任务项目、审批、任务更新、待审项处理和复盘的输入输出模型。
-- AI 任务字段仅允许名称、类别、预计分钟数、优先级、完成标准和生成理由，拒绝额外字段与非法类别。
+#### [MODIFY] [app/templates/base.html](</C:/Users/cixia/Desktop/daily plan/app/templates/base.html>)
+- 在主导航新增“执行台”入口。
 
-### 本地规则与 AI 生成
+#### [MODIFY] [app/templates/index.html](</C:/Users/cixia/Desktop/daily plan/app/templates/index.html>)
+- 已确认后把主按钮从“提交今日情况”改成“进入执行台”。
+- 主任务实际分钟改成只读展示，避免形成双数据源。
 
-#### [NEW] `app/services/task_rules.py`
-- 按保底、普通、充足三档生成候选任务，并以可用时长限制总量。
-- 固定学习主线；AI 项目只在普通或充足档且周频率允许时加入。
-- 将专注、手机隔离和数学检查规则显示为执行方法，而不是全部转换为待办。
-- 康复训练采用本地轮换和停止条件，不允许 AI 改写训练强度或提供诊断。
+#### [NEW] [app/templates/execute.html](</C:/Users/cixia/Desktop/daily plan/app/templates/execute.html>)
+- 新增独立执行页，承载任务切换、标签切换、时间轴补改和提交入口。
 
-#### [NEW] `app/services/ai_planner.py`
-- 封装兼容 OpenAI API 的 DeepSeek 请求、超时、有限重试、JSON 解析和结构验证。
-- 只提交晨间抽象状态、候选任务、非敏感历史统计和硬约束。
-- 对任务数、总时长、类别、康复安全边界进行二次校验；失败时返回规则版草稿并标注降级原因。
+#### [MODIFY] [app/templates/review.html](</C:/Users/cixia/Desktop/daily plan/app/templates/review.html>)
+- 在总统计和晚间收束之间新增任务执行看板区域。
 
-#### [NEW] `app/prompts/daily_planner_v1.md`
-- 保存由 GPT-5.5 设计的可版本化提示词框架。
-- 包含角色边界、候选任务目录、隐私约束、JSON Schema、正反示例与“不得直接发布任务”的要求。
+#### [MODIFY] [app/templates/settings.html](</C:/Users/cixia/Desktop/daily plan/app/templates/settings.html>)
+- 增加执行标签配置区域，支持自定义标签。
 
-### 后端接口与业务流程
+#### [MODIFY] [app/static/app.js](</C:/Users/cixia/Desktop/daily plan/app/static/app.js>)
+- 新增执行页状态管理、时间段切换、补记编辑、任务看板渲染。
+- 更新今天页、复盘页、设置页的联动逻辑。
 
-#### [NEW] `app/main.py` 与 `app/api.py`
-- 提供应用入口、页面路由、静态资源和统一错误处理。
-- 实现以下接口：
-  - `POST /api/daily-plans/draft`
-  - `PUT /api/daily-plans/{date}`
-  - `POST /api/daily-plans/{date}/approve`
-  - `PATCH /api/tasks/{id}`
-  - `POST /api/daily-reviews`
-  - `POST /api/carryovers/{id}/resolve`
-- 生成新一天草稿前，将此前已确认计划中的未完成任务放入待审池，绝不自动顺延。
-- 审批后冻结任务内容；如需改变当日任务，必须显式撤回审批并重新确认，保留修改记录。
+#### [MODIFY] [app/static/style.css](</C:/Users/cixia/Desktop/daily plan/app/static/style.css>)
+- 补充执行页、时间轴、任务看板和标签设置样式。
 
-#### [NEW] `app/services/weekly_review.py`
-- 汇总最近 7 个实际执行日的计划次数、完成率、计划/实际时长、分类分布和未完成原因。
-- 只提供调量建议，不自动修改下周任务强度或长期规划。
+### 测试
 
-### 页面与交互
+#### [MODIFY] [tests/test_api.py](</C:/Users/cixia/Desktop/daily plan/tests/test_api.py>)
+- 新增执行段接口、提交流程、聚合看板和标签配置测试。
 
-#### [NEW] `app/templates/` 与 `app/static/`
-- 今日页依次展示待审池、晨间三项输入、AI/规则生成状态、可编辑草稿、审批按钮、正式清单、执行方法和晚间三行复盘。
-- 待审项支持重排到指定日期、拆为更小任务或放弃；未经处理时提示用户，但不阻止生成其他任务。
-- 周复盘页展示最近 7 个实际执行日的数据和调量建议。
-- 设置页允许编辑任务模板、周频率、当前阶段、DeepSeek 非敏感配置；密钥仅通过环境变量配置，页面不可读取或回显。
-- 使用响应式原生 CSS 和少量原生 JavaScript，兼顾电脑与手机窄屏，不增加前端构建链。
-
-### 测试与文档
-
-#### [NEW] `tests/`
-- 严格按“先失败、后实现”的顺序覆盖规则生成、时长限制、审批状态机、待审池、AI 校验与降级、隐私过滤、数据库持久化和 API 行为。
-- AI 网络调用仅在适配层边界使用可控替身，业务规则与数据库测试使用真实代码和临时 SQLite。
-
-#### [NEW] `docs/README.md` 与相关模块文档
-- 补充项目总览、数据流、核心规则、隐私边界和模块职责。
-- 代码行为调整时同步更新对应文档。
-
-#### [NEW] `task.md`
-- 在本计划获批后创建，用 `[ ]`、`[/]`、`[x]` 跟踪实际开发与验证进度。
-
-### 后续阶段：提醒与移动部署
-
-- 核心流程完成并经过至少 7 个实际执行日校准后，另行规划 PushDeer 中性提醒、Termux 常驻启动、SQLite 备份恢复和局域网访问。
-- 后续阶段不向通知正文发送敏感记录，也不改变当前单用户、本地优先的数据模型。
-
----
-
-## 实施顺序
-
-1. 创建最小测试环境，先为数据库模型和三档任务规则编写失败测试。
-2. 实现足以通过测试的数据层和本地规则，再重构公共逻辑。
-3. 为计划生成、人工编辑、审批、勾选和待审池状态机编写失败的 API 测试，再实现接口。
-4. 为隐私过滤、AI 合规输出、超时、非法 JSON、超量任务和降级编写失败测试，再实现 DeepSeek 适配层。
-5. 完成今日页、周复盘页和设置页；由用户按手动步骤验证交互和视觉效果。
-6. 完成全量测试、配置安全检查、文档同步和本地启动说明。
-
----
+#### [MODIFY] [tests/test_ui_and_settings.py](</C:/Users/cixia/Desktop/daily plan/tests/test_ui_and_settings.py>)
+- 新增 `/execute` 页面、执行看板、设置页标签配置相关断言。
 
 ## 验证计划
 
 ### 自动化测试
-
 - 命令：`python -m pytest -q`
-- 预期：三种精力档、可用时长、早课日、康复安全边界、审批状态机、待审池、复盘汇总、AI 超时、非法 JSON、超量任务、敏感数据过滤和规则降级全部通过。
-- 命令：`python -m pytest tests/test_persistence.py -q`
-- 预期：关闭并重新建立数据库连接后，已确认计划、任务状态、待审项和复盘数据保持一致。
+- 预期：执行段、设置页、执行页和复盘页新增回归测试通过。
+
 - 命令：`python -m compileall app tests`
-- 预期：所有 Python 模块编译成功，无语法错误。
-- 命令：`rg -n "DEEPSEEK_API_KEY|api[_-]?key|Authorization" app/templates app/static`
-- 预期：前端模板和静态资源中不存在密钥值或读取密钥的逻辑。
-- 命令：`cmd /c "启动今日航线.cmd --check"`
-- 预期：脚本完成 Python、应用模块、端口和启动配置检查后以退出码 0 结束，不常驻启动服务。
+- 预期：`app/` 与 `tests/` 全部可编译。
 
-### 用户手动验证
+- 命令：`node --check app/static/app.js`
+- 预期：前端脚本语法通过。
 
-1. 访问 `http://127.0.0.1:8000`，分别生成保底、普通和充足三档任务，确认总时长不超过所选可用时长。
-2. 修改、删除、增加和排序草稿，确认审批前任务不可勾选，审批后才显示正式清单。
-3. 留下一项未完成并切换到下一天，确认该项进入待审池且没有自动加入新清单。
-4. 分别执行重排、拆小和放弃，确认原待审项状态正确且不会重复出现。
-5. 临时使用无效 DeepSeek 配置生成草稿，确认页面提示已降级且仍能使用规则版任务。
-6. 填写晚间三行复盘并查看周复盘，确认统计只包含实际执行日。
-7. 将浏览器缩窄到手机宽度，确认表单、任务卡、操作按钮和导航均可正常阅读与点击。
-8. 在项目根目录双击 `启动今日航线.cmd`，确认可见窗口显示启动日志、浏览器自动打开主页，按 `Ctrl+C` 后服务停止。
-
----
-
-## 完成标准与风险边界
-
-- 第一阶段完成标准是本地核心闭环可用、自动化测试通过、用户手动验证通过；PushDeer 和 Termux 不计入本阶段完成条件。
-- DeepSeek 的兼容接口细节通过环境变量适配；若服务商响应格式存在扩展差异，只在 AI 适配层处理。
-- 本应用不提供医疗诊断。出现膝盖疼痛、错位、卡住、打软或肿胀时，只提示停止相关训练并寻求专业评估。
-- 未经用户明确要求，不创建或更新 `HANDOFF.md`。
+### 手动验证
+1. 确认某天清单后，今天页出现“进入执行台”入口。
+2. 进入执行台后，开始任务有效时间，切换计总标签，再切回任务，确认只有一个激活项。
+3. 切到“吃饭”等中断标签，确认中断被记录但不并入任务总时间。
+4. 在时间轴里补记、编辑、删除一段，确认任务看板即时刷新。
+5. 在执行台勾选任务并提交，确认仍有未结束段时会被拦住。
+6. 打开单日复盘页，确认能看到任务总时间、有效时间、标签时间和次数。
