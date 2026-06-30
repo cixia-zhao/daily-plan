@@ -152,12 +152,7 @@ git status
 以后日常更新就是这两条：
 
 ```bash
-cd /storage/emulated/0/daily-plan
-bash ./termux-update.sh
+spdp
 ```
 
-然后：
-
-```bash
-bash ./termux-start.sh
-```
+它会自动先更新，再启动。

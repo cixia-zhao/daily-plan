@@ -43,7 +43,10 @@ git pull --ff-only
 echo "[3/4] 同步 Python 依赖"
 python -m pip install -e ".[dev]"
 
-echo "[4/4] 保留本地数据目录，不做覆盖"
+echo "[4/5] 刷新快捷命令"
+bash ./termux-register-commands.sh
+
+echo "[5/5] 保留本地数据目录，不做覆盖"
 echo
 echo "[OK] 更新完成。"
-echo "下次启动继续运行：bash ./termux-start.sh"
+echo "下次启动继续运行：dp"

@@ -74,8 +74,7 @@ ERROR: Installing pip is forbidden, this will break the python-pip package (term
 ### 每次启动
 
 ```bash
-cd ~/daily-plan
-bash ./termux-start.sh
+dp
 ```
 
 ### 以后更新
@@ -83,8 +82,7 @@ bash ./termux-start.sh
 如果手机这一份已经改成 Git 工作区，之后更新可以直接：
 
 ```bash
-cd /storage/emulated/0/daily-plan
-bash ./termux-update.sh
+spdp
 ```
 
 它会先备份本地数据库，再拉最新代码，并保留你的 `data/` 不变。

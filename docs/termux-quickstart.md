@@ -154,8 +154,7 @@ ERROR: Installing pip is forbidden, this will break the python-pip package (term
 以后每天只需要这样：
 
 ```bash
-cd /storage/emulated/0/daily-plan
-bash ./termux-start.sh
+dp
 ```
 
 它会默认：
@@ -193,8 +192,7 @@ http://127.0.0.1:8000
 2. 执行：
 
 ```bash
-cd /storage/emulated/0/daily-plan
-bash ./termux-start.sh
+dp
 ```
 
 3. 打开主屏幕图标或浏览器
@@ -285,7 +283,32 @@ data/daily_plan.db
 
 ---
 
-## 八、如果你把这份文档发给 GPT
+## 八、快捷命令
+
+最新的安装脚本会自动注册两个快捷命令：
+
+```bash
+dp
+```
+
+- 直接启动今日航线
+
+```bash
+spdp
+```
+
+- 先更新 GitHub 最新代码，再启动今日航线
+
+如果你刚拉了新版本，但本地还没有这两个命令，可以手动执行一次：
+
+```bash
+cd /storage/emulated/0/daily-plan
+bash ./termux-register-commands.sh
+```
+
+---
+
+## 九、如果你把这份文档发给 GPT
 
 你可以直接告诉它：
 
