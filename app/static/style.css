@@ -1120,6 +1120,24 @@ body.modal-open {
   display: none;
 }
 
+.section-heading-actions,
+.timeline-content,
+.submit-zero-group {
+  display: grid;
+  gap: 12px;
+}
+
+.section-heading-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.section-toggle-button {
+  justify-content: center;
+  white-space: nowrap;
+}
+
 .execution-section-toggle {
   display: flex;
   align-items: center;
@@ -1201,6 +1219,32 @@ body.modal-open {
   display: none;
 }
 
+body[data-page=settings] {
+  overflow-x: clip;
+}
+
+body[data-page=settings] .form-grid > *,
+body[data-page=settings] .settings-form > label,
+body[data-page=settings] .actions,
+body[data-page=settings] .actions button {
+  min-width: 0;
+}
+
+body[data-page=settings] .execution-label-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr) auto auto;
+  align-items: end;
+}
+
+body[data-page=settings] .execution-label-row label {
+  min-width: 0;
+}
+
+body[data-page=settings] .execution-label-row .status,
+body[data-page=settings] .execution-label-row .ghost-button {
+  white-space: nowrap;
+}
+
 @media(max-width:900px){
   .execute-layout,
   .execution-board-lists {
@@ -1223,6 +1267,17 @@ body.modal-open {
     width: 100%;
   }
 
+  .section-heading-actions {
+    width: 100%;
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .section-toggle-button {
+    width: 100%;
+    white-space: normal;
+  }
+
   .execution-task-meta {
     gap: 8px 12px;
     font-size: 14px;
@@ -1233,5 +1288,29 @@ body.modal-open {
     border: 1px solid var(--line);
     border-radius: 16px;
     background: rgba(255, 255, 255, 0.72);
+  }
+
+  body[data-page=settings] .hero.compact {
+    align-items: stretch;
+  }
+
+  body[data-page=settings] .status.success,
+  body[data-page=settings] .alert-check,
+  body[data-page=settings] .config-note,
+  body[data-page=settings] .actions button {
+    width: 100%;
+  }
+
+  body[data-page=settings] .alert-check {
+    flex-wrap: wrap;
+  }
+
+  body[data-page=settings] .execution-label-row {
+    grid-template-columns: 1fr;
+  }
+
+  body[data-page=settings] .execution-label-row .status,
+  body[data-page=settings] .execution-label-row .ghost-button {
+    white-space: normal;
   }
 }

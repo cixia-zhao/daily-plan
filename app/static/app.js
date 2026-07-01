@@ -794,11 +794,16 @@ if (page === 'execute') {
   let executionState = null;
   let selectedTaskId = null;
   let showDraftSegment = false;
-  let mobileExecutionState = {
-    collapsedZeroMain: true,
-    collapsedSub: true,
-    expandedLabelBucket: null,
-  };
+  function defaultExecutionUiState() {
+    return {
+      collapsedZeroMain: true,
+      collapsedSub: true,
+      expandedLabelBucket: null,
+      collapsedTimeline: true,
+      collapsedZeroMinuteSubmit: true,
+    };
+  }
+  let executionUiState = defaultExecutionUiState();
   dateInput.value = selectedFromQuery || todayIso();
   updateDateTrigger(dateButton, dateInput.value);
 
@@ -820,9 +825,23 @@ if (page === 'execute') {
     return executionState?.task_execution_board?.find(item => String(item.task_id) === String(taskId)) || null;
   }
 
+  function timelineToggleText() {
+    const segmentCount = (executionState?.segments?.length || 0) + (showDraftSegment ? 1 : 0);
+    const countText = segmentCount ? `（${segmentCount} 段）` : '';
+    return executionUiState.collapsedTimeline ? `展开时间轴${countText}` : `收起时间轴${countText}`;
+  }
+
+  function visibleExecutionSubmitTasks(tasks) {
+    return tasks.filter(task => Number(task.estimated_minutes) > 0 || Number(task.actual_minutes || 0) > 0);
+  }
+
+  function collapsedExecutionSubmitTasks(tasks) {
+    return tasks.filter(task => Number(task.estimated_minutes) === 0 && Number(task.actual_minutes || 0) === 0);
+  }
+
   async function startEffectiveTask(taskId, successMessage='已开始记录有效时间') {
     selectedTaskId = taskId;
-    mobileExecutionState.expandedLabelBucket = null;
+    executionUiState.expandedLabelBucket = null;
     executionState = await api(`/api/daily-execution/${dateInput.value}/tasks/start`, {method:'POST', body:JSON.stringify({task_id:taskId})});
     renderExecutionState(executionState);
     toast(successMessage);
@@ -915,6 +934,7 @@ if (page === 'execute') {
           ? await api(`/api/daily-execution/${dateInput.value}/segments`, {method:'POST', body:JSON.stringify(body)})
           : await api(`/api/daily-execution/${dateInput.value}/segments/${row.dataset.segmentId}`, {method:'PUT', body:JSON.stringify(body)});
         showDraftSegment = false;
+        executionUiState.collapsedTimeline = false;
         renderExecutionState(executionState);
         toast(row.dataset.segmentId === 'draft' ? '补记已保存' : '时间段已更新');
       } catch (error) { toast(error.message); }
@@ -924,7 +944,7 @@ if (page === 'execute') {
       const row = button.closest('.timeline-card');
       if (row.dataset.segmentId === 'draft') {
         showDraftSegment = false;
-        renderTimelineList();
+        renderTimelineSection();
         return;
       }
       try {
@@ -941,6 +961,15 @@ if (page === 'execute') {
         toast('已停止当前计时');
       } catch (error) { toast(error.message); }
     });
+  }
+
+  function renderTimelineSection() {
+    const toggle = $('#timeline-toggle');
+    const content = $('#timeline-content');
+    toggle.textContent = timelineToggleText();
+    toggle.setAttribute('aria-expanded', String(!executionUiState.collapsedTimeline));
+    content.classList.toggle('hidden', executionUiState.collapsedTimeline);
+    renderTimelineList();
   }
 
   function executionTaskCardHtml(task) {
@@ -996,26 +1025,25 @@ if (page === 'execute') {
     });
   }
 
-  function renderExecutionSubmitList() {
-    const list = $('#execute-submit-list');
-    const tasks = executionState?.plan?.tasks || [];
-    list.innerHTML = tasks.map(task => {
-      const isMain = !task.is_sub && Number(task.estimated_minutes) > 0;
-      const disabled = !isMain ? 'disabled' : '';
-      const summary = task.is_sub
-        ? `有效 ${task.actual_minutes || 0} 分 · ${task.completed ? '已完成' : '未完成'}`
-        : `计划 ${task.estimated_minutes} 分 · 有效 ${task.actual_minutes || 0} 分`;
-      return `
-        <article class="task-card ${task.completed ? 'completed' : ''}" data-submit-task-id="${task.id}">
-          <input class="task-check execute-submit-check" type="checkbox" ${task.completed ? 'checked' : ''} ${disabled} aria-label="完成任务">
-          <div class="task-content">
-            <div class="task-title-row"><strong>${esc(task.title)}</strong></div>
-            <div class="task-meta"><span>${esc(settings?.task_titles?.[task.category] || task.category)}</span><span>${summary}</span></div>
-          </div>
-        </article>
-      `;
-    }).join('');
-    $$('.execute-submit-check', list).forEach(checkbox => checkbox.onchange = async () => {
+  function executionSubmitCardHtml(task) {
+    const canComplete = !task.is_sub && (Number(task.estimated_minutes) > 0 || Number(task.actual_minutes || 0) > 0);
+    const disabled = !canComplete ? 'disabled' : '';
+    const summary = task.is_sub
+      ? `有效 ${task.actual_minutes || 0} 分 · ${task.completed ? '已完成' : '未完成'}`
+      : `计划 ${task.estimated_minutes} 分 · 有效 ${task.actual_minutes || 0} 分`;
+    return `
+      <article class="task-card ${task.completed ? 'completed' : ''}" data-submit-task-id="${task.id}">
+        <input class="task-check execute-submit-check" type="checkbox" ${task.completed ? 'checked' : ''} ${disabled} aria-label="完成任务">
+        <div class="task-content">
+          <div class="task-title-row"><strong>${esc(task.title)}</strong></div>
+          <div class="task-meta"><span>${esc(settings?.task_titles?.[task.category] || task.category)}</span><span>${summary}</span></div>
+        </div>
+      </article>
+    `;
+  }
+
+  function bindExecutionSubmitEvents(root) {
+    $$('.execute-submit-check', root).forEach(checkbox => checkbox.onchange = async () => {
       const card = checkbox.closest('[data-submit-task-id]');
       try {
         const updated = await api(`/api/tasks/${card.dataset.submitTaskId}`, {method:'PATCH', body:JSON.stringify({completed:checkbox.checked})});
@@ -1027,6 +1055,32 @@ if (page === 'execute') {
         toast(error.message);
       }
     });
+  }
+
+  function renderExecutionSubmitList() {
+    const list = $('#execute-submit-list');
+    const zeroGroup = $('#execute-submit-zero-group');
+    const zeroToggle = $('#execute-submit-zero-toggle');
+    const zeroList = $('#execute-submit-zero-list');
+    const tasks = executionState?.plan?.tasks || [];
+    const visibleTasks = visibleExecutionSubmitTasks(tasks);
+    const hiddenZeroMinuteTasks = collapsedExecutionSubmitTasks(tasks);
+
+    list.innerHTML = visibleTasks.map(executionSubmitCardHtml).join('');
+    bindExecutionSubmitEvents(list);
+
+    if (!hiddenZeroMinuteTasks.length) {
+      zeroGroup.classList.add('hidden');
+      zeroList.innerHTML = '';
+      return;
+    }
+
+    zeroGroup.classList.remove('hidden');
+    zeroToggle.textContent = `${executionUiState.collapsedZeroMinuteSubmit ? '展开' : '收起'}今日原计划为 0 分的项目（${hiddenZeroMinuteTasks.length} 项）`;
+    zeroToggle.setAttribute('aria-expanded', String(!executionUiState.collapsedZeroMinuteSubmit));
+    zeroList.classList.toggle('hidden', executionUiState.collapsedZeroMinuteSubmit);
+    zeroList.innerHTML = hiddenZeroMinuteTasks.map(executionSubmitCardHtml).join('');
+    bindExecutionSubmitEvents(zeroList);
   }
 
   function renderExecutionTasks() {
@@ -1041,8 +1095,8 @@ if (page === 'execute') {
     const plannedMainTasks = mainTasks.filter(task => Number(task.estimated_minutes) > 0);
     const zeroMinuteMainTasks = mainTasks.filter(task => Number(task.estimated_minutes) === 0);
     const subTasks = tasks.filter(task => task.is_sub);
-    const zeroMainCollapsed = mobileExecutionState.collapsedZeroMain && !zeroMinuteMainTasks.some(task => task.id === activeTaskId);
-    const subCollapsed = mobileExecutionState.collapsedSub && !subTasks.some(task => task.id === activeTaskId);
+    const zeroMainCollapsed = executionUiState.collapsedZeroMain && !zeroMinuteMainTasks.some(task => task.id === activeTaskId);
+    const subCollapsed = executionUiState.collapsedSub && !subTasks.some(task => task.id === activeTaskId);
     const sections = [];
 
     if (plannedMainTasks.length) {
@@ -1069,8 +1123,8 @@ if (page === 'execute') {
 
     list.innerHTML = sections.join('');
     $$('.execution-section-toggle', list).forEach(button => button.onclick = () => {
-      if (button.dataset.sectionKey === 'zero-main') mobileExecutionState.collapsedZeroMain = !mobileExecutionState.collapsedZeroMain;
-      if (button.dataset.sectionKey === 'sub-route') mobileExecutionState.collapsedSub = !mobileExecutionState.collapsedSub;
+      if (button.dataset.sectionKey === 'zero-main') executionUiState.collapsedZeroMain = !executionUiState.collapsedZeroMain;
+      if (button.dataset.sectionKey === 'sub-route') executionUiState.collapsedSub = !executionUiState.collapsedSub;
       renderExecutionTasks();
     });
     bindExecutionTaskCardEvents(list);
@@ -1093,7 +1147,7 @@ if (page === 'execute') {
           method:'POST',
           body:JSON.stringify({label_id:button.dataset.labelId, task_id:task?.id || null}),
         });
-        mobileExecutionState.expandedLabelBucket = null;
+        executionUiState.expandedLabelBucket = null;
         renderExecutionState(executionState);
         toast(`已切到${button.textContent}`);
       } catch (error) { toast(error.message); }
@@ -1114,22 +1168,22 @@ if (page === 'execute') {
     const active = executionState?.active_segment;
     const canReturnToEffective = Boolean(active && active.segment_kind !== 'effective' && active.task_id);
 
-    $('#mobile-counted-toggle').classList.toggle('active', mobileExecutionState.expandedLabelBucket === 'counted');
-    $('#mobile-interrupt-toggle').classList.toggle('active', mobileExecutionState.expandedLabelBucket === 'interrupt');
+    $('#mobile-counted-toggle').classList.toggle('active', executionUiState.expandedLabelBucket === 'counted');
+    $('#mobile-interrupt-toggle').classList.toggle('active', executionUiState.expandedLabelBucket === 'interrupt');
     $('#mobile-return-effective').disabled = !canReturnToEffective;
 
-    countedPanel.classList.toggle('hidden', mobileExecutionState.expandedLabelBucket !== 'counted');
-    interruptPanel.classList.toggle('hidden', mobileExecutionState.expandedLabelBucket !== 'interrupt');
+    countedPanel.classList.toggle('hidden', executionUiState.expandedLabelBucket !== 'counted');
+    interruptPanel.classList.toggle('hidden', executionUiState.expandedLabelBucket !== 'interrupt');
 
     renderExecutionLabelButtons('counted', '#mobile-counted-label-list');
     renderExecutionLabelButtons('interrupt', '#mobile-interrupt-label-list');
 
     $('#mobile-counted-toggle').onclick = () => {
-      mobileExecutionState.expandedLabelBucket = mobileExecutionState.expandedLabelBucket === 'counted' ? null : 'counted';
+      executionUiState.expandedLabelBucket = executionUiState.expandedLabelBucket === 'counted' ? null : 'counted';
       renderExecutionToolbar();
     };
     $('#mobile-interrupt-toggle').onclick = () => {
-      mobileExecutionState.expandedLabelBucket = mobileExecutionState.expandedLabelBucket === 'interrupt' ? null : 'interrupt';
+      executionUiState.expandedLabelBucket = executionUiState.expandedLabelBucket === 'interrupt' ? null : 'interrupt';
       renderExecutionToolbar();
     };
     $('#mobile-return-effective').onclick = async () => {
@@ -1169,7 +1223,7 @@ if (page === 'execute') {
     renderExecutionLabels();
     renderExecutionToolbar();
     renderTaskExecutionBoard($('#execute-task-board'), result.task_execution_board, '<p class="muted">开始记录后，这里会出现每个任务的时间结构。</p>');
-    renderTimelineList();
+    renderTimelineSection();
     renderExecutionSubmitList();
   }
 
@@ -1189,7 +1243,18 @@ if (page === 'execute') {
 
   $('#add-segment').onclick = () => {
     showDraftSegment = true;
-    renderTimelineList();
+    executionUiState.collapsedTimeline = false;
+    renderTimelineSection();
+  };
+
+  $('#timeline-toggle').onclick = () => {
+    executionUiState.collapsedTimeline = !executionUiState.collapsedTimeline;
+    renderTimelineSection();
+  };
+
+  $('#execute-submit-zero-toggle').onclick = () => {
+    executionUiState.collapsedZeroMinuteSubmit = !executionUiState.collapsedZeroMinuteSubmit;
+    renderExecutionSubmitList();
   };
 
   $('#execute-submit').onclick = async () => {
@@ -1207,7 +1272,7 @@ if (page === 'execute') {
       dateInput.value = nextDate;
       selectedTaskId = null;
       showDraftSegment = false;
-      mobileExecutionState = {collapsedZeroMain: true, collapsedSub: true, expandedLabelBucket: null};
+      executionUiState = defaultExecutionUiState();
       updateDateTrigger(dateButton, nextDate);
       await loadExecution();
     }, '选择执行日期');

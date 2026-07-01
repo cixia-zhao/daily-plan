@@ -61,14 +61,23 @@
 <section id="timeline-panel" class="panel hidden">
   <div class="section-heading">
     <div><p class="step">02 · 时间轴</p><h2>允许补记，也允许回头修正</h2></div>
-    <button id="add-segment" class="ghost-button" type="button">补一段</button>
+    <div class="section-heading-actions">
+      <button id="timeline-toggle" class="ghost-button section-toggle-button" type="button" aria-expanded="false">展开时间轴</button>
+      <button id="add-segment" class="ghost-button" type="button">补一段</button>
+    </div>
   </div>
-  <div id="timeline-list" class="timeline-list"></div>
+  <div id="timeline-content" class="timeline-content hidden">
+    <div id="timeline-list" class="timeline-list"></div>
+  </div>
 </section>
 
 <section id="execute-submit-panel" class="panel hidden">
   <div class="section-heading"><div><p class="step">03 · 收尾提交</p><h2>勾完成，再交给复盘页</h2></div></div>
   <div id="execute-submit-list" class="execution-task-list"></div>
+  <section id="execute-submit-zero-group" class="submit-zero-group hidden">
+    <button id="execute-submit-zero-toggle" class="ghost-button section-toggle-button" type="button" aria-expanded="false">展开今日原计划为 0 分的项目</button>
+    <div id="execute-submit-zero-list" class="execution-task-list hidden"></div>
+  </section>
   <div class="actions">
     <button id="execute-submit" class="primary" type="button">提交今日情况</button>
   </div>

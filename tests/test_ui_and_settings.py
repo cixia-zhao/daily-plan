@@ -131,13 +131,21 @@ def test_execute_page_assets_exist():
     assert 'id="counted-label-list"' in execute
     assert 'id="interrupt-label-list"' in execute
     assert 'id="timeline-list"' in execute
+    assert 'id="timeline-toggle"' in execute
+    assert 'id="timeline-content"' in execute
+    assert 'id="execute-submit-zero-toggle"' in execute
     assert 'id="execute-submit"' in execute
+    assert "collapsedTimeline" in script
+    assert "collapsedZeroMinuteSubmit" in script
+    assert "今日原计划为 0 分的项目" in script
     assert ".execute-layout" in styles
     assert ".execution-mobile-toolbar" in styles
     assert ".execution-task-section" in styles
     assert ".execution-section-toggle" in styles
     assert ".execution-board-card" in styles
     assert ".timeline-card" in styles
+    assert ".section-toggle-button" in styles
+    assert ".submit-zero-group" in styles
 
 
 def test_zero_minute_main_tasks_hide_execution_controls_in_approved_view():
@@ -211,8 +219,12 @@ def test_settings_budget_inputs_use_fifteen_minute_steps():
 def test_settings_and_copy_text_deemphasize_deepseek():
     settings_page = Path("app/templates/settings.html").read_text(encoding="utf-8")
     weekly_page = Path("app/templates/weekly.html").read_text(encoding="utf-8")
+    styles = Path("app/static/style.css").read_text(encoding="utf-8")
 
     assert "GPT 协作偏好" in settings_page
     assert "DeepSeek 连接" not in settings_page
     assert "复制给 ChatGPT" in weekly_page
     assert "DeepSeek" not in weekly_page
+    assert "body[data-page=settings]" in styles
+    assert "overflow-x: clip" in styles
+    assert ".execution-label-row" in styles
