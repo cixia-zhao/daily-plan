@@ -11,6 +11,23 @@ def make_client(tmp_path):
     return TestClient(app)
 
 
+def editable_tasks(draft):
+    editable_fields = {
+        "id", "title", "category", "estimated_minutes", "priority",
+        "completion_criteria", "reason", "source", "sub_category", "is_sub",
+    }
+    return [{key: value for key, value in task.items() if key in editable_fields} for task in draft["tasks"]]
+
+
+def set_main_minutes(tasks, minutes_by_category):
+    for task in tasks:
+        if task["is_sub"]:
+            continue
+        if task["category"] in minutes_by_category:
+            task["estimated_minutes"] = minutes_by_category[task["category"]]
+    return tasks
+
+
 def test_draft_must_be_approved_before_tasks_can_be_checked(tmp_path):
     client = make_client(tmp_path)
     today = date.today().isoformat()
@@ -38,6 +55,8 @@ def test_unfinished_tasks_enter_review_pool_without_automatic_rollover(tmp_path)
     first = client.post("/api/daily-plans/draft", json={
         "date": first_day.isoformat(), "energy": "minimum", "available_minutes": 90, "day_type": "normal"
     }).json()
+    first_tasks = set_main_minutes(editable_tasks(first), {"math": 30, "english": 20, "computer": 30, "rehab": 10})
+    client.put(f"/api/daily-plans/{first_day.isoformat()}", json={"tasks": first_tasks})
     client.post(f"/api/daily-plans/{first_day.isoformat()}/approve")
 
     second = client.post("/api/daily-plans/draft", json={
@@ -166,6 +185,9 @@ def test_daily_review_summarizes_plan_and_saved_review(tmp_path):
     draft = client.post("/api/daily-plans/draft", json={
         "date": today, "energy": "normal", "available_minutes": 160, "day_type": "normal"
     }).json()
+    tasks = set_main_minutes(editable_tasks(draft), {"math": 60, "english": 30, "computer": 50, "rehab": 20})
+    client.put(f"/api/daily-plans/{today}", json={"tasks": tasks})
+    draft = client.get(f"/api/daily-plans/{today}").json()
     client.post(f"/api/daily-plans/{today}/approve")
 
     main_task = next(t for t in draft["tasks"] if not t["is_sub"])
@@ -265,6 +287,9 @@ def test_clear_daily_data_removes_day_from_weekly_review(tmp_path):
     draft = client.post("/api/daily-plans/draft", json={
         "date": today, "energy": "normal", "available_minutes": 160, "day_type": "normal"
     }).json()
+    tasks = set_main_minutes(editable_tasks(draft), {"math": 60, "english": 30, "computer": 50, "rehab": 20})
+    client.put(f"/api/daily-plans/{today}", json={"tasks": tasks})
+    draft = client.get(f"/api/daily-plans/{today}").json()
     client.post(f"/api/daily-plans/{today}/approve")
     main_task = next(t for t in draft["tasks"] if not t["is_sub"])
     client.patch(f"/api/tasks/{main_task['id']}", json={"completed": True})
@@ -312,6 +337,8 @@ def test_explicitly_rescheduled_task_is_added_on_target_day(tmp_path):
     first = client.post("/api/daily-plans/draft", json={
         "date": day1.isoformat(), "energy": "minimum", "available_minutes": 90, "day_type": "normal"
     }).json()
+    first_tasks = set_main_minutes(editable_tasks(first), {"math": 30, "english": 20, "computer": 30, "rehab": 10})
+    client.put(f"/api/daily-plans/{day1.isoformat()}", json={"tasks": first_tasks})
     client.post(f"/api/daily-plans/{day1.isoformat()}/approve")
     client.post("/api/daily-plans/draft", json={
         "date": day2.isoformat(), "energy": "minimum", "available_minutes": 90, "day_type": "normal"
@@ -332,6 +359,9 @@ def test_submit_flow_and_sub_route_rules(tmp_path):
     draft = client.post("/api/daily-plans/draft", json={
         "date": today, "energy": "normal", "available_minutes": 160, "day_type": "normal"
     }).json()
+    tasks = set_main_minutes(editable_tasks(draft), {"math": 60, "english": 30, "computer": 50, "rehab": 20})
+    client.put(f"/api/daily-plans/{today}", json={"tasks": tasks})
+    draft = client.get(f"/api/daily-plans/{today}").json()
 
     client.post(f"/api/daily-plans/{today}/approve")
 
@@ -379,7 +409,14 @@ def test_execution_segments_aggregate_into_daily_execution_and_review_board(tmp_
         {
             "task_id": main_task["id"],
             "segment_kind": "effective",
+            "label_id": "effective_math_course",
             "started_at": f"{today}T09:35:00",
+            "ended_at": f"{today}T10:15:00",
+        },
+        {
+            "task_id": main_task["id"],
+            "segment_kind": "effective",
+            "started_at": f"{today}T10:15:00",
             "ended_at": f"{today}T10:35:00",
         },
         {
@@ -405,12 +442,18 @@ def test_execution_segments_aggregate_into_daily_execution_and_review_board(tmp_
     body = execution.json()
     assert body["labels"]
     assert body["active_segment"] is None
-    assert len(body["segments"]) == 3
+    assert len(body["segments"]) == 4
     board = body["task_execution_board"][0]
     assert board["task_id"] == main_task["id"]
     assert board["effective_minutes"] == 60
     assert board["total_minutes"] == 70
     assert board["interrupt_minutes"] == 45
+    assert board["effective_ratio"] == 0.8571
+    assert board["effective_labels"][0]["label_name"] == "网课"
+    assert board["effective_labels"][0]["minutes"] == 40
+    assert board["effective_labels"][0]["effective_share"] == 0.6667
+    assert board["effective_labels"][1]["label_name"] == "未细分"
+    assert board["effective_labels"][1]["minutes"] == 20
     assert board["counted_labels"][0]["label_name"] == "上厕所"
     assert board["counted_labels"][0]["count"] == 1
     assert board["interrupt_labels"][0]["label_name"] == "吃饭"
@@ -429,9 +472,10 @@ def test_execution_active_segment_switch_and_submit_guard(tmp_path):
     client.post(f"/api/daily-plans/{today}/approve")
     main_task = next(t for t in draft["tasks"] if not t["is_sub"])
 
-    started = client.post(f"/api/daily-execution/{today}/tasks/start", json={"task_id": main_task["id"]})
+    started = client.post(f"/api/daily-execution/{today}/tasks/start", json={"task_id": main_task["id"], "label_id": "effective_math_practice"})
     assert started.status_code == 200
     assert started.json()["active_segment"]["segment_kind"] == "effective"
+    assert started.json()["active_segment"]["label_name"] == "刷题"
 
     blocked_submit = client.post(f"/api/daily-plans/{today}/submit")
     assert blocked_submit.status_code == 409
@@ -446,6 +490,31 @@ def test_execution_active_segment_switch_and_submit_guard(tmp_path):
     stopped = client.post(f"/api/daily-execution/{today}/stop")
     assert stopped.status_code == 200
     assert stopped.json()["active_segment"] is None
+
+
+def test_effective_label_must_match_task_category(tmp_path):
+    client = make_client(tmp_path)
+    today = date.today().isoformat()
+    draft = client.post("/api/daily-plans/draft", json={
+        "date": today, "energy": "normal", "available_minutes": 160, "day_type": "normal"
+    }).json()
+    client.post(f"/api/daily-plans/{today}/approve")
+    english_task = next(t for t in draft["tasks"] if t["category"] == "english")
+
+    started = client.post(f"/api/daily-execution/{today}/tasks/start", json={
+        "task_id": english_task["id"],
+        "label_id": "effective_math_course",
+    })
+    assert started.status_code == 404
+
+    segment = client.post(f"/api/daily-execution/{today}/segments", json={
+        "task_id": english_task["id"],
+        "segment_kind": "effective",
+        "label_id": "effective_math_course",
+        "started_at": f"{today}T09:00:00",
+        "ended_at": f"{today}T09:30:00",
+    })
+    assert segment.status_code == 404
 
 
 def test_execution_open_effective_segment_never_reports_negative_minutes(tmp_path):
@@ -563,11 +632,8 @@ def test_saving_draft_keeps_original_available_time_capacity(tmp_path):
     draft = client.post("/api/daily-plans/draft", json={
         "date": today, "energy": "normal", "available_minutes": 180, "day_type": "normal"
     }).json()
-    editable_fields = {
-        "id", "title", "category", "estimated_minutes", "priority",
-        "completion_criteria", "reason", "source", "sub_category", "is_sub",
-    }
-    tasks = [{key: value for key, value in task.items() if key in editable_fields} for task in draft["tasks"]]
+    tasks = editable_tasks(draft)
+    set_main_minutes(tasks, {"math": 60, "english": 30, "computer": 50, "rehab": 20})
     first_main = next(task for task in tasks if not task["is_sub"])
     first_main["estimated_minutes"] -= 10
 
@@ -653,11 +719,8 @@ def test_zero_minute_main_tasks_are_excluded_from_daily_and_weekly_review_counts
     draft = client.post("/api/daily-plans/draft", json={
         "date": today, "energy": "normal", "available_minutes": 160, "day_type": "normal"
     }).json()
-    editable_fields = {
-        "id", "title", "category", "estimated_minutes", "priority",
-        "completion_criteria", "reason", "source", "sub_category", "is_sub",
-    }
-    tasks = [{key: value for key, value in task.items() if key in editable_fields} for task in draft["tasks"]]
+    tasks = editable_tasks(draft)
+    set_main_minutes(tasks, {"math": 60, "english": 30, "computer": 50, "rehab": 20})
     main_tasks = [task for task in tasks if not task["is_sub"]]
     main_tasks[1]["estimated_minutes"] = 0
     main_tasks[2]["estimated_minutes"] = 0
@@ -693,11 +756,8 @@ def test_zero_minute_main_tasks_do_not_enter_carryover_pool(tmp_path):
     draft = client.post("/api/daily-plans/draft", json={
         "date": first_day.isoformat(), "energy": "normal", "available_minutes": 160, "day_type": "normal"
     }).json()
-    editable_fields = {
-        "id", "title", "category", "estimated_minutes", "priority",
-        "completion_criteria", "reason", "source", "sub_category", "is_sub",
-    }
-    tasks = [{key: value for key, value in task.items() if key in editable_fields} for task in draft["tasks"]]
+    tasks = editable_tasks(draft)
+    set_main_minutes(tasks, {"math": 60, "english": 30, "computer": 50, "rehab": 20})
     main_tasks = [task for task in tasks if not task["is_sub"]]
     main_tasks[1]["estimated_minutes"] = 0
     main_tasks[2]["estimated_minutes"] = 0
@@ -808,6 +868,12 @@ def test_settings_persist_weekly_prompt_templates(tmp_path):
         "ai_project_weekly_frequency": 3,
         "rehab_enabled": True,
         "project_start_date": date.today().isoformat(),
+        "draft_main_minutes_by_category": {
+            "math": 0,
+            "english": 15,
+            "computer": 25,
+            "rehab": 10,
+        },
         "budget_minimum": 90,
         "budget_normal": 150,
         "budget_ample": 210,
@@ -815,6 +881,18 @@ def test_settings_persist_weekly_prompt_templates(tmp_path):
             {"id": "counted_toilet", "name": "上厕所", "bucket": "counted", "is_system": True},
             {"id": "custom_break", "name": "放空", "bucket": "interrupt", "is_system": False},
         ],
+        "effective_labels_by_category": {
+            "math": [
+                {"id": "effective_math_course", "name": "网课", "is_system": True},
+                {"id": "math_mock", "name": "模考", "is_system": False},
+            ],
+            "english": [
+                {"id": "effective_english_reading", "name": "阅读", "is_system": True},
+            ],
+            "computer": [
+                {"id": "effective_computer_questions", "name": "真题", "is_system": False},
+            ],
+        },
         "task_titles": {
             "math": "数学", "english": "英语", "computer": "408",
             "vibe_coding": "vibe coding", "algorithm": "算法",
@@ -888,7 +966,11 @@ def test_settings_persist_weekly_prompt_templates(tmp_path):
     assert saved["chatgpt_export_active_prompt_id"] == "chatgpt_export_custom_1"
     assert saved["daily_gpt_active_prompt_id"] == "daily_gpt_custom_1"
     assert saved["weekly_gpt_active_prompt_id"] == "weekly_gpt_custom_1"
+    assert saved["draft_main_minutes_by_category"]["english"] == 15
     assert any(label["id"] == "custom_break" for label in saved["execution_labels"])
+    assert any(label["id"] == "math_mock" for label in saved["effective_labels_by_category"]["math"])
+    assert any(label["id"] == "effective_english_words" for label in saved["effective_labels_by_category"]["english"])
+    assert saved["effective_labels_by_category"]["computer"][0]["name"] == "真题"
     assert any(prompt["id"] == "weekly_analysis_custom_1" for prompt in saved["weekly_analysis_prompts"])
     assert any(prompt["id"] == "chatgpt_export_custom_1" for prompt in saved["chatgpt_export_prompts"])
     assert any(prompt["id"] == "daily_gpt_custom_1" for prompt in saved["daily_gpt_prompts"])
@@ -904,6 +986,32 @@ def test_settings_persist_weekly_prompt_templates(tmp_path):
     daily = client.get(f"/api/daily-review/{date.today().isoformat()}")
     assert daily.status_code == 200
     assert daily.json()["prompt_settings"]["daily_gpt_active_prompt_id"] == "daily_gpt_custom_1"
+
+
+def test_draft_uses_configured_main_route_default_minutes_and_keeps_rehab_when_enabled(tmp_path):
+    client = make_client(tmp_path)
+    settings = client.get("/api/settings").json()
+    settings["rehab_enabled"] = True
+    settings["draft_main_minutes_by_category"] = {
+        "math": 0,
+        "english": 5,
+        "computer": 10,
+        "rehab": 0,
+    }
+    saved = client.put("/api/settings", json=settings)
+    assert saved.status_code == 200
+
+    draft = client.post("/api/daily-plans/draft", json={
+        "date": date.today().isoformat(), "energy": "normal", "available_minutes": 180, "day_type": "normal"
+    })
+    assert draft.status_code == 201
+    body = draft.json()
+    main_tasks = [task for task in body["tasks"] if not task["is_sub"]]
+    by_category = {task["category"]: task for task in main_tasks}
+    assert by_category["math"]["estimated_minutes"] == 0
+    assert by_category["english"]["estimated_minutes"] == 5
+    assert by_category["computer"]["estimated_minutes"] == 10
+    assert by_category["rehab"]["estimated_minutes"] == 0
 
 
 def test_gpt_workbench_returns_daily_and_weekly_archives(tmp_path):

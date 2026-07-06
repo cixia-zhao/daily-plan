@@ -135,6 +135,11 @@ def test_execute_page_assets_exist():
     assert 'id="timeline-content"' in execute
     assert 'id="execute-submit-zero-toggle"' in execute
     assert 'id="execute-submit"' in execute
+    assert "effectiveLabelSelections" in script
+    assert "latestEffectiveLabelIdForTask" in script
+    assert "effective_labels_by_category" in script
+    assert "effective-label-button" in script
+    assert "有效细分" in script
     assert "collapsedTimeline" in script
     assert "collapsedZeroMinuteSubmit" in script
     assert "今日原计划为 0 分的项目" in script
@@ -210,10 +215,28 @@ def test_settings_budget_inputs_use_fifteen_minute_steps():
     assert 'name="budget_normal" type="number" min="30" max="720" step="15"' in settings_page
     assert 'name="budget_ample" type="number" min="30" max="720" step="15"' in settings_page
     assert 'name="project_start_date" type="date" required' in settings_page
+    assert 'id="draft-main-minute-fields"' in settings_page
     assert 'id="execution-label-fields"' in settings_page
     assert 'id="add-counted-label"' in settings_page
     assert 'id="add-interrupt-label"' in settings_page
+    assert 'id="effective-label-category-fields"' in settings_page
+    assert "draft_main_minutes_by_category" in script
+    assert "data-draft-main-category" in script
+    assert "renderEffectiveLabelFields" in script
+    assert "effective_labels_by_category" in script
     assert "{minimum:90, normal:150, ample:210}" in script
+
+
+def test_today_page_has_nearby_execute_entry_after_confirmation():
+    today = Path("app/templates/index.html").read_text(encoding="utf-8")
+    script = Path("app/static/app.js").read_text(encoding="utf-8")
+
+    assert 'id="submit-today"' in today
+    assert 'id="submit-today-nearby"' in today
+    assert "const buttons = [$('#submit-today'), $('#submit-today-nearby')].filter(Boolean);" in script
+    assert "$('#draft-actions').classList.remove('hidden');" in script
+    assert "$('#save-draft').classList.toggle('hidden', plan.status !== 'draft');" in script
+    assert "$('#approve-plan').classList.toggle('hidden', plan.status !== 'draft');" in script
 
 
 def test_settings_and_copy_text_deemphasize_deepseek():
@@ -222,6 +245,7 @@ def test_settings_and_copy_text_deemphasize_deepseek():
     styles = Path("app/static/style.css").read_text(encoding="utf-8")
 
     assert "GPT 协作偏好" in settings_page
+    assert "主航线包含运动" in settings_page
     assert "DeepSeek 连接" not in settings_page
     assert "复制给 ChatGPT" in weekly_page
     assert "DeepSeek" not in weekly_page

@@ -10,7 +10,7 @@
       <label>AI 项目每周上限<input name="ai_project_weekly_frequency" type="number" min="0" max="7"></label>
       <label>项目起始日<input name="project_start_date" type="date" required></label>
     </div>
-    <label class="alert-check"><input name="rehab_enabled" type="checkbox"><span><strong>启用康复任务</strong><small>异常日仍会由本地安全规则自动停用</small></span></label>
+    <label class="alert-check"><input name="rehab_enabled" type="checkbox"><span><strong>主航线包含运动</strong><small>关闭后，草稿里不会再自动生成“运动”这条主航线；膝盖异常日仍会由本地安全规则自动停用</small></span></label>
 
     <h2>主航线精力档预算（分钟）</h2>
     <div class="form-grid">
@@ -18,6 +18,10 @@
       <label>普通档总时间<input name="budget_normal" type="number" min="30" max="720" step="15" required></label>
       <label>充足档总时间<input name="budget_ample" type="number" min="30" max="720" step="15" required></label>
     </div>
+
+    <h2>主航线草稿默认分钟</h2>
+    <p class="muted">这里控制草稿生成时数学、英语、408、运动默认填多少分钟。默认是 0，后面你再按当天情况改。</p>
+    <div id="draft-main-minute-fields" class="form-grid"></div>
 
     <h2>任务名称</h2><div id="task-title-fields" class="form-grid"></div>
     <h2>执行标签</h2>
@@ -27,6 +31,9 @@
       <button id="add-counted-label" class="ghost-button" type="button">新增计总标签</button>
       <button id="add-interrupt-label" class="ghost-button" type="button">新增中断标签</button>
     </div>
+    <h2>有效细分标签</h2>
+    <p class="muted">按任务类别给有效时间补充细分，例如数学里的“网课 / 刷题”。不选也可以直接开始有效时间。</p>
+    <div id="effective-label-category-fields" class="stack"></div>
     <button class="primary" type="submit">保存设置</button>
   </form>
   <div class="config-note"><h3>GPT 协作工作流</h3><p>这一版优先走“项目整理上下文 -> 复制到 ChatGPT -> 把回复贴回项目”的本地闭环。模板和协作历史统一在 <a href="/gpt-workbench">GPT 工作台</a> 里管理。</p></div>

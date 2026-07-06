@@ -29,6 +29,12 @@ class ExecutionLabelItem(BaseModel):
     is_system: bool = False
 
 
+class EffectiveLabelItem(BaseModel):
+    id: str = Field(min_length=1, max_length=100)
+    name: str = Field(min_length=1, max_length=50)
+    is_system: bool = False
+
+
 class MorningCheckIn(BaseModel):
     energy: Energy
     available_minutes: int = Field(ge=30, le=720)
@@ -112,6 +118,7 @@ class GPTRecordSaveInput(BaseModel):
 
 class ExecutionTaskStartInput(BaseModel):
     task_id: int
+    label_id: str | None = Field(default=None, max_length=100)
 
 
 class ExecutionLabelStartInput(BaseModel):
@@ -147,10 +154,12 @@ class SettingsInput(BaseModel):
     rehab_enabled: bool = True
     project_start_date: date = Field(default_factory=date.today)
     task_titles: dict[Category, str]
+    draft_main_minutes_by_category: dict[Category, int] = Field(default_factory=dict)
     budget_minimum: int = Field(default=90, ge=30, le=720)
     budget_normal: int = Field(default=150, ge=30, le=720)
     budget_ample: int = Field(default=210, ge=30, le=720)
     execution_labels: list[ExecutionLabelItem] = Field(default_factory=list)
+    effective_labels_by_category: dict[Category, list[EffectiveLabelItem]] = Field(default_factory=dict)
     weekly_analysis_prompts: list[PromptConfigItem] = Field(default_factory=list)
     weekly_analysis_active_prompt_id: str = "weekly_analysis_system_default"
     chatgpt_export_prompts: list[PromptConfigItem] = Field(default_factory=list)

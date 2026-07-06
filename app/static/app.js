@@ -121,6 +121,10 @@ function formatMinutes(value) {
   return `${Number(value || 0)} 分`;
 }
 
+function formatPercent(value) {
+  return `${Math.round(Number(value || 0) * 100)}%`;
+}
+
 function toDateTimeInputValue(value) {
   if (!value) return '';
   return String(value).slice(0, 16);
@@ -172,6 +176,7 @@ function renderTaskExecutionBoard(container, boards, emptyHtml='') {
           <span>有效 ${formatMinutes(board.effective_minutes)}</span>
           <span>计总标签 ${formatMinutes(board.counted_label_minutes)}</span>
           <span>中断 ${formatMinutes(board.interrupt_minutes)}</span>
+          <span>有效占总计 ${formatPercent(board.effective_ratio)}</span>
         </div>
         <div class="execution-bar" aria-hidden="true">
           <span class="execution-bar-effective" style="width:${taskBoardRatio(board.effective_minutes, barBase)}%"></span>
@@ -179,6 +184,12 @@ function renderTaskExecutionBoard(container, boards, emptyHtml='') {
           <span class="execution-bar-interrupt" style="width:${taskBoardRatio(board.interrupt_minutes, barBase)}%"></span>
         </div>
         <div class="execution-board-lists">
+          <div>
+            <h4>有效细分</h4>
+            ${board.effective_labels?.length
+              ? `<ul>${board.effective_labels.map(label => `<li>${esc(label.label_name)} · ${formatMinutes(label.minutes)} · ${formatPercent(label.effective_share)}</li>`).join('')}</ul>`
+              : '<p class="muted">还没有有效细分记录</p>'}
+          </div>
           <div>
             <h4>计总标签</h4>
             ${board.counted_labels?.length
@@ -419,21 +430,25 @@ if (page === 'today') {
   }
 
   function renderSubmitButton(plan) {
-    const button = $('#submit-today');
+    const buttons = [$('#submit-today'), $('#submit-today-nearby')].filter(Boolean);
     const badge = $('#plan-status');
     if (plan.status === 'draft') {
-      button.classList.add('hidden');
+      buttons.forEach(button => button.classList.add('hidden'));
       badge.className = 'status';
       badge.textContent = '草稿';
     } else if (plan.status === 'approved') {
-      button.className = 'primary btn-submit';
-      button.disabled = false;
-      button.textContent = '进入执行台';
+      buttons.forEach(button => {
+        button.className = 'primary btn-submit';
+        button.disabled = false;
+        button.textContent = '进入执行台';
+      });
       badge.classList.add('hidden');
     } else {
-      button.className = 'secondary btn-submit submitted';
-      button.disabled = false;
-      button.textContent = '查看执行台';
+      buttons.forEach(button => {
+        button.className = 'secondary btn-submit submitted';
+        button.disabled = false;
+        button.textContent = '查看执行台';
+      });
       badge.classList.add('hidden');
     }
   }
@@ -528,7 +543,9 @@ if (page === 'today') {
     $('#plan-section').classList.remove('hidden');
     renderSubmitButton(plan);
     $('#plan-title').textContent = plan.status === 'draft' ? '任务草稿' : '今天就走这条航线';
-    $('#draft-actions').classList.toggle('hidden', plan.status !== 'draft');
+    $('#draft-actions').classList.remove('hidden');
+    $('#save-draft').classList.toggle('hidden', plan.status !== 'draft');
+    $('#approve-plan').classList.toggle('hidden', plan.status !== 'draft');
     $('#safety-notice').classList.toggle('hidden', !plan.safety_notice);
     $('#safety-notice').textContent = plan.safety_notice || '';
     $('#degraded-notice').classList.toggle('hidden', !plan.degraded_reason);
@@ -768,9 +785,11 @@ if (page === 'today') {
       toast('今日清单已确认');
     } catch (error) { toast(error.message); }
   };
-  $('#submit-today').onclick = async () => {
+  const openExecutionDesk = () => {
     window.location.href = `/execute?date=${encodeURIComponent(dateInput.value)}`;
   };
+  $('#submit-today').onclick = openExecutionDesk;
+  if ($('#submit-today-nearby')) $('#submit-today-nearby').onclick = openExecutionDesk;
   document.addEventListener('keydown', event => { if (event.key === 'Escape') cancelSwap(); });
 
   loadCarryovers();
@@ -801,6 +820,7 @@ if (page === 'execute') {
       expandedLabelBucket: null,
       collapsedTimeline: true,
       collapsedZeroMinuteSubmit: true,
+      effectiveLabelSelections: {},
     };
   }
   let executionUiState = defaultExecutionUiState();
@@ -812,8 +832,47 @@ if (page === 'execute') {
     return executionState.tasks.find(task => String(task.id) === String(selectedTaskId)) || executionState.tasks[0];
   }
 
-  function labelOptionsForKind(kind, selectedId='') {
-    if (kind === 'effective') return '';
+  function effectiveLabelsForCategory(category) {
+    return settings?.effective_labels_by_category?.[category] || [];
+  }
+
+  function effectiveLabelsForTask(taskId) {
+    const task = (executionState?.tasks || []).find(item => String(item.id) === String(taskId));
+    return task ? effectiveLabelsForCategory(task.category) : [];
+  }
+
+  function selectedEffectiveLabelId(taskId) {
+    const labelId = executionUiState.effectiveLabelSelections[String(taskId)] || '';
+    return effectiveLabelsForTask(taskId).some(label => label.id === labelId) ? labelId : '';
+  }
+
+  function rememberEffectiveLabelSelection(taskId, labelId='') {
+    const key = String(taskId);
+    if (!labelId) {
+      delete executionUiState.effectiveLabelSelections[key];
+      return;
+    }
+    executionUiState.effectiveLabelSelections[key] = labelId;
+  }
+
+  function latestEffectiveLabelIdForTask(taskId) {
+    const segments = executionState?.segments || [];
+    for (let index = segments.length - 1; index >= 0; index -= 1) {
+      const segment = segments[index];
+      if (String(segment.task_id) !== String(taskId) || segment.segment_kind !== 'effective') continue;
+      if (segment.label_id) return segment.label_id;
+    }
+    return '';
+  }
+
+  function labelOptionsForKind(kind, taskId, selectedId='') {
+    if (kind === 'effective') {
+      const options = ['<option value="">未细分</option>'];
+      effectiveLabelsForTask(taskId).forEach(label => {
+        options.push(`<option value="${esc(label.id)}" ${label.id === selectedId ? 'selected' : ''}>${esc(label.name)}</option>`);
+      });
+      return options.join('');
+    }
     const bucket = kind === 'counted_label' ? 'counted' : 'interrupt';
     return (executionState?.labels || [])
       .filter(label => label.bucket === bucket)
@@ -839,10 +898,11 @@ if (page === 'execute') {
     return tasks.filter(task => Number(task.estimated_minutes) === 0 && Number(task.actual_minutes || 0) === 0);
   }
 
-  async function startEffectiveTask(taskId, successMessage='已开始记录有效时间') {
+  async function startEffectiveTask(taskId, successMessage='已开始记录有效时间', labelId=selectedEffectiveLabelId(taskId)) {
     selectedTaskId = taskId;
     executionUiState.expandedLabelBucket = null;
-    executionState = await api(`/api/daily-execution/${dateInput.value}/tasks/start`, {method:'POST', body:JSON.stringify({task_id:taskId})});
+    rememberEffectiveLabelSelection(taskId, labelId || '');
+    executionState = await api(`/api/daily-execution/${dateInput.value}/tasks/start`, {method:'POST', body:JSON.stringify({task_id:taskId, label_id:labelId || null})});
     renderExecutionState(executionState);
     toast(successMessage);
   }
@@ -851,7 +911,7 @@ if (page === 'execute') {
     const taskOptions = (executionState?.tasks || [])
       .map(task => `<option value="${task.id}" ${String(task.id) === String(segment.task_id) ? 'selected' : ''}>${esc(task.title)}</option>`)
       .join('');
-    const labelFieldHidden = segment.segment_kind === 'effective' ? 'hidden' : '';
+    const labelLabel = segment.segment_kind === 'effective' ? '细分' : '标签';
     return `
       <article class="timeline-card ${isDraft ? 'draft' : ''}" data-segment-id="${segment.id}">
         <div class="timeline-form">
@@ -863,8 +923,8 @@ if (page === 'execute') {
             <option value="counted_label" ${segment.segment_kind === 'counted_label' ? 'selected' : ''}>计总标签</option>
             <option value="interrupt_label" ${segment.segment_kind === 'interrupt_label' ? 'selected' : ''}>中断标签</option>
           </select></label>
-          <label class="segment-label-field ${labelFieldHidden}">标签
-            <select class="segment-label-id">${labelOptionsForKind(segment.segment_kind, segment.label_id || '')}</select>
+          <label class="segment-label-field"><span class="segment-label-title">${labelLabel}</span>
+            <select class="segment-label-id">${labelOptionsForKind(segment.segment_kind, segment.task_id, segment.label_id || '')}</select>
           </label>
         </div>
         <div class="timeline-actions">
@@ -896,7 +956,7 @@ if (page === 'execute') {
           <article class="timeline-card active" data-segment-id="${segment.id}">
             <div>
               <strong>${esc(segment.task_title)}</strong>
-              <p class="muted">${segment.segment_kind === 'effective' ? '有效时间' : esc(segment.label_name || '标签')} · 已累计 ${formatMinutes(segment.minutes)}</p>
+              <p class="muted">${segment.segment_kind === 'effective' ? esc(segment.label_name ? `有效时间 / ${segment.label_name}` : '有效时间') : esc(segment.label_name || '标签')} · 已累计 ${formatMinutes(segment.minutes)}</p>
               <p class="muted">${segment.started_at.replace('T', ' ')}</p>
             </div>
             <div class="timeline-actions"><button class="ghost-button active-segment-stop" type="button">停止</button></div>
@@ -907,28 +967,33 @@ if (page === 'execute') {
     }));
     list.innerHTML = rows.length ? rows.join('') : '<p class="muted">还没有任何执行记录，先开始一段任务有效时间。</p>';
 
-    $$('.segment-kind', list).forEach(select => select.onchange = event => {
-      const row = event.target.closest('.timeline-card');
-      const field = $('.segment-label-field', row);
+    const syncSegmentLabelField = row => {
+      const kind = $('.segment-kind', row).value;
+      const taskId = Number($('.segment-task-id', row).value);
+      const title = $('.segment-label-title', row);
       const labelSelect = $('.segment-label-id', row);
-      if (event.target.value === 'effective') {
-        field.classList.add('hidden');
-        labelSelect.innerHTML = '';
-      } else {
-        field.classList.remove('hidden');
-        labelSelect.innerHTML = labelOptionsForKind(event.target.value);
-      }
+      title.textContent = kind === 'effective' ? '细分' : '标签';
+      labelSelect.innerHTML = labelOptionsForKind(kind, taskId, labelSelect.value || '');
+    };
+
+    $$('.segment-kind', list).forEach(select => select.onchange = event => {
+      syncSegmentLabelField(event.target.closest('.timeline-card'));
+    });
+    $$('.segment-task-id', list).forEach(select => select.onchange = event => {
+      syncSegmentLabelField(event.target.closest('.timeline-card'));
     });
 
     $$('.segment-save', list).forEach(button => button.onclick = async () => {
       const row = button.closest('.timeline-card');
+      const segmentKind = $('.segment-kind', row).value;
       const body = {
         task_id: Number($('.segment-task-id', row).value),
-        segment_kind: $('.segment-kind', row).value,
-        label_id: $('.segment-kind', row).value === 'effective' ? null : $('.segment-label-id', row).value,
+        segment_kind: segmentKind,
+        label_id: $('.segment-label-id', row).value || null,
         started_at: fromDateTimeInputValue($('.segment-start', row).value),
         ended_at: fromDateTimeInputValue($('.segment-end', row).value),
       };
+      if (segmentKind === 'effective') rememberEffectiveLabelSelection(body.task_id, body.label_id || '');
       try {
         executionState = row.dataset.segmentId === 'draft'
           ? await api(`/api/daily-execution/${dateInput.value}/segments`, {method:'POST', body:JSON.stringify(body)})
@@ -978,6 +1043,26 @@ if (page === 'execute') {
     const selected = selectedExecutionTask();
     const selectedClass = selected && String(selected.id) === String(task.id) ? 'selected' : '';
     const disabled = Number(task.estimated_minutes) === 0 ? 'disabled' : '';
+    const effectiveLabels = effectiveLabelsForTask(task.id);
+    const selectedLabelId = selectedEffectiveLabelId(task.id);
+    const selectedLabel = effectiveLabels.find(label => label.id === selectedLabelId);
+    const startLabelSuffix = selectedLabel ? ` · ${selectedLabel.name}` : '';
+    const inlineLabelPicker = selectedClass && effectiveLabels.length
+      ? `
+        <div class="effective-label-picker">
+          <p class="muted">有效细分</p>
+          <div class="pill-list">
+            ${effectiveLabels.map(label => `
+              <button
+                class="ghost-button effective-label-button ${label.id === selectedLabelId ? 'active' : ''}"
+                type="button"
+                data-effective-label-id="${esc(label.id)}"
+              >${esc(label.name)}</button>
+            `).join('')}
+          </div>
+        </div>
+      `
+      : '';
     return `
       <article class="execution-task-card ${selectedClass} ${active ? 'active' : ''}" data-execution-task-id="${task.id}">
         <div class="execution-task-head">
@@ -985,13 +1070,14 @@ if (page === 'execute') {
             <h3>${esc(task.title)}</h3>
             <p class="muted">${esc(settings?.task_titles?.[task.category] || task.category)}</p>
           </div>
-          <button class="primary task-start-button" type="button" ${disabled}>开始有效时间</button>
+          <button class="primary task-start-button" type="button" ${disabled}>开始有效时间${esc(startLabelSuffix)}</button>
         </div>
         <div class="execution-task-meta">
           <span>计划 ${task.estimated_minutes} 分</span>
           <span>有效 ${task.actual_minutes || 0} 分</span>
           <span>总计 ${board ? formatMinutes(board.total_minutes) : '0 分'}</span>
         </div>
+        ${inlineLabelPicker}
       </article>
     `;
   }
@@ -1013,7 +1099,17 @@ if (page === 'execute') {
   function bindExecutionTaskCardEvents(root=document) {
     $$('.execution-task-card', root).forEach(card => card.onclick = event => {
       if (event.target.closest('.task-start-button')) return;
+      if (event.target.closest('.effective-label-button')) return;
       selectedTaskId = Number(card.dataset.executionTaskId);
+      renderExecutionState(executionState);
+    });
+    $$('.effective-label-button', root).forEach(button => button.onclick = event => {
+      event.stopPropagation();
+      const card = button.closest('.execution-task-card');
+      const taskId = Number(card.dataset.executionTaskId);
+      const nextLabelId = button.dataset.effectiveLabelId;
+      rememberEffectiveLabelSelection(taskId, selectedEffectiveLabelId(taskId) === nextLabelId ? '' : nextLabelId);
+      selectedTaskId = taskId;
       renderExecutionState(executionState);
     });
     $$('.task-start-button', root).forEach(button => button.onclick = async event => {
@@ -1189,7 +1285,7 @@ if (page === 'execute') {
     $('#mobile-return-effective').onclick = async () => {
       if (!canReturnToEffective) return;
       try {
-        await startEffectiveTask(active.task_id, '已切回有效时间');
+        await startEffectiveTask(active.task_id, '已切回有效时间', latestEffectiveLabelIdForTask(active.task_id));
       } catch (error) { toast(error.message); }
     };
   }
@@ -1214,10 +1310,11 @@ if (page === 'execute') {
       return;
     }
     const active = result.active_segment;
+    if (active?.segment_kind === 'effective') rememberEffectiveLabelSelection(active.task_id, active.label_id || '');
     $('#execute-active-badge').textContent = !active
       ? '当前空闲'
       : active.segment_kind === 'effective'
-        ? `正在做：${active.task_title}`
+        ? `正在做：${active.task_title}${active.label_name ? ` / ${active.label_name}` : ''}`
         : `正在切到：${active.task_title} / ${active.label_name}`;
     renderExecutionTasks();
     renderExecutionLabels();
@@ -1810,6 +1907,7 @@ if (page === 'gpt-workbench') {
 
 if (page === 'settings') {
   const categories = {math:'数学', english:'英语', computer:'408', ai_project:'AI 项目', sleep:'睡眠', vibe_coding:'vibe coding', algorithm:'算法', reading:'阅读', writing:'练字', rehab:'运动'};
+  const draftMainCategories = {math:'数学', english:'英语', computer:'408', rehab:'运动'};
   let settingsState = null;
 
   function renderExecutionLabelFields() {
@@ -1853,6 +1951,61 @@ if (page === 'settings') {
     renderExecutionLabelFields();
   }
 
+  function effectiveLabelsForCategoryState(category) {
+    if (!settingsState.effective_labels_by_category) settingsState.effective_labels_by_category = {};
+    if (!Array.isArray(settingsState.effective_labels_by_category[category])) {
+      settingsState.effective_labels_by_category[category] = [];
+    }
+    return settingsState.effective_labels_by_category[category];
+  }
+
+  function renderEffectiveLabelFields() {
+    $('#effective-label-category-fields').innerHTML = Object.entries(categories).map(([category, label]) => {
+      const rows = effectiveLabelsForCategoryState(category).map(item => `
+        <div class="effective-label-row" data-category="${esc(category)}" data-label-id="${esc(item.id)}">
+          <label>名称<input class="effective-label-name" value="${esc(item.name)}"></label>
+          <span class="status">${item.is_system ? '系统默认' : '自定义'}</span>
+          <button class="ghost-button effective-label-delete" type="button" ${item.is_system ? 'disabled' : ''}>删除</button>
+        </div>
+      `).join('');
+      return `
+        <section class="effective-label-category-card" data-effective-category="${esc(category)}">
+          <div class="effective-label-category-head">
+            <div>
+              <h3>${esc(label)}</h3>
+              <p class="muted">${effectiveLabelsForCategoryState(category).length ? '这些标签会用于该类别的有效时间细分。' : '当前还没有细分标签，可按你的习惯手动补充。'}</p>
+            </div>
+            <button class="ghost-button add-effective-label" type="button" data-category="${esc(category)}">新增细分标签</button>
+          </div>
+          <div class="stack">
+            ${rows || '<p class="muted">当前为空。</p>'}
+          </div>
+        </section>
+      `;
+    }).join('');
+
+    $$('.effective-label-name').forEach(input => input.oninput = event => {
+      const row = event.target.closest('.effective-label-row');
+      const item = effectiveLabelsForCategoryState(row.dataset.category).find(label => label.id === row.dataset.labelId);
+      if (item) item.name = event.target.value;
+    });
+    $$('.effective-label-delete').forEach(button => button.onclick = () => {
+      const row = button.closest('.effective-label-row');
+      settingsState.effective_labels_by_category[row.dataset.category] = effectiveLabelsForCategoryState(row.dataset.category)
+        .filter(label => label.id !== row.dataset.labelId);
+      renderEffectiveLabelFields();
+    });
+    $$('.add-effective-label').forEach(button => button.onclick = () => {
+      const category = button.dataset.category;
+      effectiveLabelsForCategoryState(category).push({
+        id: `effective_${category}_${Date.now()}`,
+        name: '新细分标签',
+        is_system: false,
+      });
+      renderEffectiveLabelFields();
+    });
+  }
+
   api('/api/settings').then(result => {
     settingsState = result;
     const form = $('#settings-form');
@@ -1863,14 +2016,19 @@ if (page === 'settings') {
     form.budget_minimum.value = result.budget_minimum || 90;
     form.budget_normal.value = result.budget_normal || 150;
     form.budget_ample.value = result.budget_ample || 210;
+    $('#draft-main-minute-fields').innerHTML = Object.entries(draftMainCategories)
+      .map(([key, label]) => `<label>${esc(label)}<input data-draft-main-category="${esc(key)}" type="number" min="0" max="720" step="5" value="${Number(result.draft_main_minutes_by_category?.[key] ?? 0)}"></label>`)
+      .join('');
     $('#task-title-fields').innerHTML = Object.entries(categories).map(([key, label]) => `<label>${esc(label)}<input data-category="${esc(key)}" value="${esc(result.task_titles?.[key] || label)}"></label>`).join('');
     renderExecutionLabelFields();
+    renderEffectiveLabelFields();
   });
   $('#add-counted-label').onclick = () => addExecutionLabel('counted');
   $('#add-interrupt-label').onclick = () => addExecutionLabel('interrupt');
   $('#settings-form').onsubmit = async event => {
     event.preventDefault();
     const task_titles = Object.fromEntries($$('[data-category]').map(input => [input.dataset.category, input.value]));
+    const draft_main_minutes_by_category = Object.fromEntries($$('[data-draft-main-category]').map(input => [input.dataset.draftMainCategory, Number(input.value || 0)]));
     try {
       settingsState = await api('/api/settings', {method:'PUT', body:JSON.stringify({
         current_stage:event.target.current_stage.value,
@@ -1881,7 +2039,9 @@ if (page === 'settings') {
         budget_normal:Number(event.target.budget_normal.value),
         budget_ample:Number(event.target.budget_ample.value),
         task_titles,
+        draft_main_minutes_by_category,
         execution_labels: settingsState.execution_labels,
+        effective_labels_by_category: settingsState.effective_labels_by_category,
       })});
       invalidateAllCalendarMonths();
       toast('设置已保存');

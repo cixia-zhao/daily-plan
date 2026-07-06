@@ -1086,8 +1086,33 @@ body.modal-open {
   gap: 10px;
 }
 
+.effective-label-picker {
+  display: grid;
+  gap: 10px;
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid rgba(221, 216, 204, 0.9);
+}
+
+.effective-label-picker p {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+}
+
 .execution-label-button {
   border-radius: 999px;
+}
+
+.effective-label-button {
+  border-radius: 999px;
+}
+
+.effective-label-button.active {
+  border-color: var(--green);
+  box-shadow: 0 0 0 2px rgba(40, 99, 74, 0.14);
+  background: var(--green-soft);
+  color: var(--green);
 }
 
 .execution-mobile-toolbar {
@@ -1183,7 +1208,7 @@ body.modal-open {
 
 .execution-board-lists {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 16px;
 }
 
@@ -1243,6 +1268,44 @@ body[data-page=settings] .execution-label-row label {
 body[data-page=settings] .execution-label-row .status,
 body[data-page=settings] .execution-label-row .ghost-button {
   white-space: nowrap;
+}
+
+.effective-label-category-card {
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.72);
+  padding: 16px;
+  display: grid;
+  gap: 14px;
+}
+
+.effective-label-category-head,
+.effective-label-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.effective-label-category-head h3 {
+  margin: 0 0 4px;
+}
+
+.effective-label-category-head p {
+  margin: 0;
+}
+
+.effective-label-row {
+  padding: 12px 14px;
+  border: 1px solid rgba(221, 216, 204, 0.9);
+  border-radius: 14px;
+  background: rgba(255, 253, 248, 0.94);
+}
+
+.effective-label-row label {
+  flex: 1;
+  display: grid;
+  gap: 6px;
 }
 
 @media(max-width:900px){
@@ -1310,7 +1373,20 @@ body[data-page=settings] .execution-label-row .ghost-button {
   }
 
   body[data-page=settings] .execution-label-row .status,
-  body[data-page=settings] .execution-label-row .ghost-button {
+  body[data-page=settings] .execution-label-row .ghost-button,
+  .effective-label-category-head,
+  .effective-label-row {
+    white-space: normal;
+  }
+
+  .effective-label-category-head,
+  .effective-label-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .effective-label-row .status,
+  .effective-label-row .ghost-button {
     white-space: normal;
   }
 }

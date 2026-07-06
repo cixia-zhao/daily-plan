@@ -9,6 +9,7 @@ from fastapi import APIRouter, HTTPException, Request, status
 from .database import connect
 from .schemas import (
     CarryoverResolution,
+    EffectiveLabelItem,
     DraftRequest,
     ExecutionLabelItem,
     ExecutionLabelStartInput,
@@ -86,6 +87,24 @@ DEFAULT_EXECUTION_LABELS = [
     {"id": "interrupt_pause", "name": "手动暂停", "bucket": "interrupt", "is_system": True},
 ]
 
+DEFAULT_EFFECTIVE_LABELS_BY_CATEGORY = {
+    "math": [
+        {"id": "effective_math_course", "name": "网课", "is_system": True},
+        {"id": "effective_math_practice", "name": "刷题", "is_system": True},
+    ],
+    "english": [
+        {"id": "effective_english_reading", "name": "阅读", "is_system": True},
+        {"id": "effective_english_words", "name": "单词", "is_system": True},
+    ],
+}
+
+DEFAULT_DRAFT_MAIN_MINUTES_BY_CATEGORY = {
+    "math": 0,
+    "english": 0,
+    "computer": 0,
+    "rehab": 0,
+}
+
 DEFAULT_SETTINGS = {
     "current_stage": "恢复秩序期",
     "ai_project_weekly_frequency": 3,
@@ -96,10 +115,12 @@ DEFAULT_SETTINGS = {
         "vibe_coding": "vibe coding", "algorithm": "算法",
         "reading": "阅读", "writing": "练字", "rehab": "运动",
     },
+    "draft_main_minutes_by_category": DEFAULT_DRAFT_MAIN_MINUTES_BY_CATEGORY,
     "budget_minimum": 90,
     "budget_normal": 150,
     "budget_ample": 210,
     "execution_labels": DEFAULT_EXECUTION_LABELS,
+    "effective_labels_by_category": DEFAULT_EFFECTIVE_LABELS_BY_CATEGORY,
     "weekly_analysis_prompts": [
         {
             "id": "weekly_analysis_system_default",
@@ -178,6 +199,10 @@ def _get_settings(connection) -> dict:
     settings = json.loads(row["value_json"]) if row else dict(DEFAULT_SETTINGS)
     settings.setdefault("project_start_date", DEFAULT_SETTINGS["project_start_date"])
     settings.setdefault("execution_labels", DEFAULT_SETTINGS["execution_labels"])
+    settings.setdefault("effective_labels_by_category", DEFAULT_SETTINGS["effective_labels_by_category"])
+    settings.setdefault("draft_main_minutes_by_category", DEFAULT_SETTINGS["draft_main_minutes_by_category"])
+    settings["effective_labels_by_category"] = _effective_labels_by_category(settings)
+    settings["draft_main_minutes_by_category"] = _draft_main_minutes_by_category(settings)
     settings.setdefault("weekly_analysis_prompts", DEFAULT_SETTINGS["weekly_analysis_prompts"])
     settings.setdefault("weekly_analysis_active_prompt_id", "weekly_analysis_system_default")
     settings.setdefault("chatgpt_export_prompts", DEFAULT_SETTINGS["chatgpt_export_prompts"])
@@ -210,14 +235,75 @@ def _build_execution_label_map(settings: dict) -> dict[str, dict]:
     return {item["id"]: item for item in labels}
 
 
+def _effective_labels_by_category(settings: dict) -> dict[str, list[dict]]:
+    raw = settings.get("effective_labels_by_category") or DEFAULT_EFFECTIVE_LABELS_BY_CATEGORY
+    merged: dict[str, list[dict]] = {}
+    category_keys = {*(DEFAULT_EFFECTIVE_LABELS_BY_CATEGORY.keys()), *(str(key) for key in raw.keys())}
+    for category in category_keys:
+        default_items = [dict(item) for item in DEFAULT_EFFECTIVE_LABELS_BY_CATEGORY.get(category, [])]
+        raw_items = [dict(item) for item in (raw.get(category) or raw.get(str(category)) or [])]
+        if not default_items:
+            merged[category] = raw_items
+            continue
+        raw_by_id = {item["id"]: item for item in raw_items}
+        combined = [raw_by_id.pop(item["id"], item) for item in default_items]
+        combined.extend(raw_by_id.values())
+        merged[category] = combined
+    return merged
+
+
+def _draft_main_minutes_by_category(settings: dict) -> dict[str, int]:
+    raw = settings.get("draft_main_minutes_by_category") or DEFAULT_DRAFT_MAIN_MINUTES_BY_CATEGORY
+    merged = dict(DEFAULT_DRAFT_MAIN_MINUTES_BY_CATEGORY)
+    for category, value in raw.items():
+        if category not in merged:
+            continue
+        try:
+            merged[category] = max(0, min(720, int(value)))
+        except (TypeError, ValueError):
+            continue
+    return merged
+
+
+def _build_effective_label_map(settings: dict, category: str) -> dict[str, dict]:
+    labels = _effective_labels_by_category(settings).get(category) or []
+    return {item["id"]: item for item in labels}
+
+
 def _serialize_execution_labels(settings: dict) -> list[dict]:
     labels = settings.get("execution_labels") or DEFAULT_EXECUTION_LABELS
     return [ExecutionLabelItem(**item).model_dump(mode="json") for item in labels]
 
 
-def _resolve_execution_label(settings: dict, label_id: str | None, segment_kind: str) -> tuple[str | None, str | None]:
+def _serialize_effective_labels_by_category(settings: dict) -> dict[str, list[dict]]:
+    return {
+        category: [EffectiveLabelItem(**item).model_dump(mode="json") for item in labels]
+        for category, labels in _effective_labels_by_category(settings).items()
+    }
+
+
+def _apply_draft_main_minutes(tasks: list[TaskDraft], settings: dict) -> list[TaskDraft]:
+    defaults = _draft_main_minutes_by_category(settings)
+    output: list[TaskDraft] = []
+    for task in tasks:
+        if task.is_sub or task.source == "carryover":
+            output.append(task)
+            continue
+        if task.category not in defaults:
+            output.append(task)
+            continue
+        output.append(task.model_copy(update={"estimated_minutes": defaults[task.category]}))
+    return output
+
+
+def _resolve_segment_label(settings: dict, task_category: str, label_id: str | None, segment_kind: str) -> tuple[str | None, str | None]:
     if segment_kind == "effective":
-        return None, None
+        if not label_id:
+            return None, None
+        label = _build_effective_label_map(settings, task_category).get(label_id)
+        if not label:
+            raise HTTPException(404, "有效细分标签不存在")
+        return label["id"], label["name"]
     if not label_id:
         raise HTTPException(422, "标签不能为空")
     label_map = _build_execution_label_map(settings)
@@ -369,8 +455,10 @@ def _aggregate_execution_board(tasks: list[dict], segments: list[dict]) -> list[
             "effective_minutes": 0,
             "counted_label_minutes": 0,
             "interrupt_minutes": 0,
+            "effective_labels": [],
             "counted_labels": [],
             "interrupt_labels": [],
+            "_effective": {},
             "_counted": {},
             "_interrupt": {},
         }
@@ -383,6 +471,18 @@ def _aggregate_execution_board(tasks: list[dict], segments: list[dict]) -> list[
         if segment["segment_kind"] == "effective":
             board["effective_minutes"] += minutes
             board["total_minutes"] += minutes
+            key = segment["label_id"] or "__unlabeled_effective__"
+            label_bucket = board["_effective"]
+            if key not in label_bucket:
+                label_bucket[key] = {
+                    "label_id": segment["label_id"],
+                    "label_name": segment["label_name"] or "未细分",
+                    "minutes": 0,
+                    "count": 0,
+                }
+                board["effective_labels"].append(label_bucket[key])
+            label_bucket[key]["minutes"] += minutes
+            label_bucket[key]["count"] += 1
             continue
         bucket_name = "_counted" if segment["segment_kind"] == "counted_label" else "_interrupt"
         public_name = "counted_labels" if segment["segment_kind"] == "counted_label" else "interrupt_labels"
@@ -402,8 +502,15 @@ def _aggregate_execution_board(tasks: list[dict], segments: list[dict]) -> list[
     board_items = []
     for task in tasks:
         board = board_map[task["id"]]
+        board.pop("_effective")
         board.pop("_counted")
         board.pop("_interrupt")
+        effective_minutes = max(0, int(board["effective_minutes"] or 0))
+        total_minutes = max(0, int(board["total_minutes"] or 0))
+        board["effective_ratio"] = round(effective_minutes / total_minutes, 4) if total_minutes else 0
+        for label in board["effective_labels"]:
+            label_minutes = max(0, int(label["minutes"] or 0))
+            label["effective_share"] = round(label_minutes / effective_minutes, 4) if effective_minutes else 0
         board["has_segments"] = bool(
             board["effective_minutes"]
             or board["counted_label_minutes"]
@@ -1123,6 +1230,7 @@ def create_draft(payload: DraftRequest, request: Request):
             tasks = [task for task in tasks if task.category != "rehab"]
 
         tasks = [task.model_copy(update={"title": settings["task_titles"].get(task.category, task.title)}) for task in tasks]
+        tasks = _apply_draft_main_minutes(tasks, settings)
         scheduled = connection.execute(
             """SELECT * FROM carryovers WHERE status='resolved' AND
                ((resolution='reschedule' AND target_date=?) OR
@@ -1276,12 +1384,14 @@ def daily_execution(plan_date: date, request: Request):
 def start_execution_task(plan_date: date, payload: ExecutionTaskStartInput, request: Request):
     with _db(request) as connection:
         task = _get_task_row_for_execution(connection, plan_date.isoformat(), payload.task_id)
+        settings = _get_settings(connection)
+        label_id, label_name = _resolve_segment_label(settings, task["category"], payload.label_id, "effective")
         _close_active_execution_segment(connection)
         started_at = _now_iso()
         connection.execute(
-            """INSERT INTO task_execution_segments(plan_date,task_id,segment_kind,started_at)
-               VALUES(?,?,?,?)""",
-            (plan_date.isoformat(), task["id"], "effective", started_at),
+            """INSERT INTO task_execution_segments(plan_date,task_id,segment_kind,label_id,label_name,started_at)
+               VALUES(?,?,?,?,?,?)""",
+            (plan_date.isoformat(), task["id"], "effective", label_id, label_name, started_at),
         )
         _sync_plan_actual_minutes_from_execution(connection, task["plan_id"])
         return _build_execution_payload(connection, plan_date.isoformat())
@@ -1329,7 +1439,7 @@ def create_execution_segment(plan_date: date, payload: ExecutionSegmentCreateInp
     with _db(request) as connection:
         task = _get_task_row_for_execution(connection, plan_date.isoformat(), payload.task_id)
         settings = _get_settings(connection)
-        label_id, label_name = _resolve_execution_label(settings, payload.label_id, payload.segment_kind)
+        label_id, label_name = _resolve_segment_label(settings, task["category"], payload.label_id, payload.segment_kind)
         _assert_no_segment_overlap(
             connection,
             plan_date.isoformat(),
@@ -1372,7 +1482,7 @@ def update_execution_segment(plan_date: date, segment_id: int, payload: Executio
             raise HTTPException(409, "请先停止当前正在计时的记录，再编辑它")
         task = _get_task_row_for_execution(connection, plan_date.isoformat(), payload.task_id)
         settings = _get_settings(connection)
-        label_id, label_name = _resolve_execution_label(settings, payload.label_id, payload.segment_kind)
+        label_id, label_name = _resolve_segment_label(settings, task["category"], payload.label_id, payload.segment_kind)
         _assert_no_segment_overlap(
             connection,
             plan_date.isoformat(),
@@ -1713,6 +1823,8 @@ def save_settings(payload: SettingsInput, request: Request):
         data = payload.model_dump(mode="json")
         for key in [
             "execution_labels",
+            "effective_labels_by_category",
+            "draft_main_minutes_by_category",
             "weekly_analysis_prompts",
             "weekly_analysis_active_prompt_id",
             "chatgpt_export_prompts",
