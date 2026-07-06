@@ -6,6 +6,28 @@ cd "$(dirname "$0")"
 DATABASE_PATH="${DATABASE_PATH:-data/daily_plan.db}"
 BACKUP_DIR="${BACKUP_DIR:-backups}"
 
+clear_loopback_proxy() {
+  for key in HTTP_PROXY HTTPS_PROXY ALL_PROXY http_proxy https_proxy all_proxy; do
+    value="${!key:-}"
+    case "$value" in
+      *127.0.0.1*|*localhost*)
+        unset "$key"
+        echo "[INFO] 已清理环境变量代理：$key=$value"
+        ;;
+    esac
+  done
+
+  for key in http.proxy https.proxy; do
+    value="$(git config --global --get "$key" 2>/dev/null || true)"
+    case "$value" in
+      *127.0.0.1*|*localhost*)
+        git config --global --unset-all "$key" || true
+        echo "[INFO] 已清理 Git 全局代理：$key=$value"
+        ;;
+    esac
+  done
+}
+
 if ! command -v git >/dev/null 2>&1; then
   echo "[ERROR] 没找到 git。先运行：bash ./termux-install.sh"
   exit 1
@@ -36,6 +58,8 @@ if [ -f "$DATABASE_PATH" ]; then
 else
   echo "[1/4] 当前还没有数据库文件，跳过备份"
 fi
+
+clear_loopback_proxy
 
 echo "[2/4] 拉取 GitHub 最新代码"
 git pull --ff-only
