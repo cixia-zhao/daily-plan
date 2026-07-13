@@ -1,6 +1,6 @@
 # 前端页面与交互速查文档
 
-> 最后更新：2026-06-30
+> 最后更新：2026-07-06
 > 覆盖文件：`app/templates/*.html`、`app/static/style.css`、`app/static/app.js`
 
 ## 模块职责
@@ -18,17 +18,22 @@
 ### `app/templates/index.html`
 
 - **职责**：今天页的晨间输入、草稿编辑、确认清单与待审池入口。
-- **主要区域**：共享月历日期入口、“重置今日”按钮、待审池按钮与下拉浮层、晨间输入、任务草稿/正式清单、执行方法、时间占用摘要。
+- **主要区域**：共享月历日期入口、“重置今日”按钮、待审池按钮与下拉浮层、晨间输入、任务草稿 / 正式清单、执行方法、时间占用摘要。
 - **关键变化**：
   - 已确认后主按钮改成“进入执行台”，不再鼓励直接在今天页提交今日情况。
   - 主任务 `actual_minutes` 改成只读展示，避免和执行台形成两套数据源。
+  - 确认区附近现在保留一个更近的“进入执行台 / 查看执行台”入口，不只剩面板头部右上角按钮。
 - **依赖接口**：计划、任务、待审项 API，以及 `DELETE /api/daily-data/{date}`。
 
 ### `app/templates/execute.html`
 
 - **职责**：白天真实执行入口，负责开始任务有效时间、切到标签、补改时间段、勾完成并提交今日情况。
-- **主要区域**：日期入口、当前激活状态、任务列表、计总标签区、中断标签区、任务执行看板、时间轴编辑区、底部提交区。
+- **主要区域**：日期入口、当前激活状态、任务列表、顶部快捷切换条、任务执行看板、时间轴编辑区、底部提交区。
 - **依赖接口**：`GET /api/daily-execution/{date}`、`POST /api/daily-execution/{date}/tasks/start`、`POST /api/daily-execution/{date}/labels/start`、`POST /api/daily-execution/{date}/stop`、`POST /api/daily-execution/{date}/segments`、`PUT/DELETE /api/daily-execution/{date}/segments/{id}`、`PATCH /api/tasks/{id}`、`POST /api/daily-plans/{date}/submit`。
+- **关键变化**：
+  - 选中任务后，卡片内联会出现该任务类别的有效细分标签按钮。
+  - 开始有效时间时可以直接开始，也可以先点细分标签再开始。
+  - `切回有效` 会尽量回到这个任务上一次使用过的有效细分标签。
 
 ### `app/templates/review.html`
 
@@ -44,14 +49,17 @@
 
 ### `app/templates/gpt_workbench.html`
 
-- **职责**：集中管理单日/单周 GPT 模板，并回看贴回来的协作记录。
+- **职责**：集中管理单日 / 单周 GPT 模板，并回看贴回来的协作记录。
 - **依赖接口**：`GET /api/gpt-workbench`、`GET/PUT /api/settings`。
 
 ### `app/templates/settings.html`
 
 - **职责**：维护当前阶段、项目起始日、预算、任务名称和执行标签，并说明 GPT 协作主路径。
 - **关键变化**：
+  - 设置页现在有主航线草稿默认分钟编辑区 `#draft-main-minute-fields`。
   - 设置页现在有执行标签编辑区 `#execution-label-fields`，可新增、编辑、删除自定义标签。
+  - 设置页现在有有效细分标签编辑区 `#effective-label-category-fields`，按任务类别维护。
+  - `rehab_enabled` 的用户文案已经改成更直白的 `主航线包含运动`。
   - GPT 模板编辑仍然不在这里，而在 GPT 工作台。
 - **依赖接口**：`GET/PUT /api/settings`。
 
@@ -59,31 +67,41 @@
 
 - **职责**：今天页、执行台、单日复盘、七日复盘、GPT 工作台和设置页的全部浏览器交互。
 - **关键函数/组件**：
-  - `renderTaskExecutionBoard()` (L141) — 把任务执行看板渲染成“总时间 / 有效时间 / 计总标签 / 中断标签”的轻量卡片。
-  - `renderTimelineList()` (L838) — 执行台时间轴列表，负责激活段展示、补记卡片、时间段编辑与删除。
-  - `renderExecutionSubmitList()` (L925) — 执行台底部勾选与提交区。
-  - `renderExecutionTasks()` (L958) — 执行台任务列表与“开始有效时间”按钮。
-  - `renderExecutionLabels()` (L999) — 执行台标签按钮区，按计总 / 中断两组渲染。
-  - `renderExecutionState()` (L1026) — 执行台总入口，统一处理空态、激活态、任务看板、时间轴和提交区刷新。
-  - `loadExecution()` (L1058) — 加载 `/api/daily-execution/{date}` 聚合数据。
-  - `loadDailyReview()` (L1218) — 单日复盘页加载顶部统计、任务执行看板、复盘内容和 GPT 留档。
-  - `loadWeeklyReview()` (L1389) — 七日复盘页加载周统计、内嵌复盘编辑、GPT 留档和历史周报。
-  - `renderWorkbenchPrompts()` (L1493) — GPT 工作台模板切换和保存。
+  - `renderTaskExecutionBoard()` — 把任务执行看板渲染成“总时间 / 有效时间 / 计总标签 / 中断标签”的轻量卡片。
+  - `effectiveLabelsForTask()` / `selectedEffectiveLabelId()` — 给执行台任务卡和时间轴提供任务类别级有效细分标签源。
+  - `renderTimelineList()` — 执行台时间轴列表，负责激活段展示、补记卡片、时间段编辑与删除。
+  - `renderExecutionSubmitList()` — 执行台底部勾选与提交区。
+  - `executionTaskSectionHtml()` — 渲染可折叠的执行任务分组容器。
+  - `renderExecutionTasks()` — 执行台任务列表与“开始有效时间”按钮，同时把 `0 分钟主航线` 和 `副航线` 收进折叠组。
+  - `renderExecutionLabels()` — 执行台标签按钮区，按计总 / 中断两组渲染。
+  - `renderExecutionToolbar()` — 顶部快捷条，负责 `计总 / 中断 / 切回有效` 的单次展开和回切逻辑。
+  - `renderExecutionState()` — 执行台总入口，统一处理空态、激活态、任务看板、时间轴和提交区刷新。
+  - `loadExecution()` — 加载 `/api/daily-execution/{date}` 聚合数据。
+  - `loadDailyReview()` — 单日复盘页加载顶部统计、任务执行看板、复盘内容和 GPT 留档。
+  - `loadWeeklyReview()` — 七日复盘页加载周统计、内嵌复盘编辑、GPT 留档和历史周报。
+  - `renderWorkbenchPrompts()` — GPT 工作台模板切换和保存。
 - **关键行为变化**：
   - 今天页 `#submit-today` 现在直接跳转到 `/execute?date=...`。
-  - 执行台会在任何开始/切换动作后刷新整页聚合状态，不在前端自己缓存计算总时长。
+  - 今天页 `#submit-today-nearby` 会在确认区附近保留一个更近的执行台入口。
+  - 执行台会在任何开始 / 切换动作后刷新整页聚合状态，不在前端自己缓存计算总时长。
+  - 执行台顶部快捷条现在统一出现在当前版本里，不再只属于手机端。
+  - `切回有效` 会直接对当前标签段挂载的任务重新调用“开始有效时间”接口，不额外新增 API。
+  - `startEffectiveTask()` 现在支持带上 `label_id`，让有效时间本身就能挂细分标签。
+  - 看板现在会显示 `有效占总计`，以及有效细分内部的百分比。
+  - `mobileExecutionState` 现在承担的其实是“跨端执行台折叠与快捷条状态”，名称虽保留，但行为已经不是手机专属。
   - 复盘页会用 `task_execution_board` 渲染中部任务看板。
-  - 设置页会把 `execution_labels` 一并提交到 `/api/settings`。
+  - 设置页会把 `execution_labels`、`effective_labels_by_category`、`draft_main_minutes_by_category` 一并提交到 `/api/settings`。
+  - `api()` 已兼容 FastAPI 的数组型 `detail` 错误，避免 toast 出现 `[object Object]`。
 - **依赖**：`/api/*`、模板中的固定元素 ID。
 - **被依赖**：全部页面模板。
 
 ### `app/static/style.css`
 
 - **职责**：暖色纸张视觉、任务卡、状态标签、表单、执行台、看板卡片、Toast 与窄屏单列布局。
-- **关键布局/组件样式**：
-  - 日期区按钮组、“重置今日”和待审池按钮/红点/浮层。
+- **关键布局 / 组件样式**：
+  - 日期区按钮组、“重置今日”和待审池按钮 / 红点 / 浮层。
   - 主副航线双栏和等高五槽位布局。
-  - 执行台任务卡、标签按钮、时间轴卡片、任务执行看板横条。
+  - 执行台任务卡、有效细分按钮、快捷条、标签按钮、时间轴卡片、任务执行看板横条。
   - 自定义确认弹层、共享月历和窄屏单列适配。
 - **注意**：执行台在手机上会频繁使用，改样式时优先保证触控面积、文本不断裂和时间轴表单不挤爆。
 
@@ -105,7 +123,10 @@ GPT 工作台 → gpt-workbench / settings
 - 执行台只对 `approved` 或 `submitted` 的日期开放；草稿状态会显示引导空态。
 - 同一时刻全局只允许一个激活段；如果后续改交互，不要在前端做出“双计时”假象。
 - 中断标签不并入任务总时间，但仍会显示在任务看板里。
+- 有效细分标签是“任务类别级配置”，不是每天单独配一套。
+- 目前默认维护方向是桌面端和手机端一致，不再故意分叉成“手机一版、桌面一版”。
 - 执行台时间轴支持补记、编辑、删除；这块在手机上最容易暴露触控和日期输入问题。
 - 设置页的执行标签分为系统标签和自定义标签；系统标签可改名但不可删。
+- 设置页的主航线草稿默认分钟现在默认是 0；如果后续觉得太极端，要改的是设置值，不是再把代码默认分钟写死。
 - 单日复盘页和七日复盘页都支持“复制给 GPT -> 粘贴回项目”的手工协作闭环。
 - 当前只做响应式页面，没有 PWA、离线缓存或前端构建链。

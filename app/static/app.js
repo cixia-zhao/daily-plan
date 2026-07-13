@@ -74,6 +74,32 @@ async function api(path, options={}) {
   return response.json();
 }
 
+function filenameFromDisposition(value, fallback='daily_plan_backup.db') {
+  const match = /filename="?([^"]+)"?/i.exec(value || '');
+  return match?.[1] || fallback;
+}
+
+async function downloadBackupFile() {
+  const response = await fetch('/api/system/backup-export');
+  if (!response.ok) {
+    let detail = '导出备份失败';
+    try {
+      const payload = await response.json();
+      if (typeof payload?.detail === 'string' && payload.detail.trim()) detail = payload.detail;
+    } catch {}
+    throw new Error(detail);
+  }
+  const blob = await response.blob();
+  const objectUrl = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = objectUrl;
+  link.download = filenameFromDisposition(response.headers.get('Content-Disposition'));
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(objectUrl);
+}
+
 async function resetDailyDataFor(dateValue) {
   if (!dateValue) return null;
   const confirmed = await confirmAction(
@@ -330,6 +356,15 @@ if (page === 'today') {
   let swapSourceId = null;
   let carryoverItems = [];
 
+  function setTodayStage(stage) {
+    const checkinStage = $('#today-checkin-stage');
+    const reviewStage = $('#today-review-stage');
+    const showingReview = stage === 'review';
+    checkinStage.classList.toggle('hidden', showingReview);
+    reviewStage.classList.toggle('hidden', !showingReview);
+    if (showingReview) window.scrollTo({top: 0, behavior: 'smooth'});
+  }
+
   const taskTitle = task => settings?.task_titles?.[task.category] || task.category;
   const taskById = id => currentPlan?.tasks.find(task => String(task.id) === String(id));
 
@@ -430,26 +465,24 @@ if (page === 'today') {
   }
 
   function renderSubmitButton(plan) {
-    const buttons = [$('#submit-today'), $('#submit-today-nearby')].filter(Boolean);
+    const button = $('#open-execution-desk');
     const badge = $('#plan-status');
     if (plan.status === 'draft') {
-      buttons.forEach(button => button.classList.add('hidden'));
+      button.classList.add('hidden');
       badge.className = 'status';
       badge.textContent = '草稿';
     } else if (plan.status === 'approved') {
-      buttons.forEach(button => {
-        button.className = 'primary btn-submit';
-        button.disabled = false;
-        button.textContent = '进入执行台';
-      });
-      badge.classList.add('hidden');
+      button.className = 'primary btn-submit';
+      button.disabled = false;
+      button.textContent = '进入执行台';
+      badge.className = 'status plan-confirmed-status';
+      badge.textContent = '今日清单已确认';
     } else {
-      buttons.forEach(button => {
-        button.className = 'secondary btn-submit submitted';
-        button.disabled = false;
-        button.textContent = '查看执行台';
-      });
-      badge.classList.add('hidden');
+      button.className = 'secondary btn-submit submitted';
+      button.disabled = false;
+      button.textContent = '查看执行台';
+      badge.className = 'status plan-confirmed-status';
+      badge.textContent = '今日情况已提交';
     }
   }
 
@@ -504,15 +537,25 @@ if (page === 'today') {
     } else {
       timeBlock = `<span>计划 ${task.estimated_minutes} 分钟</span><span class="actual-minutes-readonly">有效 ${task.actual_minutes || 0} 分</span>`;
     }
-    return `<article class="task-card ${task.completed ? 'completed' : ''}" data-task-id="${task.id}" data-category="${esc(task.category)}">
+    const titleBlock = approved
+      ? `<h3 class="task-archive-title">${esc(task.title)}</h3>`
+      : `<input class="task-archive-title title-input" type="text" value="${esc(task.title)}">`;
+    const criteriaBlock = isSub
+      ? ''
+      : approved
+        ? `<p class="task-archive-note">${esc(task.completion_criteria)}</p>`
+        : `<input class="task-archive-note criteria-input" type="text" value="${esc(task.completion_criteria)}" placeholder="完成标准">`;
+    return `<article class="task-card task-archive-card ${isSub ? 'sub-route-task' : 'main-route-task'} ${task.completed ? 'completed' : ''}" data-task-id="${task.id}" data-category="${esc(task.category)}">
       ${lead}
       <div class="task-content">
-        <div class="task-title-row">
-          <input class="title-input" type="text" value="${esc(task.title)}" ${approved ? 'readonly' : ''}>
+        <div class="task-archive-head">
+          <div class="task-title-row">
+            ${titleBlock}
+          </div>
           ${subCategoryTabs(task)}
         </div>
-        <div class="task-meta"><span>${esc(taskTitle(task))}</span>${timeBlock}</div>
-        ${isSub ? '' : `<input class="criteria-input" type="text" value="${esc(task.completion_criteria)}" ${approved ? 'readonly' : ''} placeholder="完成标准">`}
+        <div class="task-meta task-paper-tags"><span>${esc(taskTitle(task))}</span>${timeBlock}</div>
+        ${criteriaBlock}
       </div>
       ${taskControls(task, index, routeLength)}
     </article>`;
@@ -540,12 +583,14 @@ if (page === 'today') {
   function renderPlan(plan) {
     currentPlan = plan;
     swapSourceId = null;
-    $('#plan-section').classList.remove('hidden');
+    setTodayStage('review');
+    $('#sub-route-details').open = false;
     renderSubmitButton(plan);
     $('#plan-title').textContent = plan.status === 'draft' ? '任务草稿' : '今天就走这条航线';
     $('#draft-actions').classList.remove('hidden');
     $('#save-draft').classList.toggle('hidden', plan.status !== 'draft');
     $('#approve-plan').classList.toggle('hidden', plan.status !== 'draft');
+    $('#adjust-checkin').classList.toggle('hidden', plan.status !== 'draft');
     $('#safety-notice').classList.toggle('hidden', !plan.safety_notice);
     $('#safety-notice').textContent = plan.safety_notice || '';
     $('#degraded-notice').classList.toggle('hidden', !plan.degraded_reason);
@@ -553,6 +598,7 @@ if (page === 'today') {
 
     const mainTasks = plan.tasks.filter(task => !task.is_sub);
     const subTasks = plan.tasks.filter(task => task.is_sub);
+    $('#sub-route-count').textContent = `${subTasks.length} 项`;
     renderRoute($('#main-route-list'), mainTasks, false);
     renderRoute($('#sub-route-list'), subTasks, true);
     bindTaskEvents();
@@ -717,7 +763,7 @@ if (page === 'today') {
   async function loadPlanForDate() {
     cancelSwap();
     currentPlan = null;
-    $('#plan-section').classList.add('hidden');
+    setTodayStage('checkin');
     $('#time-summary').classList.add('hidden');
     updateTimeSummary();
     try {
@@ -734,7 +780,7 @@ if (page === 'today') {
       invalidateCalendarMonth(dateInput.value);
       cancelSwap();
       currentPlan = null;
-      $('#plan-section').classList.add('hidden');
+      setTodayStage('checkin');
       $('#time-summary').classList.add('hidden');
       await loadCarryovers();
       toast(result.message);
@@ -749,6 +795,10 @@ if (page === 'today') {
   $('#checkin-form').onsubmit = async event => {
     event.preventDefault();
     const submit = event.submitter;
+    if (currentPlan?.status === 'draft') {
+      const confirmed = await confirmAction('重新生成会覆盖当前未确认草稿。', {title:'重新生成今天的草稿？', confirmLabel:'重新生成'});
+      if (!confirmed) return;
+    }
     submit.disabled = true;
     submit.firstElementChild.textContent = '正在生成…';
     try {
@@ -762,7 +812,6 @@ if (page === 'today') {
       invalidateCalendarMonth(dateInput.value);
       renderPlan(plan);
       await loadCarryovers();
-      $('#plan-section').scrollIntoView({behavior:'smooth'});
     } catch (error) { toast(error.message); }
     finally {
       submit.disabled = false;
@@ -785,11 +834,11 @@ if (page === 'today') {
       toast('今日清单已确认');
     } catch (error) { toast(error.message); }
   };
+  $('#adjust-checkin').onclick = () => setTodayStage('checkin');
   const openExecutionDesk = () => {
     window.location.href = `/execute?date=${encodeURIComponent(dateInput.value)}`;
   };
-  $('#submit-today').onclick = openExecutionDesk;
-  if ($('#submit-today-nearby')) $('#submit-today-nearby').onclick = openExecutionDesk;
+  $('#open-execution-desk').onclick = openExecutionDesk;
   document.addEventListener('keydown', event => { if (event.key === 'Escape') cancelSwap(); });
 
   loadCarryovers();
@@ -1124,15 +1173,17 @@ if (page === 'execute') {
   function executionSubmitCardHtml(task) {
     const canComplete = !task.is_sub && (Number(task.estimated_minutes) > 0 || Number(task.actual_minutes || 0) > 0);
     const disabled = !canComplete ? 'disabled' : '';
+    const board = (executionState?.task_execution_board || []).find(item => Number(item.task_id) === Number(task.id));
+    const totalMinutes = Number(board?.total_minutes || task.actual_minutes || 0);
     const summary = task.is_sub
-      ? `有效 ${task.actual_minutes || 0} 分 · ${task.completed ? '已完成' : '未完成'}`
-      : `计划 ${task.estimated_minutes} 分 · 有效 ${task.actual_minutes || 0} 分`;
+      ? `<span>有效 ${task.actual_minutes || 0} 分</span><span>总计 ${totalMinutes} 分</span><span>${task.completed ? '已完成' : '未完成'}</span>`
+      : `<span>计划 ${task.estimated_minutes} 分</span><span>有效 ${task.actual_minutes || 0} 分</span><span>总计 ${totalMinutes} 分</span>`;
     return `
       <article class="task-card ${task.completed ? 'completed' : ''}" data-submit-task-id="${task.id}">
         <input class="task-check execute-submit-check" type="checkbox" ${task.completed ? 'checked' : ''} ${disabled} aria-label="完成任务">
         <div class="task-content">
           <div class="task-title-row"><strong>${esc(task.title)}</strong></div>
-          <div class="task-meta"><span>${esc(settings?.task_titles?.[task.category] || task.category)}</span><span>${summary}</span></div>
+          <div class="task-meta submit-task-meta"><span>${esc(settings?.task_titles?.[task.category] || task.category)}</span>${summary}</div>
         </div>
       </article>
     `;
@@ -1297,9 +1348,11 @@ if (page === 'execute') {
     const emptyPanel = $('#execute-empty-state');
     const emptyMessage = $('#execute-empty-message');
     const runnable = result?.plan && ['approved', 'submitted'].includes(result.plan.status);
+    const readyToClose = runnable && !result?.active_segment;
     $('#execute-panel').classList.toggle('hidden', !runnable);
     $('#timeline-panel').classList.toggle('hidden', !runnable);
-    $('#execute-submit-panel').classList.toggle('hidden', !runnable);
+    $('#execute-submit-panel').classList.toggle('hidden', !readyToClose);
+    $('#enter-review').disabled = result?.plan?.status !== 'submitted';
     emptyPanel.classList.toggle('hidden', runnable);
     if (!result?.plan) {
       emptyMessage.textContent = '当前日期还没有计划。先回今天页生成并确认清单。';
@@ -1361,6 +1414,11 @@ if (page === 'execute') {
       invalidateCalendarMonth(dateInput.value);
       toast('今日数据已成功提交到复盘页');
     } catch (error) { toast(error.message); }
+  };
+
+  $('#enter-review').onclick = () => {
+    if ($('#enter-review').disabled) return;
+    window.location.href = `/review?date=${encodeURIComponent(dateInput.value)}`;
   };
 
   api('/api/settings').then(result => {
@@ -2025,6 +2083,12 @@ if (page === 'settings') {
   });
   $('#add-counted-label').onclick = () => addExecutionLabel('counted');
   $('#add-interrupt-label').onclick = () => addExecutionLabel('interrupt');
+  $('#export-backup').onclick = async () => {
+    try {
+      await downloadBackupFile();
+      toast('备份已开始下载');
+    } catch (error) { toast(error.message); }
+  };
   $('#settings-form').onsubmit = async event => {
     event.preventDefault();
     const task_titles = Object.fromEntries($$('[data-category]').map(input => [input.dataset.category, input.value]));

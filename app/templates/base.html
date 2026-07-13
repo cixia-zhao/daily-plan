@@ -9,13 +9,23 @@
 <body data-page="{% block page %}today{% endblock %}">
   <header class="site-header">
     <a class="brand" href="/"><span class="brand-mark">✓</span><span>今日航线</span></a>
-    <nav aria-label="主导航">
-      <a href="/" data-nav="today">今天</a>
-      <a href="/execute" data-nav="execute">执行台</a>
-      <a href="/review" data-nav="review">单日复盘</a>
-      <a href="/weekly" data-nav="weekly">七日复盘</a>
-      <a href="/gpt-workbench" data-nav="gpt-workbench">GPT 工作台</a>
-      <a href="/settings" data-nav="settings">设置</a>
+    <nav class="site-nav" aria-label="主导航">
+      <div class="primary-nav">
+        <a href="/" data-nav="today">今天</a>
+        <a href="/execute" data-nav="execute">执行</a>
+        <a href="/review" data-nav="review">复盘</a>
+      </div>
+      <details class="nav-more">
+        <summary>更多<span aria-hidden="true">⌄</span></summary>
+        <div class="nav-more-panel">
+          <a href="/weekly" data-nav="weekly">周报</a>
+          <a href="/gpt-workbench" data-nav="gpt-workbench">GPT 工作台</a>
+          <a href="/settings" data-nav="settings">设置</a>
+          {% if request.app.state.auth.required %}
+          <form action="/logout" method="post" class="logout-form"><button type="submit" class="nav-logout">退出登录</button></form>
+          {% endif %}
+        </div>
+      </details>
     </nav>
   </header>
   <main>{% block content %}{% endblock %}</main>

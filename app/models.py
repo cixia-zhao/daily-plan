@@ -25,6 +25,7 @@ CREATE TABLE IF NOT EXISTS tasks (
     source TEXT NOT NULL DEFAULT 'rule',
     position INTEGER NOT NULL DEFAULT 0,
     completed INTEGER NOT NULL DEFAULT 0,
+    completion_override INTEGER,
     sub_category TEXT,
     is_sub INTEGER DEFAULT 0
 );

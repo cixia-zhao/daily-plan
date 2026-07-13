@@ -2,40 +2,35 @@
 {% block title %}设置 · 今日航线{% endblock %}
 {% block page %}settings{% endblock %}
 {% block content %}
-<section class="hero compact"><div><p class="eyebrow">LOCAL FIRST</p><h1>任务设置</h1><p>只改真正影响每日清单的几件事。</p></div><span class="status success">GPT 协作偏好</span></section>
+<section class="hero compact"><div><h1>任务设置</h1><p>只改真正影响每日清单和执行记录的内容。</p></div><span class="status success">GPT 协作偏好</span></section>
 <section class="panel">
   <form id="settings-form" class="settings-form">
-    <div class="form-grid">
-      <label>当前阶段<input name="current_stage" required maxlength="100"></label>
-      <label>AI 项目每周上限<input name="ai_project_weekly_frequency" type="number" min="0" max="7"></label>
-      <label>项目起始日<input name="project_start_date" type="date" required></label>
-    </div>
-    <label class="alert-check"><input name="rehab_enabled" type="checkbox"><span><strong>主航线包含运动</strong><small>关闭后，草稿里不会再自动生成“运动”这条主航线；膝盖异常日仍会由本地安全规则自动停用</small></span></label>
-
-    <h2>主航线精力档预算（分钟）</h2>
-    <div class="form-grid">
-      <label>保底档总时间<input name="budget_minimum" type="number" min="30" max="720" step="15" required></label>
-      <label>普通档总时间<input name="budget_normal" type="number" min="30" max="720" step="15" required></label>
-      <label>充足档总时间<input name="budget_ample" type="number" min="30" max="720" step="15" required></label>
-    </div>
-
-    <h2>主航线草稿默认分钟</h2>
-    <p class="muted">这里控制草稿生成时数学、英语、408、运动默认填多少分钟。默认是 0，后面你再按当天情况改。</p>
-    <div id="draft-main-minute-fields" class="form-grid"></div>
-
-    <h2>任务名称</h2><div id="task-title-fields" class="form-grid"></div>
-    <h2>执行标签</h2>
-    <p class="muted">计总标签会并入任务总时间；中断标签会单独统计，但不并入任务总时间。</p>
-    <div id="execution-label-fields" class="stack"></div>
-    <div class="actions">
-      <button id="add-counted-label" class="ghost-button" type="button">新增计总标签</button>
-      <button id="add-interrupt-label" class="ghost-button" type="button">新增中断标签</button>
-    </div>
-    <h2>有效细分标签</h2>
-    <p class="muted">按任务类别给有效时间补充细分，例如数学里的“网课 / 刷题”。不选也可以直接开始有效时间。</p>
-    <div id="effective-label-category-fields" class="stack"></div>
-    <button class="primary" type="submit">保存设置</button>
+    <details class="settings-group" open>
+      <summary>日常计划</summary>
+      <div class="details-content">
+        <div class="form-grid"><label>当前阶段<input name="current_stage" required maxlength="100"></label><label>AI 项目每周上限<input name="ai_project_weekly_frequency" type="number" min="0" max="7"></label><label>项目起始日<input name="project_start_date" type="date" required></label></div>
+        <label class="alert-check"><input name="rehab_enabled" type="checkbox"><span><strong>主航线包含运动</strong><small>关闭后，草稿不再自动生成运动；膝盖异常日仍由本地安全规则自动停用。</small></span></label>
+        <h2>主航线精力档预算（分钟）</h2><div class="form-grid"><label>保底档总时间<input name="budget_minimum" type="number" min="30" max="720" step="15" required></label><label>普通档总时间<input name="budget_normal" type="number" min="30" max="720" step="15" required></label><label>充足档总时间<input name="budget_ample" type="number" min="30" max="720" step="15" required></label></div>
+        <h2>主航线草稿默认分钟</h2><p class="muted">控制数学、英语、408、运动默认分钟；默认是 0，可按当天情况修改。</p><div id="draft-main-minute-fields" class="form-grid"></div>
+        <h2>任务名称</h2><div id="task-title-fields" class="form-grid"></div>
+      </div>
+    </details>
+    <details class="settings-group">
+      <summary>执行标签</summary>
+      <div class="details-content">
+        <p class="muted">计总标签并入任务总时间；中断标签单独统计。</p><div id="execution-label-fields" class="stack"></div><div class="actions"><button id="add-counted-label" class="ghost-button" type="button">新增计总标签</button><button id="add-interrupt-label" class="ghost-button" type="button">新增中断标签</button></div>
+        <h2>有效细分标签</h2><p class="muted">按任务类别补充细分；不选也能直接开始有效时间。</p><div id="effective-label-category-fields" class="stack"></div>
+      </div>
+    </details>
+    <details class="settings-group">
+      <summary>备份与使用说明</summary>
+      <div class="details-content">
+        <h2>数据备份</h2><p class="muted">服务器每天自动备份数据库；你也可以在这里手动导出一份。</p><div class="actions"><button id="export-backup" class="ghost-button" type="button">导出数据库备份</button></div>
+        <div class="config-note"><h3>GPT 协作</h3><p>项目整理上下文后复制给 ChatGPT，再把回复贴回项目；模板与历史在 <a href="/gpt-workbench">GPT 工作台</a> 管理。</p></div>
+        <div class="config-note"><h3>云端入口</h3><p>当前通过 Tailscale Funnel 提供登录保护的 HTTPS 入口；手机无需安装或开启 Tailscale，也不需要开放服务器业务端口。</p></div>
+      </div>
+    </details>
+    <div class="actions settings-save"><button class="primary" type="submit">保存设置</button></div>
   </form>
-  <div class="config-note"><h3>GPT 协作工作流</h3><p>这一版优先走“项目整理上下文 -> 复制到 ChatGPT -> 把回复贴回项目”的本地闭环。模板和协作历史统一在 <a href="/gpt-workbench">GPT 工作台</a> 里管理。</p></div>
 </section>
 {% endblock %}

@@ -3,9 +3,9 @@
 {% block page %}execute{% endblock %}
 {% block content %}
 <section class="hero compact">
-  <div><p class="eyebrow">EXECUTION DESK</p><h1>执行台</h1><p>白天只管切换任务、标签和中断，晚上再回头看结构。</p></div>
+  <div><h1>执行台</h1><p>现在只做一件事：开始、切换或结束当前任务。</p></div>
   <div class="date-actions">
-    <button id="execute-stop" class="ghost-button" type="button">停止当前计时</button>
+    <button id="execute-stop" class="ghost-button stop-current" type="button">停止当前计时</button>
     <div class="date-chip date-chip-button">
       <span>日期</span>
       <button id="execute-date-button" class="date-trigger" type="button"></button>
@@ -19,7 +19,7 @@
   <p id="execute-empty-message" class="muted">当前日期还没有可执行的已确认清单。</p>
 </section>
 
-<section id="execute-panel" class="panel hidden">
+<section id="execute-panel" class="panel execute-focus hidden">
   <div class="section-heading">
     <div><p class="step">01 · 白天执行</p><h2>一次只追踪一个激活项</h2></div>
     <span id="execute-active-badge" class="status">当前空闲</span>
@@ -50,10 +50,12 @@
       </div>
     </div>
     <aside class="execute-side">
-      <div class="panel compact-panel">
-        <h3>任务看板</h3>
-        <div id="execute-task-board" class="execution-board-grid"></div>
-      </div>
+      <details id="execute-board-details" class="execution-details">
+        <summary>查看任务进度</summary>
+        <div class="details-content">
+          <div id="execute-task-board" class="execution-board-grid"></div>
+        </div>
+      </details>
     </aside>
   </div>
 </section>
@@ -61,18 +63,16 @@
 <section id="timeline-panel" class="panel hidden">
   <div class="section-heading">
     <div><p class="step">02 · 时间轴</p><h2>允许补记，也允许回头修正</h2></div>
-    <div class="section-heading-actions">
-      <button id="timeline-toggle" class="ghost-button section-toggle-button" type="button" aria-expanded="false">展开时间轴</button>
-      <button id="add-segment" class="ghost-button" type="button">补一段</button>
-    </div>
+    <div class="section-heading-actions"><button id="timeline-toggle" class="ghost-button section-toggle-button" type="button" aria-expanded="false">展开时间轴</button></div>
   </div>
   <div id="timeline-content" class="timeline-content hidden">
+    <div class="timeline-actions"><button id="add-segment" class="ghost-button" type="button">补一段时间</button></div>
     <div id="timeline-list" class="timeline-list"></div>
   </div>
 </section>
 
 <section id="execute-submit-panel" class="panel hidden">
-  <div class="section-heading"><div><p class="step">03 · 收尾提交</p><h2>勾完成，再交给复盘页</h2></div></div>
+  <div class="section-heading"><div><p class="step">收尾</p><h2>确认完成情况，交给复盘</h2></div></div>
   <div id="execute-submit-list" class="execution-task-list"></div>
   <section id="execute-submit-zero-group" class="submit-zero-group hidden">
     <button id="execute-submit-zero-toggle" class="ghost-button section-toggle-button" type="button" aria-expanded="false">展开今日原计划为 0 分的项目</button>
@@ -80,6 +80,7 @@
   </section>
   <div class="actions">
     <button id="execute-submit" class="primary" type="button">提交今日情况</button>
+    <button id="enter-review" class="secondary" type="button" disabled>进入复盘</button>
   </div>
 </section>
 {% endblock %}

@@ -1,138 +1,209 @@
 # 项目交接文档
 
-> 最后更新：2026-06-30
+> 最后更新：2026-07-06
 > 当前环境：Codex / 常规环境
-> 交接方向：先把“本地执行记录 + 手机实用链路”跑顺，再根据首日真实使用反馈微调
+> 当前远端：`https://github.com/cixia-zhao/daily-plan.git`
+> 明天接手优先级：先按真实使用继续跑“执行台有效细分 + 草稿默认分钟 + 手机 Git 更新链路”，再根据实际卡点微调
 
-## 1. 项目概览与环境
+## 1. 当前项目真实状态
 
 - 项目名称：今日航线
-- 工作区路径：`C:\Users\cixia\Desktop\daily plan`
+- 工作区路径：`C:\Users\cixia\Desktop\project\daily plan`
 - 技术栈：FastAPI + Jinja2 + SQLite + 原生 JavaScript / CSS
-- 当前产品定位：单用户、本地优先的每日任务执行与复盘 Web App
-- 当前主流程：晨间输入 → 生成草稿 → 人工确认 → 执行台记录时间段 → 晚间提交与复盘 → 需要时复制给 GPT 协作
-- Windows 启动方式：双击 `启动今日航线.cmd`，或手动运行 `uvicorn app.main:app --reload`
-- 安卓手机启动方式：Termux 进入项目目录后执行 `bash ./termux-start.sh`，浏览器访问 `http://127.0.0.1:8000`
-- 当前“传到手机”方式：电脑运行 `share-to-phone.ps1 -Serve` 打包并临时开下载地址，手机下载压缩包后解压到 `/storage/emulated/0/daily-plan`
-- 构建与部署现状：没有前端构建链，也没有正式 APK；当前最稳方案仍是“Termux 起后端 + 手机浏览器访问”
+- 产品定位：单用户、本地优先、先确认再执行的每日任务 Web App
+- 当前主流程：晨间输入 → 生成草稿 → 人工确认 → 执行台记录时间段 → 晚间提交 → 单日 / 单周复盘 → 需要时复制给 GPT 协作
+- Windows 启动方式：双击 `启动今日航线.cmd`
+- 安卓手机启动方式：
+  - 首次安装后：`dp`
+  - 更新并启动：`spdp`
+- 当前手机长期方案：项目已经进入 GitHub 公共仓库，手机推荐走“Git 工作区 + `spdp` 更新”，不再把“每次重新传 zip 覆盖”当成主路径
+- 当前手机安装、迁移与更新说明：见 `docs/termux-guide.md`
+- 当前临时传机方式仍保留：电脑可运行 `share-to-phone.ps1 -Serve` 生成并分享 `dist/daily-plan-termux.zip`
 
-## 2. 本次会话已完成的工作
+## 2. 今天这轮收束后的关键结论
 
-### A. 执行台与任务时间看板第一版
+### A. 执行台关键 bug 已修正
 
-**文件**：`app/main.py`、`app/api.py`、`app/database.py`、`app/models.py`、`app/schemas.py`、`app/templates/base.html`、`app/templates/index.html`、`app/templates/execute.html`、`app/templates/review.html`、`app/templates/settings.html`、`app/static/app.js`、`app/static/style.css`、`tests/test_api.py`、`tests/test_ui_and_settings.py`
+**文件**：`app/api.py`、`app/schemas.py`、`app/static/app.js`、`tests/test_api.py`、`tests/test_ui_and_settings.py`
 
-- 新增独立 `/execute` 页面，白天执行不再主要依赖今天页，而是在执行台里开始任务有效时间、切换标签、补记时间段、勾选完成并直接提交今日情况。
-- 新增 `task_execution_segments` 时间段模型，按 `effective`、`counted_label`、`interrupt_label` 三类存明细；任务总时间实时聚合为“有效时间 + 计总标签时间”。
-- 设置新增 `execution_labels`，内置“上厕所 / 走动 / 打游戏 / 吃饭 / 突发 / 手动暂停”，支持自定义；系统标签可改名不可删。
-- 单日复盘页新增任务执行看板；今天页确认后主按钮改成“进入执行台”，主任务实际分钟改为只读展示，避免出现两套数据源。
-- `POST /api/daily-plans/{date}/submit` 现在会先拦截未停止的激活段，再把主任务 `actual_minutes` 同步为有效时间；副航线仍按有效时间 `>= 30` 自动完成。
+- 早上刚点“开始有效时间”时，任务卡出现 `有效 -480 分` 的问题已修掉。
+- 现在有效分钟统一走 Python 侧的 `_minutes_between()` 和 `_parse_iso_datetime()` 口径，不再用 SQLite `CURRENT_TIMESTAMP` 去和本地 naive ISO 时间直接做差。
+- `task_execution_board`、任务卡里的有效分钟、提交前同步、标签切换后的刷新，已经统一复用同一套聚合逻辑，避免“卡片和统计不一致”。
 
-### B. 手机落地最小链路
+### B. 执行台现在支持“有效时间细分”
 
-**文件**：`termux-install.sh`、`termux-start.sh`、`share-to-phone.ps1`、`docs/termux-quickstart.md`、`docs/phone-transfer.md`、`README.md`、`docs/README.md`、`tests/test_launcher.py`
+**文件**：`app/api.py`、`app/schemas.py`、`app/static/app.js`、`app/static/style.css`、`app/templates/settings.html`、`tests/test_api.py`、`tests/test_ui_and_settings.py`
 
-- 增加 Termux 最小安装与启动脚本，手机上只需要进项目目录后运行安装脚本和启动脚本即可，不依赖电脑端启动器。
-- 新增 `share-to-phone.ps1`，会打出 `dist/daily-plan-termux.zip`，排除 `.git`、`data`、`.env` 和缓存目录，并可临时起下载服务给手机下载。
-- `termux-quickstart.md` 已重写成“只有手机也能照着走”的版本，路径默认是 `/storage/emulated/0/daily-plan`，并专门处理了 `termux-setup-storage` 的 `y/n` 提示坑。
-- 当前结论已经明确：先不要把这版说成 APK 或原生 App；明天最稳妥的真实用法就是 Termux 起本地后端，再把网页添加到主屏幕。
+- `effective` 时间段现在也可以带 `label_id / label_name`，不再只允许计总 / 中断标签带标签快照。
+- 有效细分标签当前按“任务类别”配置：
+  - 默认预置：`数学 -> 网课 / 刷题`
+  - 默认预置：`英语 -> 阅读 / 单词`
+  - 其他类别默认空，用户可在设置页自己加
+- 执行台开始有效时间时：
+  - 可以直接开始，不强制选细分标签
+  - 也可以先选细分标签再开始
+  - `切回有效` 会优先回到该任务最近一次用过的有效细分标签
+- 时间轴补记 / 编辑现在也支持给 `effective` 段选细分标签。
+- 看板现在除了 `有效 / 计总 / 中断` 之外，还会显示：
+  - `有效占总计` 百分比
+  - 有效细分内部占比
+  - 没选细分标签的有效时间会显示成 `未细分`
 
-### C. 交接与模块文档同步
+### C. 今天页草稿默认分钟已改成可配置
 
-**文件**：`HANDOFF.md`、`docs/README.md`、`docs/backend-api.md`、`docs/frontend.md`
+**文件**：`app/api.py`、`app/schemas.py`、`app/static/app.js`、`app/templates/settings.html`、`tests/test_api.py`、`tests/test_ui_and_settings.py`
 
-- 这几份文档已同步到“执行台 + 时间段 + Termux 手机链路”的当前真实状态，供明天新窗口直接恢复上下文，不必再从旧的 GPT 工作台版本脑补现状。
+- 设置模型新增 `draft_main_minutes_by_category`，控制主航线草稿生成时的默认分钟。
+- 当前默认值已经收束成：
+  - 数学 `0`
+  - 英语 `0`
+  - 408 `0`
+  - 运动 `0`
+- 产品含义是：草稿先给结构，不强行替用户预填分钟；当天要多少，用户再按真实情况改。
+- 设置页现在可以直接改这四项默认分钟，不需要每次新草稿都手动从 `60 / 30 / 50 / 20` 往回改。
 
-## 3. 历史工作沉淀
+### D. 今日清单分钟校验已放宽到真实需求
 
-### A. 本地草稿与人工确认主流程
+**文件**：`app/schemas.py`、`app/api.py`、`app/static/app.js`、`tests/test_api.py`
 
-- 今天页已经稳定为“晨间输入 -> 草稿 -> 手动调整 -> 审阅确认”的流程，未完成任务只进入待审池，不自动滚入下一天。
-- 主副航线仍保持五槽位心智，桌面端对齐优先；主任务是否完成仍由用户手动判断。
+- `300 分钟全给数学、其他主航线为 0` 现在被视为合法需求。
+- `PlanTaskInput.estimated_minutes` 的基础输入上限已经放宽到 `720`，不再把 `241+` 之类的值提前拦死。
+- 真正的限制现在回到业务校验里：
+  - 单个主航线任务不能超过当天 `available_minutes`
+  - 主航线总分钟不能超过当天 `available_minutes`
+- 前端 `api()` 已兼容 FastAPI 的 `detail: []` 返回结构，错误提示不再显示 `[object Object]`。
 
-### B. GPT 手工协作与留档
+### E. 执行台已经统一成跨端同版本
 
-- 单日复盘、七日复盘和 GPT 工作台都已经支持“复制提示词给 GPT -> 把回复贴回项目留档”的手工协作闭环。
-- GPT 回复原文和采用备注走独立 `gpt_collab_records` 表，不会直接污染正式复盘字段。
+**文件**：`app/templates/execute.html`、`app/static/app.js`、`app/static/style.css`
 
-### C. 周视角与当前边界
+- 最初方案里“只改手机端”的方向，已经在实现上收束成“桌面端和手机端保持同一套执行台语义”。
+- 当前执行台的统一结构是：
+  - 顶部快捷条：`计总 / 中断 / 切回有效`
+  - `0 分钟主航线` 默认折叠
+  - `副航线` 默认折叠
+  - `切回有效` 会直接回到当前标签段所挂载的任务，并复用现有 `tasks/start` 接口
+- 当前默认产品判断：以后没有特别说明时，桌面端和手机端应尽量保持一致，不再故意分叉成两套版本。
 
-- 七日复盘现在按所选日期所在自然周统计，不是最近 7 个实际执行日。
-- DeepSeek 兼容入口仍保留，但它不再是当前第一主叙事；更值得继续打磨的是本地执行闭环和手机可用性。
+### F. 手机已经具备“更新不丢数据”的正式链路
 
-## 4. 核心文件地图
+**文件**：`termux-install.sh`、`termux-start.sh`、`termux-update.sh`、`termux-register-commands.sh`、`docs/termux-guide.md`
+
+- 项目已经上传到 GitHub 公共仓库：`cixia-zhao/daily-plan`
+- `termux-install.sh` 已兼容 Termux，不再执行会触发报错的 `pip install --upgrade pip`
+- `termux-register-commands.sh` 会在 `$PREFIX/bin` 注册两个正式命令：
+  - `dp`：直接启动
+  - `spdp`：先更新，再启动
+- `termux-update.sh` 的行为：
+  - 要求当前目录是 Git 工作区
+  - 如检测到本地代码改动则停止
+  - 更新前备份 `data/daily_plan.db` 到 `backups/`
+  - 如检测到 `127.0.0.1 / localhost` 这类手机本地回环代理，会先自动清掉对应环境变量和 Git 全局代理
+  - `git pull --ff-only`
+  - `python -m pip install -e ".[dev]"`
+  - 刷新 `dp / spdp`
+  - 不覆盖本地 `data/`
+
+### G. “运动”主航线现在要看真实设置开关
+
+**文件**：`app/api.py`、`app/templates/settings.html`、`app/static/app.js`
+
+- 草稿规则层仍然会生成第 4 条主航线 `运动`。
+- 但如果设置里的 `rehab_enabled=false`，`create_draft()` 会在保存草稿前把 `rehab` 类任务过滤掉。
+- 设置页文案已经改成更直白的 `主航线包含运动`，避免用户以为只是影响康复备注，而不是直接影响第 4 条主航线是否出现。
+
+## 3. 当前最值得继续跟进的点
+
+1. 真机继续跑一天，确认统一执行台在桌面和手机上都顺手，尤其是：
+   - `切到标签` 后再 `切回有效`
+   - 有效细分标签在手机上是不是足够顺手，不会把开始动作搞重
+   - `0 分钟主航线` 折叠后是否还足够可见
+   - 时间轴补记在手机上的操作负担
+2. 用真实手机再验证几次 `spdp`，确认：
+   - 数据库备份正常生成
+   - 首次遇到旧回环代理时，手动清代理后能成功把修复版脚本拉下来
+   - 之后再次更新时，`termux-update.sh` 能自动清掉回环代理
+   - 没有误覆盖 `data/daily_plan.db`
+   - 更新后 `dp / spdp` 仍然可用
+3. 如果后续要继续打磨手机体验，优先修“真实使用摩擦”，不要先跳到 APK、PWA、自启动这些大话题。
+4. 如果后续要继续打磨今天页，优先想清楚“草稿默认分钟=0”之后，怎样让用户改分钟更顺，而不是先把默认值重新写死。
+
+## 4. 历史沉淀中仍然有效的产品边界
+
+- 今天页仍然坚持“草稿 -> 人工确认”，不能绕过审批直接开始正式执行。
+- 未完成任务只进入待审池，不自动顺延到下一天。
+- GPT 协作仍然是“复制提示词 -> 外部对话 -> 粘贴回留档”，不走项目内联网 API。
+- 七日复盘当前按所选日期所在自然周统计，不是最近 7 个实际执行日。
+- 副航线完成规则仍然是“有效时间 `>= 30` 自动完成”。
+- 主任务 `actual_minutes` 仍然只认 `effective` 段，不把计总标签或中断标签写回去。
+
+## 5. 核心文件地图
 
 ```text
 daily plan/
-├── HANDOFF.md                     # 新窗口优先读取的交接文档
-├── README.md                      # 项目总说明与启动入口
-├── share-to-phone.ps1             # 电脑打包并临时分享给手机下载
-├── termux-install.sh              # 安卓 Termux 第一次安装依赖
-├── termux-start.sh                # 安卓 Termux 每日启动本地服务
+├── HANDOFF.md                     # 明天新窗口优先读
+├── README.md                      # 项目总说明
+├── share-to-phone.ps1             # 电脑打包并临时分享 zip 给手机下载
+├── termux-install.sh              # Termux 首次安装
+├── termux-start.sh                # Termux 启动服务
+├── termux-update.sh               # Termux 更新代码但保留本地数据
+├── termux-register-commands.sh    # 注册 dp / spdp
 ├── docs/
 │   ├── README.md                  # 模块文档索引
-│   ├── backend-api.md             # 后端接口、状态机、时间段模型速查
-│   ├── backend-services.md        # 本地规则、GPT 协作与兼容旧 AI 逻辑
-│   ├── frontend.md                # 页面、交互与执行台前端速查
-│   ├── termux-quickstart.md       # 只有手机时的 Termux 实操说明
-│   └── phone-transfer.md          # 电脑传到手机的最省事步骤
+│   ├── backend-api.md             # 后端接口、时间聚合、脚本链路
+│   ├── backend-services.md        # 本地规则、AI 兼容入口、周分析服务
+│   ├── frontend.md                # 今天页、执行台、复盘页前端结构
+│   └── termux-guide.md            # 手机 Termux 安装、迁移、更新与排错总说明
 ├── app/
-│   ├── main.py                    # FastAPI 应用工厂与页面路由
-│   ├── api.py                     # JSON API、计划状态机、执行聚合
-│   ├── database.py                # SQLite 初始化与补表逻辑
-│   ├── models.py                  # 全量建表 SQL
-│   ├── schemas.py                 # Pydantic 输入输出模型
+│   ├── main.py
+│   ├── api.py
+│   ├── database.py
+│   ├── models.py
+│   ├── schemas.py
 │   ├── services/
-│   │   ├── ai_planner.py          # 兼容旧 DeepSeek 日计划入口
-│   │   └── task_rules.py          # 本地规则与任务草稿生成
+│   │   ├── ai_planner.py
+│   │   ├── task_rules.py
+│   │   └── weekly_review_analyzer.py
 │   ├── templates/
-│   │   ├── index.html             # 今天页
-│   │   ├── execute.html           # 执行台
-│   │   ├── review.html            # 单日复盘页
-│   │   ├── weekly.html            # 七日复盘页
-│   │   ├── gpt_workbench.html     # GPT 协作工作台
-│   │   └── settings.html          # 设置页与执行标签配置
+│   │   ├── index.html
+│   │   ├── execute.html
+│   │   ├── review.html
+│   │   ├── weekly.html
+│   │   ├── gpt_workbench.html
+│   │   └── settings.html
 │   └── static/
-│       ├── app.js                 # 全部页面交互
-│       └── style.css              # 页面视觉与响应式布局
-└── tests/                         # API、页面资产和脚本验证
+│       ├── app.js
+│       └── style.css
+└── tests/
 ```
 
-## 5. 当前进度与待办事项
+## 6. 明天新窗口建议读取顺序
 
-1. **首日真机试用校准**：明天按真实一天去跑执行台，重点观察“有效时间 / 计总标签 / 中断标签”的切换语义是否顺手。
-2. **手机端细节打磨**：根据真机反馈继续修表单触控、时间轴编辑、按钮文案和空态提示。
-3. **传机与启动体验补坑**：如果明天还遇到目录、端口、下载地址或浏览器入口问题，优先修文档和脚本，不急着上 APK。
-4. **复盘统计再迭代**：如果任务执行看板的数据已经足够有用，再考虑更细分类或更强图形化；当前先不要上复杂图表库。
+1. `HANDOFF.md`
+2. `docs/README.md`
+3. 如果是执行台 / 时间统计问题：`docs/backend-api.md` + `docs/frontend.md`
+4. 如果是手机更新 / 部署问题：`docs/termux-guide.md`
+5. 再按需进代码，不要先全仓无差别扫描
 
-## 6. 不可触碰的红线
+## 7. 不可触碰的红线
 
-- 🚫 DO NOT 绕过人工确认直接开始正式执行：今天页的草稿必须先由用户确认，不能自动变成正式清单。
-- 🚫 DO NOT 恢复“未完成任务自动顺延”：未完成任务只进待审池，不自动滚入下一天。
-- 🚫 DO NOT 把 GPT 回复自动写回正式复盘字段：GPT 回复只能留档或手动采用，不能自动当成结构化真相。
-- 🚫 DO NOT 把密钥写进前端、数据库或设置接口：`.env` 仍只由后端读取。
-- 🚫 DO NOT 覆盖或删除用户本地 `data/daily_plan.db`：这个库是真实数据，改表前要先考虑备份。
-- 🚫 DO NOT 破坏“同一时刻只有一个激活段”的前提：执行台任何开始或切换都必须先关掉旧段再开新段。
-- 🚫 DO NOT 把中断标签并入任务总时间：任务总时间只等于“有效时间 + 计总标签”，中断标签只展示不并入。
-- 🚫 DO NOT 假定手机项目目录是 `~/daily-plan`：当前文档和脚本默认以 `/storage/emulated/0/daily-plan` 为主路径。
-- 🚫 DO NOT 把当前方案宣传成 APK、PWA、离线缓存或自启动已完成：这些都还没做，现在只是浏览器壳式本地网页。
-
-## 7. 关键配置与外部依赖
-
-| 配置项 | 说明 |
-|---|---|
-| `DATABASE_PATH` | 后端数据库路径；默认是 `data/daily_plan.db`，Termux 启动脚本也依赖它 |
-| `PORT` | 服务端口；Termux 默认 `8000`，需要时可临时切到别的端口 |
-| `DEEPSEEK_BASE_URL` | 兼容旧 AI 入口地址；当前不是主流程必需 |
-| `DEEPSEEK_API_KEY` | 启用兼容旧 AI 入口时才需要；为空时应用照样可本地运行 |
-| `DEEPSEEK_MODEL` | 兼容旧 AI 使用的模型名；默认 `deepseek-chat` |
-| `dist/daily-plan-termux.zip` | `share-to-phone.ps1` 生成的手机分发包，不包含真实数据库和密钥 |
+- 🚫 不要绕过人工确认，把草稿直接变成正式执行清单
+- 🚫 不要恢复“未完成任务自动顺延”
+- 🚫 不要把 GPT 回复自动写回正式复盘字段
+- 🚫 不要把 `DEEPSEEK_*` 密钥暴露给前端、数据库或设置接口
+- 🚫 不要覆盖或删除用户本地 `data/daily_plan.db`
+- 🚫 不要破坏“同一时刻只有一个激活段”的执行前提
+- 🚫 不要把中断标签并入任务总时间
+- 🚫 不要把计总标签写回主任务 `actual_minutes`
+- 🚫 不要把“主航线包含运动”开关误写成只影响提示文案，它现在真实影响草稿里第 4 条主航线是否出现
+- 🚫 不要再把桌面端和手机端默认当成两套分叉版本
+- 🚫 不要把当前方案表述成 APK、PWA、离线缓存、自启动已完成
 
 ## 8. 当前验证状态
 
-本轮与这轮功能相关的验证已跑过：
+今天这轮与功能相关的自动验证已经跑过：
 
-- `python -m pytest -q`
-- `python -m compileall app tests`
+- `python -m pytest -q tests/test_api.py tests/test_ui_and_settings.py`
 - `node --check app/static/app.js`
-- 浏览器侧已做过执行台主流程验证：开始任务、切标签、停止、补记、提交、复盘页看板展示
+
+今天这次文档更新本身没有改业务代码，所以未再重复跑测试。

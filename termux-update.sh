@@ -40,7 +40,7 @@ fi
 
 if ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
   echo "[ERROR] 当前目录不是 Git 工作区。"
-  echo "请先按 docs/termux-git-update.md 完成一次性迁移，再使用这个脚本。"
+  echo "请先按 docs/termux-guide.md 完成一次性迁移，再使用这个脚本。"
   exit 1
 fi
 

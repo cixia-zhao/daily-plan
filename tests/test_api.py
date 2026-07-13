@@ -1055,3 +1055,58 @@ def test_settings_persist_project_start_date(tmp_path):
     response = client.put("/api/settings", json=settings)
     assert response.status_code == 200
     assert response.json()["project_start_date"] == target_date
+
+
+def test_system_health_reports_runtime_and_storage_paths(tmp_path):
+    app = create_app(
+        database_path=tmp_path / "health.db",
+        backup_dir=tmp_path / "backups",
+        disable_ai=True,
+        runtime_mode="production",
+    )
+    client = TestClient(app)
+
+    response = client.get("/api/system/health")
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] == "ok"
+    assert body["mode"] == "production"
+    assert body["database_path"].endswith("health.db")
+    assert body["backup_dir"].endswith("backups")
+    assert body["backup_retention_days"] == 14
+    assert body["ai_enabled"] is False
+
+
+def test_backup_export_downloads_valid_sqlite_snapshot(tmp_path):
+    backup_dir = tmp_path / "backups"
+    app = create_app(
+        database_path=tmp_path / "backup.db",
+        backup_dir=backup_dir,
+        disable_ai=True,
+        runtime_mode="production",
+    )
+    client = TestClient(app)
+    today = date.today().isoformat()
+
+    draft = client.post("/api/daily-plans/draft", json={
+        "date": today, "energy": "minimum", "available_minutes": 90, "day_type": "normal"
+    }).json()
+    client.post(f"/api/daily-plans/{today}/approve")
+    main_task = next(task for task in draft["tasks"] if not task["is_sub"])
+    client.patch(f"/api/tasks/{main_task['id']}", json={"completed": True})
+
+    response = client.get("/api/system/backup-export")
+    assert response.status_code == 200
+    assert response.headers["content-type"] == "application/octet-stream"
+    assert "attachment;" in response.headers["content-disposition"]
+
+    exported = tmp_path / "exported.db"
+    exported.write_bytes(response.content)
+
+    with sqlite3.connect(exported) as connection:
+        plan_count = connection.execute("SELECT COUNT(*) FROM plans").fetchone()[0]
+        task_count = connection.execute("SELECT COUNT(*) FROM tasks").fetchone()[0]
+
+    assert plan_count == 1
+    assert task_count > 0
+    assert any(path.name.startswith("daily_plan-") for path in backup_dir.iterdir())

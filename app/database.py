@@ -19,6 +19,8 @@ def initialize(path: str | Path) -> None:
             cursor.execute("ALTER TABLE tasks ADD COLUMN sub_category TEXT")
         if "is_sub" not in columns:
             cursor.execute("ALTER TABLE tasks ADD COLUMN is_sub INTEGER DEFAULT 0")
+        if "completion_override" not in columns:
+            cursor.execute("ALTER TABLE tasks ADD COLUMN completion_override INTEGER")
         cursor.execute("PRAGMA table_info(reviews)")
         review_columns = [row[1] for row in cursor.fetchall()]
         for name, ddl in [

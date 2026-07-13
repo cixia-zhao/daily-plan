@@ -220,10 +220,12 @@ def test_settings_budget_inputs_use_fifteen_minute_steps():
     assert 'id="add-counted-label"' in settings_page
     assert 'id="add-interrupt-label"' in settings_page
     assert 'id="effective-label-category-fields"' in settings_page
+    assert 'id="export-backup"' in settings_page
     assert "draft_main_minutes_by_category" in script
     assert "data-draft-main-category" in script
     assert "renderEffectiveLabelFields" in script
     assert "effective_labels_by_category" in script
+    assert "downloadBackupFile" in script
     assert "{minimum:90, normal:150, ample:210}" in script
 
 

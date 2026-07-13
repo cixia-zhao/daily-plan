@@ -5,7 +5,9 @@ import json
 from datetime import date, datetime, timedelta
 
 from fastapi import APIRouter, HTTPException, Request, status
+from fastapi.responses import FileResponse
 
+from .backup_utils import create_sqlite_backup, prune_old_backups
 from .database import connect
 from .schemas import (
     CarryoverResolution,
@@ -174,6 +176,10 @@ def _db(request: Request):
     return connect(request.app.state.database_path)
 
 
+def _backup_dir(request: Request):
+    return request.app.state.backup_dir
+
+
 def _is_planned_main_task(row) -> bool:
     return not row["is_sub"] and row["estimated_minutes"] > 0
 
@@ -194,10 +200,26 @@ def _capture_unfinished(connection, before_date: str) -> None:
         )
 
 
+def _earliest_business_date(connection) -> str | None:
+    row = connection.execute(
+        """SELECT MIN(record_date) AS record_date FROM (
+               SELECT plan_date AS record_date FROM plans
+               UNION ALL SELECT review_date AS record_date FROM reviews
+               UNION ALL SELECT plan_date AS record_date FROM task_execution_segments
+           )"""
+    ).fetchone()
+    return row["record_date"] if row and row["record_date"] else None
+
+
 def _get_settings(connection) -> dict:
     row = connection.execute("SELECT value_json FROM app_settings WHERE key='main'").fetchone()
-    settings = json.loads(row["value_json"]) if row else dict(DEFAULT_SETTINGS)
-    settings.setdefault("project_start_date", DEFAULT_SETTINGS["project_start_date"])
+    stored_settings = json.loads(row["value_json"]) if row else {}
+    settings = dict(DEFAULT_SETTINGS) | stored_settings
+    settings["project_start_date"] = (
+        stored_settings.get("project_start_date")
+        or _earliest_business_date(connection)
+        or date.today().isoformat()
+    )
     settings.setdefault("execution_labels", DEFAULT_SETTINGS["execution_labels"])
     settings.setdefault("effective_labels_by_category", DEFAULT_SETTINGS["effective_labels_by_category"])
     settings.setdefault("draft_main_minutes_by_category", DEFAULT_SETTINGS["draft_main_minutes_by_category"])
@@ -326,7 +348,7 @@ def _resolve_prompt_content(settings: dict, prompt_key: str, active_key: str, de
 
 
 def _project_start_date(settings: dict) -> date:
-    raw = settings.get("project_start_date") or DEFAULT_SETTINGS["project_start_date"]
+    raw = settings.get("project_start_date") or date.today().isoformat()
     if isinstance(raw, date):
         return raw
     return date.fromisoformat(str(raw))
@@ -340,6 +362,15 @@ def _week_bounds(anchor: date) -> tuple[date, date]:
 
 def _parse_month_start(month: str) -> date:
     return datetime.strptime(f"{month}-01", "%Y-%m-%d").date()
+
+
+def _serialize_task_row(row) -> dict:
+    task = dict(row)
+    task["completed"] = bool(task["completed"])
+    task["is_sub"] = bool(task["is_sub"])
+    if task.get("completion_override") is not None:
+        task["completion_override"] = bool(task["completion_override"])
+    return task
 
 
 def _serialize_plan(connection, plan_date: str) -> dict:
@@ -357,7 +388,7 @@ def _serialize_plan(connection, plan_date: str) -> dict:
         "methods": json.loads(plan["methods_json"]),
         "safety_notice": plan["safety_notice"],
         "degraded_reason": plan["degraded_reason"],
-        "tasks": [dict(row) | {"completed": bool(row["completed"]), "is_sub": bool(row["is_sub"])} for row in tasks],
+        "tasks": [_serialize_task_row(row) for row in tasks],
     }
 
 
@@ -367,7 +398,7 @@ def _get_plan_row(connection, plan_date: str):
 
 def _get_plan_task_rows(connection, plan_id: int):
     rows = connection.execute("SELECT * FROM tasks WHERE plan_id=? ORDER BY position,id", (plan_id,)).fetchall()
-    return [dict(row) | {"completed": bool(row["completed"]), "is_sub": bool(row["is_sub"])} for row in rows]
+    return [_serialize_task_row(row) for row in rows]
 
 
 def _get_task_row_for_execution(connection, plan_date: str, task_id: int):
@@ -436,6 +467,16 @@ def _effective_minutes_by_task(segments: list[dict]) -> dict[int, int]:
     totals: dict[int, int] = {}
     for segment in segments:
         if segment["segment_kind"] != "effective":
+            continue
+        task_id = segment["task_id"]
+        totals[task_id] = totals.get(task_id, 0) + max(0, int(segment["minutes"] or 0))
+    return totals
+
+
+def _total_minutes_by_task(segments: list[dict]) -> dict[int, int]:
+    totals: dict[int, int] = {}
+    for segment in segments:
+        if segment["segment_kind"] not in ("effective", "counted_label"):
             continue
         task_id = segment["task_id"]
         totals[task_id] = totals.get(task_id, 0) + max(0, int(segment["minutes"] or 0))
@@ -540,20 +581,24 @@ def _sync_plan_actual_minutes_from_execution(connection, plan_id: int, segments:
             return
         segments = _list_execution_segments(connection, plan_date_row["plan_date"])
     effective_minutes_by_task = _effective_minutes_by_task(segments)
-    tasks = connection.execute("SELECT id,is_sub FROM tasks WHERE plan_id=?", (plan_id,)).fetchall()
+    total_minutes_by_task = _total_minutes_by_task(segments)
+    tasks = connection.execute(
+        "SELECT id,is_sub,estimated_minutes,completed,completion_override FROM tasks WHERE plan_id=?",
+        (plan_id,),
+    ).fetchall()
     for task in tasks:
         effective_minutes = effective_minutes_by_task.get(task["id"], 0)
-        completed = 1 if task["is_sub"] and effective_minutes >= 30 else None
-        if completed is None:
-            connection.execute(
-                "UPDATE tasks SET actual_minutes=? WHERE id=?",
-                (effective_minutes, task["id"]),
-            )
+        total_minutes = total_minutes_by_task.get(task["id"], 0)
+        if task["completion_override"] is not None:
+            completed = int(bool(task["completion_override"]))
         else:
-            connection.execute(
-                "UPDATE tasks SET actual_minutes=?, completed=? WHERE id=?",
-                (effective_minutes, completed, task["id"]),
-            )
+            reaches_planned_total = task["estimated_minutes"] > 0 and total_minutes >= task["estimated_minutes"]
+            reaches_sub_threshold = bool(task["is_sub"]) and effective_minutes >= 30
+            completed = 1 if reaches_planned_total or reaches_sub_threshold else task["completed"]
+        connection.execute(
+            "UPDATE tasks SET actual_minutes=?, completed=? WHERE id=?",
+            (effective_minutes, completed, task["id"]),
+        )
 
 
 def _build_execution_payload(connection, plan_date: str) -> dict:
@@ -1347,13 +1392,17 @@ def update_task(task_id: int, payload: TaskUpdate, request: Request):
         completed = row["completed"]
         actual_minutes = row["actual_minutes"] or 0
         sub_category = row["sub_category"]
+        completion_override = row["completion_override"]
 
         if payload.completed is not None:
             completed = int(payload.completed)
+            completion_override = completed
             if not row["is_sub"]:
                 if completed and actual_minutes == 0:
                     actual_minutes = row["estimated_minutes"]
-                elif not completed:
+                elif not completed and not connection.execute(
+                    "SELECT 1 FROM task_execution_segments WHERE task_id=? LIMIT 1", (task_id,)
+                ).fetchone():
                     actual_minutes = 0
         if payload.actual_minutes is not None:
             actual_minutes = payload.actual_minutes
@@ -1363,15 +1412,15 @@ def update_task(task_id: int, payload: TaskUpdate, request: Request):
             sub_category = payload.sub_category
 
         connection.execute(
-            "UPDATE tasks SET completed=?, actual_minutes=?, sub_category=? WHERE id=?",
-            (completed, actual_minutes, sub_category, task_id),
+            "UPDATE tasks SET completed=?, completion_override=?, actual_minutes=?, sub_category=? WHERE id=?",
+            (completed, completion_override, actual_minutes, sub_category, task_id),
         )
 
         if row["plan_status"] == "submitted":
             connection.execute("UPDATE plans SET status='approved' WHERE id=?", (row["plan_id"],))
 
         updated = connection.execute("SELECT * FROM tasks WHERE id=?", (task_id,)).fetchone()
-        return dict(updated) | {"completed": bool(updated["completed"])}
+        return _serialize_task_row(updated)
 
 
 @router.get("/daily-execution/{plan_date}")
@@ -1842,3 +1891,28 @@ def save_settings(payload: SettingsInput, request: Request):
             (json.dumps(data, ensure_ascii=False),),
         )
         return _get_settings(connection)
+
+
+@router.get("/system/health")
+def system_health(request: Request):
+    with _db(request) as connection:
+        connection.execute("SELECT 1").fetchone()
+    return {
+        "status": "ok",
+        "mode": getattr(request.app.state, "runtime_mode", "development"),
+        "database_path": str(request.app.state.database_path),
+        "backup_dir": str(_backup_dir(request)),
+        "backup_retention_days": int(getattr(request.app.state, "backup_retention_days", 14)),
+        "ai_enabled": bool(getattr(request.app.state, "ai_planner", None)),
+    }
+
+
+@router.get("/system/backup-export")
+def export_backup(request: Request):
+    backup_path = create_sqlite_backup(request.app.state.database_path, _backup_dir(request))
+    prune_old_backups(_backup_dir(request), int(getattr(request.app.state, "backup_retention_days", 14)))
+    return FileResponse(
+        path=backup_path,
+        media_type="application/octet-stream",
+        filename=backup_path.name,
+    )

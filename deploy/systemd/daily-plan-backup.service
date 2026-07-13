@@ -1,0 +1,10 @@
+[Unit]
+Description=Daily Plan SQLite backup
+After=daily-plan.service
+
+[Service]
+Type=oneshot
+User=root
+WorkingDirectory=/opt/daily-plan/current
+EnvironmentFile=/etc/daily-plan/daily-plan.env
+ExecStart=/opt/daily-plan/current/deploy/backup-daily-plan.sh

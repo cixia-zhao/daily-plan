@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>登录 - 今日航线</title>
+  <link rel="stylesheet" href="/static/style.css?v={{ static_version('style.css') }}">
+</head>
+<body class="login-page">
+  <main class="login-shell">
+    <section class="login-card" aria-labelledby="login-title">
+      <span class="brand-mark">✓</span>
+      <p class="confirm-eyebrow">私人入口</p>
+      <h1 id="login-title">今日航线</h1>
+      <p class="login-intro">请输入访问密码继续。</p>
+      {% if error %}<p class="login-error" role="alert">{{ error }}</p>{% endif %}
+      <form action="/login" method="post" class="login-form">
+        <input type="hidden" name="next" value="{{ next_path }}">
+        <label for="password">访问密码</label>
+        <input id="password" name="password" type="password" autocomplete="current-password" required autofocus>
+        <button type="submit" class="primary">进入今日航线</button>
+      </form>
+    </section>
+  </main>
+</body>
+</html>

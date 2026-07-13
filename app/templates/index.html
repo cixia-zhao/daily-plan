@@ -2,10 +2,14 @@
 {% block title %}今天 · 今日航线{% endblock %}
 {% block page %}today{% endblock %}
 {% block content %}
+<div id="today-checkin-stage">
 <section class="hero">
-  <div><p class="eyebrow">DAILY REVIEW</p><h1>先看清今天，再决定做什么。</h1><p>AI 只给草稿，最后的决定永远在你手里。</p></div>
+  <div><h1>先看清今天，再决定做什么。</h1><p>先选日期和状态，生成草稿后由你确认，最后再进入执行。</p></div>
   <div class="date-actions">
-    <button id="reset-day" class="danger-soft" type="button">重置今日</button>
+    <details class="day-options">
+      <summary>当天操作</summary>
+      <button id="reset-day" class="danger-soft" type="button">重置当天</button>
+    </details>
     <div class="carryover-entry">
       <button id="carryover-button" class="ghost-button carryover-button" type="button" aria-haspopup="dialog" aria-expanded="false">
         <span class="carryover-button-icon" aria-hidden="true">待</span>
@@ -44,9 +48,11 @@
     <button class="primary wide" type="submit"><span>生成今天的草稿</span><span aria-hidden="true">→</span></button>
   </form>
 </section>
+</div>
 
-<section id="plan-section" class="panel hidden">
-  <div class="section-heading"><div><p class="step">02 · 人工审阅</p><h2 id="plan-title">任务草稿</h2></div><div class="plan-status-actions"><span id="plan-status" class="status">草稿</span><button id="submit-today" class="primary btn-submit hidden">进入执行台</button></div></div>
+<div id="today-review-stage" class="hidden">
+<section id="plan-section" class="panel">
+  <div class="section-heading"><div><p class="step">02 · 人工审阅</p><h2 id="plan-title">任务草稿</h2></div><div class="plan-status-actions"><span id="plan-status" class="status">草稿</span><button id="adjust-checkin" class="ghost-button hidden" type="button">调整晨间条件</button></div></div>
   <div id="safety-notice" class="notice warning hidden"></div>
   <div id="degraded-notice" class="notice hidden">AI 暂时没有成功响应，当前使用稳定的本地规则版。</div>
 
@@ -56,8 +62,13 @@
       <div id="main-route-list" class="task-list"></div>
     </div>
     <div class="sub-column">
-      <div class="column-title"><h3>副航线</h3><span class="badge">低优先级</span></div>
-      <div id="sub-route-list" class="task-list"></div>
+      <details id="sub-route-details" class="sub-route-details">
+        <summary><span>副航线</span><span id="sub-route-count" class="badge">0 项</span></summary>
+        <div class="sub-route-details-content">
+          <p class="muted">平时先收好；需要调整或补记时再展开。</p>
+          <div id="sub-route-list" class="task-list"></div>
+        </div>
+      </details>
     </div>
   </div>
 
@@ -67,10 +78,11 @@
       <div class="action-buttons">
         <button id="save-draft" class="secondary">保存修改</button>
         <button id="approve-plan" class="primary">确认今日清单</button>
-        <button id="submit-today-nearby" class="primary btn-submit hidden">进入执行台</button>
+        <button id="open-execution-desk" class="primary btn-submit hidden">进入执行台</button>
       </div>
     </div>
   </div>
-  <div class="methods"><h3>今天的执行方法</h3><ul id="method-list"></ul></div>
+  <details class="methods plan-methods"><summary>查看今天的执行方法</summary><ul id="method-list"></ul></details>
 </section>
+</div>
 {% endblock %}

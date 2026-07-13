@@ -1,0 +1,19 @@
+[Unit]
+Description=Daily Plan Web App
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/opt/daily-plan/current
+EnvironmentFile=/etc/daily-plan/daily-plan.env
+ExecStart=/opt/daily-plan/current/deploy/run-daily-plan.sh
+Restart=always
+RestartSec=5
+LogsDirectory=daily-plan
+StandardOutput=append:/var/log/daily-plan/app.log
+StandardError=append:/var/log/daily-plan/app.log
+
+[Install]
+WantedBy=multi-user.target

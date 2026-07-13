@@ -6,57 +6,57 @@
 
 ### 后端与数据层
 
-#### [MODIFY] [app/models.py](</C:/Users/cixia/Desktop/daily plan/app/models.py>)
+#### [MODIFY] [app/models.py](</C:/Users/cixia/Desktop/project/daily plan/app/models.py>)
 - 新增 `task_execution_segments` 表，保存任务执行时间段、标签快照和中断记录。
 - 保留原有 `tasks.actual_minutes` 字段，但改为由有效时间聚合同步。
 
-#### [MODIFY] [app/database.py](</C:/Users/cixia/Desktop/daily plan/app/database.py>)
+#### [MODIFY] [app/database.py](</C:/Users/cixia/Desktop/project/daily plan/app/database.py>)
 - 为老库补齐 `task_execution_segments` 表和索引。
 - 确保增量初始化不会破坏已有数据。
 
-#### [MODIFY] [app/schemas.py](</C:/Users/cixia/Desktop/daily plan/app/schemas.py>)
+#### [MODIFY] [app/schemas.py](</C:/Users/cixia/Desktop/project/daily plan/app/schemas.py>)
 - 新增执行标签配置、执行段创建/编辑输入模型。
 - 扩展设置结构，支持 `execution_labels`。
 
-#### [MODIFY] [app/api.py](</C:/Users/cixia/Desktop/daily plan/app/api.py>)
+#### [MODIFY] [app/api.py](</C:/Users/cixia/Desktop/project/daily plan/app/api.py>)
 - 新增执行页聚合接口和时间段增删改查接口。
 - 在提交今日情况前校验无未结束时间段，并把任务有效时间同步到 `actual_minutes`。
 - 为单日复盘接口补充任务执行看板数据。
 
 ### 前端页面与交互
 
-#### [MODIFY] [app/main.py](</C:/Users/cixia/Desktop/daily plan/app/main.py>)
+#### [MODIFY] [app/main.py](</C:/Users/cixia/Desktop/project/daily plan/app/main.py>)
 - 新增 `/execute` 页面路由。
 
-#### [MODIFY] [app/templates/base.html](</C:/Users/cixia/Desktop/daily plan/app/templates/base.html>)
+#### [MODIFY] [app/templates/base.html](</C:/Users/cixia/Desktop/project/daily plan/app/templates/base.html>)
 - 在主导航新增“执行台”入口。
 
-#### [MODIFY] [app/templates/index.html](</C:/Users/cixia/Desktop/daily plan/app/templates/index.html>)
+#### [MODIFY] [app/templates/index.html](</C:/Users/cixia/Desktop/project/daily plan/app/templates/index.html>)
 - 已确认后把主按钮从“提交今日情况”改成“进入执行台”。
 - 主任务实际分钟改成只读展示，避免形成双数据源。
 
-#### [NEW] [app/templates/execute.html](</C:/Users/cixia/Desktop/daily plan/app/templates/execute.html>)
+#### [NEW] [app/templates/execute.html](</C:/Users/cixia/Desktop/project/daily plan/app/templates/execute.html>)
 - 新增独立执行页，承载任务切换、标签切换、时间轴补改和提交入口。
 
-#### [MODIFY] [app/templates/review.html](</C:/Users/cixia/Desktop/daily plan/app/templates/review.html>)
+#### [MODIFY] [app/templates/review.html](</C:/Users/cixia/Desktop/project/daily plan/app/templates/review.html>)
 - 在总统计和晚间收束之间新增任务执行看板区域。
 
-#### [MODIFY] [app/templates/settings.html](</C:/Users/cixia/Desktop/daily plan/app/templates/settings.html>)
+#### [MODIFY] [app/templates/settings.html](</C:/Users/cixia/Desktop/project/daily plan/app/templates/settings.html>)
 - 增加执行标签配置区域，支持自定义标签。
 
-#### [MODIFY] [app/static/app.js](</C:/Users/cixia/Desktop/daily plan/app/static/app.js>)
+#### [MODIFY] [app/static/app.js](</C:/Users/cixia/Desktop/project/daily plan/app/static/app.js>)
 - 新增执行页状态管理、时间段切换、补记编辑、任务看板渲染。
 - 更新今天页、复盘页、设置页的联动逻辑。
 
-#### [MODIFY] [app/static/style.css](</C:/Users/cixia/Desktop/daily plan/app/static/style.css>)
+#### [MODIFY] [app/static/style.css](</C:/Users/cixia/Desktop/project/daily plan/app/static/style.css>)
 - 补充执行页、时间轴、任务看板和标签设置样式。
 
 ### 测试
 
-#### [MODIFY] [tests/test_api.py](</C:/Users/cixia/Desktop/daily plan/tests/test_api.py>)
+#### [MODIFY] [tests/test_api.py](</C:/Users/cixia/Desktop/project/daily plan/tests/test_api.py>)
 - 新增执行段接口、提交流程、聚合看板和标签配置测试。
 
-#### [MODIFY] [tests/test_ui_and_settings.py](</C:/Users/cixia/Desktop/daily plan/tests/test_ui_and_settings.py>)
+#### [MODIFY] [tests/test_ui_and_settings.py](</C:/Users/cixia/Desktop/project/daily plan/tests/test_ui_and_settings.py>)
 - 新增 `/execute` 页面、执行看板、设置页标签配置相关断言。
 
 ## 验证计划
