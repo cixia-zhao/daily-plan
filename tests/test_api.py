@@ -3,12 +3,29 @@ from datetime import date, timedelta
 
 from fastapi.testclient import TestClient
 
+from app.auth import hash_password
 from app.main import create_app
 
 
 def make_client(tmp_path):
     app = create_app(database_path=tmp_path / "test.db", disable_ai=True)
     return TestClient(app)
+
+
+def make_production_client(database_path, backup_dir):
+    password = "test-production-password"
+    app = create_app(
+        database_path=database_path,
+        backup_dir=backup_dir,
+        disable_ai=True,
+        runtime_mode="production",
+        auth_password_hash=hash_password(password),
+        session_secret="test-session-secret-with-at-least-32-characters",
+    )
+    client = TestClient(app, base_url="https://testserver")
+    login = client.post("/login", data={"password": password, "next": "/"}, follow_redirects=False)
+    assert login.status_code == 303
+    return client
 
 
 def editable_tasks(draft):
@@ -1058,13 +1075,10 @@ def test_settings_persist_project_start_date(tmp_path):
 
 
 def test_system_health_reports_runtime_and_storage_paths(tmp_path):
-    app = create_app(
+    client = make_production_client(
         database_path=tmp_path / "health.db",
         backup_dir=tmp_path / "backups",
-        disable_ai=True,
-        runtime_mode="production",
     )
-    client = TestClient(app)
 
     response = client.get("/api/system/health")
     assert response.status_code == 200
@@ -1079,13 +1093,10 @@ def test_system_health_reports_runtime_and_storage_paths(tmp_path):
 
 def test_backup_export_downloads_valid_sqlite_snapshot(tmp_path):
     backup_dir = tmp_path / "backups"
-    app = create_app(
+    client = make_production_client(
         database_path=tmp_path / "backup.db",
         backup_dir=backup_dir,
-        disable_ai=True,
-        runtime_mode="production",
     )
-    client = TestClient(app)
     today = date.today().isoformat()
 
     draft = client.post("/api/daily-plans/draft", json={

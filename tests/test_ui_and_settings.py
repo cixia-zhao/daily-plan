@@ -229,13 +229,13 @@ def test_settings_budget_inputs_use_fifteen_minute_steps():
     assert "{minimum:90, normal:150, ample:210}" in script
 
 
-def test_today_page_has_nearby_execute_entry_after_confirmation():
+def test_today_page_has_execution_entry_after_confirmation():
     today = Path("app/templates/index.html").read_text(encoding="utf-8")
     script = Path("app/static/app.js").read_text(encoding="utf-8")
 
-    assert 'id="submit-today"' in today
-    assert 'id="submit-today-nearby"' in today
-    assert "const buttons = [$('#submit-today'), $('#submit-today-nearby')].filter(Boolean);" in script
+    assert 'id="open-execution-desk"' in today
+    assert "const button = $('#open-execution-desk');" in script
+    assert "$('#open-execution-desk').onclick = openExecutionDesk;" in script
     assert "$('#draft-actions').classList.remove('hidden');" in script
     assert "$('#save-draft').classList.toggle('hidden', plan.status !== 'draft');" in script
     assert "$('#approve-plan').classList.toggle('hidden', plan.status !== 'draft');" in script
