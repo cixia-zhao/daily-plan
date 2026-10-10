@@ -1,0 +1,12 @@
+[Unit]
+Description=Renew Daily Plan public IP HTTPS certificate
+Wants=network-online.target
+After=network-online.target nginx.service
+StartLimitIntervalSec=0
+
+[Service]
+Type=oneshot
+Restart=on-failure
+RestartSec=30min
+TimeoutStartSec=15min
+ExecStart=/usr/bin/env -u HTTP_PROXY -u HTTPS_PROXY -u ALL_PROXY -u http_proxy -u https_proxy -u all_proxy /opt/daily-plan-certbot/bin/certbot renew --cert-name daily-plan-public-ip --quiet --deploy-hook /usr/local/libexec/daily-plan-cert-reload

@@ -5,13 +5,15 @@
 
 ## 1. 平时使用网站
 
-1. 打开 `https://daily-plan-aliyun.tail095eb1.ts.net/`。
+1. 打开并收藏 `https://120.55.53.215/`。
 2. 输入已保存的访问密码。
 3. 早上生成草稿，修改后点“确认今日清单”。
 4. 在执行台记录实际时间。
 5. 晚上进入单日复盘。
 
 网站长期运行在阿里云。手机、Arch 和小米平板都只需浏览器，不用各自启动一份程序。
+
+2026-10-10 更换了访问入口，账号密码和学习数据没有变化。新地址需要重新登录。旧 Tailscale 地址缺少公共 DNS 记录，暂不作为书签；当前入口不需要设备加入 Tailscale。维护方式见 [服务器 HTTPS 入口](docs/server-https-entry.md)。
 
 忘记密码时，旧密码无法从哈希还原。让 Agent 在服务器上“备份配置 -> 替换密码哈希 -> 重启 -> 真实登录验证”，不要手工盲改 `.env`。
 
@@ -82,6 +84,7 @@ python -m venv .venv
 ```text
 设备 A：修改 -> 测试 -> Commit -> Push
 设备 B：开始工作前 Pull
+手机只浏览网站时：不用 Pull，直接访问服务器上的同一份学习数据
 ```
 
 如果两边都改了，不要强制 Push、Reset 或大规模 Merge，先保留现场交给 Agent 比较。
@@ -109,6 +112,8 @@ python -m venv .venv
 - 当前备份仍在同一台服务器，不等于异地灾备。
 - GitHub 只备份源码，不备份运行数据。
 - 生产配置在 `/etc/daily-plan/daily-plan.env`，不读出、不上传、不提交。
+
+项目变更、部署配置和维护记录应提交到这个仓库，不记在某一台设备的全局提示词里。Git 不会实时自动同步文件：切换开发设备前确认上一台设备已经 Push，新设备再 Pull。每台设备分别配置自己的 GitHub/服务器访问授权，密钥和生产配置不进入仓库。
 
 ## 7. Git 操作影响哪一层
 
@@ -154,7 +159,10 @@ git log --oneline --graph --decorate --all -15
 配置：/etc/daily-plan/daily-plan.env
 备份：/var/backups/daily-plan
 边界：草稿必须人工确认；未完成任务不自动顺延
-最后验证：Python 3.12 下 64 tests passed
+业务测试基线：2026-09-27，Python 3.12 下 64 tests passed
+当前访问入口：https://120.55.53.215/
+部署维护说明：docs/server-https-entry.md
+入口验证：2026-10-10，登录页、HTTPS、未登录访问保护及证书续期演练通过
 已知环境问题：Arch Python 3.14 TestClient 卡住
 请勿读取或输出 Secret，请勿直改生产数据库
 ```

@@ -4,7 +4,8 @@
 
 ## 当前状态
 
-- 线上站点：`https://daily-plan-aliyun.tail095eb1.ts.net/`
+- 线上站点：`https://120.55.53.215/`（2026-10-10 已验证，浏览器收藏此地址）
+- 入口：Nginx + 可信 IP HTTPS 证书，保留原访问密码；旧 Tailscale Funnel 地址目前缺少公共 DNS 记录
 - GitHub：`https://github.com/cixia-zhao/daily-plan`，当前为公开仓库
 - 主分支：`main`
 - 主要开发设备：Arch 主机
@@ -48,7 +49,7 @@ app/services/        本地规则与可选 AI 兼容逻辑
 app/templates/       页面模板
 app/static/          前端脚本和样式
 tests/               自动测试
-deploy/              服务器运行与备份脚本
+deploy/              服务器运行、备份与 HTTPS 配置
 ```
 
 ## 本地开发
@@ -92,5 +93,6 @@ node --check app/static/app.js
 - [Tutor.md](Tutor.md)：日常操作、多设备接力和 Agent 快速概览
 - [HANDOFF.md](HANDOFF.md)：当前状态、风险和未完成事项
 - [docs/README.md](docs/README.md)：模块文档索引
-- [docs/cloud-private-deploy.md](docs/cloud-private-deploy.md)：服务器部署历史说明；其中“私有入口”与当前 Funnel 入口不完全一致
+- [docs/server-https-entry.md](docs/server-https-entry.md)：当前 HTTPS 入口、服务器维护、证书续期及 2026-10-10 修复记录
+- [docs/cloud-private-deploy.md](docs/cloud-private-deploy.md)：历史 Tailscale 私有部署方案
 - [docs/termux-guide.md](docs/termux-guide.md)：历史手机 Termux 方案，已不是当前主架构
