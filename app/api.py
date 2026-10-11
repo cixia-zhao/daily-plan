@@ -11,6 +11,8 @@ from .backup_utils import create_sqlite_backup, prune_old_backups
 from .database import connect
 from .schemas import (
     CarryoverResolution,
+    DurationRecordInput,
+    TemporaryTaskInput,
     EffectiveLabelItem,
     DraftRequest,
     ExecutionLabelItem,
@@ -188,10 +190,9 @@ def _capture_unfinished(connection, before_date: str) -> None:
     rows = connection.execute(
         """SELECT t.id, t.title, t.category, t.estimated_minutes
            FROM tasks t JOIN plans p ON p.id=t.plan_id
-           WHERE p.status IN ('approved', 'submitted') AND p.plan_date < ? AND t.completed=0 AND t.is_sub=0""",
+           WHERE p.status IN ('approved', 'submitted') AND p.plan_date < ? AND t.completed=0 AND t.task_type='todo'""",
         (before_date,),
     ).fetchall()
-    rows = [row for row in rows if row["estimated_minutes"] > 0]
     for row in rows:
         connection.execute(
             """INSERT OR IGNORE INTO carryovers(task_id,title,category,estimated_minutes)
@@ -366,6 +367,7 @@ def _parse_month_start(month: str) -> date:
 
 def _serialize_task_row(row) -> dict:
     task = dict(row)
+    task["task_type"] = task.get("task_type") or ("habit" if task["category"] == "rehab" else "daily_goal")
     task["completed"] = bool(task["completed"])
     task["is_sub"] = bool(task["is_sub"])
     if task.get("completion_override") is not None:
@@ -448,6 +450,7 @@ def _serialize_execution_segment_row(row) -> dict:
         "started_at": row["started_at"],
         "ended_at": row["ended_at"],
         "minutes": _minutes_between(row["started_at"], row["ended_at"]),
+        "included": bool(row["included"]),
     }
 
 
@@ -463,9 +466,34 @@ def _list_execution_segments(connection, plan_date: str) -> list[dict]:
     return [_serialize_execution_segment_row(row) for row in rows]
 
 
+def _list_duration_records(connection, plan_date: str) -> list[dict]:
+    return [dict(row) for row in connection.execute(
+        """SELECT r.*, t.title AS task_title FROM task_duration_records r
+           JOIN tasks t ON t.id=r.task_id JOIN plans p ON p.id=t.plan_id
+           WHERE p.plan_date=? ORDER BY r.id""", (plan_date,)
+    ).fetchall()]
+
+
+def _execution_records(connection, plan_date: str) -> list[dict]:
+    records = _list_execution_segments(connection, plan_date)
+    records += [dict(row, segment_kind="effective") for row in _list_duration_records(connection, plan_date)]
+    return records
+
+
+def _prepare_execution_task(connection, task) -> None:
+    # 保留旧版只有实际分钟、没有明细的记录，新增计时不能将它覆盖。
+    if task["legacy_actual_minutes"] is None and not connection.execute(
+        "SELECT 1 FROM task_execution_segments WHERE task_id=? UNION ALL SELECT 1 FROM task_duration_records WHERE task_id=?",
+        (task["id"], task["id"]),
+    ).fetchone():
+        connection.execute("UPDATE tasks SET legacy_actual_minutes=? WHERE id=?", (task["actual_minutes"] or 0, task["id"]))
+
+
 def _effective_minutes_by_task(segments: list[dict]) -> dict[int, int]:
     totals: dict[int, int] = {}
     for segment in segments:
+        if not segment.get("included", True):
+            continue
         if segment["segment_kind"] != "effective":
             continue
         task_id = segment["task_id"]
@@ -476,6 +504,8 @@ def _effective_minutes_by_task(segments: list[dict]) -> dict[int, int]:
 def _total_minutes_by_task(segments: list[dict]) -> dict[int, int]:
     totals: dict[int, int] = {}
     for segment in segments:
+        if not segment.get("included", True):
+            continue
         if segment["segment_kind"] not in ("effective", "counted_label"):
             continue
         task_id = segment["task_id"]
@@ -484,7 +514,6 @@ def _total_minutes_by_task(segments: list[dict]) -> dict[int, int]:
 
 
 def _aggregate_execution_board(tasks: list[dict], segments: list[dict]) -> list[dict]:
-    tasks_by_id = {task["id"]: task for task in tasks}
     board_map: dict[int, dict] = {}
     for task in tasks:
         board_map[task["id"]] = {
@@ -492,6 +521,9 @@ def _aggregate_execution_board(tasks: list[dict], segments: list[dict]) -> list[
             "task_title": task["title"],
             "category": task["category"],
             "is_sub": bool(task["is_sub"]),
+            "estimated_minutes": task["estimated_minutes"],
+            "task_type": task.get("task_type") or ("habit" if task["category"] == "rehab" else "daily_goal"),
+            "habit_status": task.get("habit_status"),
             "total_minutes": 0,
             "effective_minutes": 0,
             "counted_label_minutes": 0,
@@ -505,6 +537,8 @@ def _aggregate_execution_board(tasks: list[dict], segments: list[dict]) -> list[
         }
 
     for segment in segments:
+        if not segment.get("included", True):
+            continue
         board = board_map.get(segment["task_id"])
         if not board:
             continue
@@ -546,6 +580,13 @@ def _aggregate_execution_board(tasks: list[dict], segments: list[dict]) -> list[
         board.pop("_effective")
         board.pop("_counted")
         board.pop("_interrupt")
+        legacy = task.get("legacy_actual_minutes")
+        if legacy is None and not any(record["task_id"] == task["id"] for record in segments):
+            legacy = task.get("actual_minutes") or 0
+        if legacy:
+            board["effective_minutes"] += legacy
+            board["total_minutes"] += legacy
+            board["effective_labels"].append({"label_id": None, "label_name": "旧版时长记录", "minutes": legacy, "count": 1})
         effective_minutes = max(0, int(board["effective_minutes"] or 0))
         total_minutes = max(0, int(board["total_minutes"] or 0))
         board["effective_ratio"] = round(effective_minutes / total_minutes, 4) if total_minutes else 0
@@ -553,7 +594,8 @@ def _aggregate_execution_board(tasks: list[dict], segments: list[dict]) -> list[
             label_minutes = max(0, int(label["minutes"] or 0))
             label["effective_share"] = round(label_minutes / effective_minutes, 4) if effective_minutes else 0
         board["has_segments"] = bool(
-            board["effective_minutes"]
+            board["habit_status"]
+            or board["effective_minutes"]
             or board["counted_label_minutes"]
             or board["interrupt_minutes"]
         )
@@ -568,8 +610,8 @@ def _aggregate_execution_board(tasks: list[dict], segments: list[dict]) -> list[
 
 def _plan_has_execution_segments(connection, plan_date: str) -> bool:
     row = connection.execute(
-        "SELECT 1 FROM task_execution_segments WHERE plan_date=? LIMIT 1",
-        (plan_date,),
+        "SELECT 1 FROM task_execution_segments WHERE plan_date=? UNION ALL SELECT 1 FROM task_duration_records r JOIN tasks t ON t.id=r.task_id JOIN plans p ON p.id=t.plan_id WHERE p.plan_date=? LIMIT 1",
+        (plan_date, plan_date),
     ).fetchone()
     return bool(row)
 
@@ -579,22 +621,34 @@ def _sync_plan_actual_minutes_from_execution(connection, plan_id: int, segments:
         plan_date_row = connection.execute("SELECT plan_date FROM plans WHERE id=?", (plan_id,)).fetchone()
         if not plan_date_row:
             return
-        segments = _list_execution_segments(connection, plan_date_row["plan_date"])
+        segments = _execution_records(connection, plan_date_row["plan_date"])
     effective_minutes_by_task = _effective_minutes_by_task(segments)
     total_minutes_by_task = _total_minutes_by_task(segments)
     tasks = connection.execute(
-        "SELECT id,is_sub,estimated_minutes,completed,completion_override FROM tasks WHERE plan_id=?",
+        "SELECT * FROM tasks WHERE plan_id=?",
         (plan_id,),
     ).fetchall()
     for task in tasks:
-        effective_minutes = effective_minutes_by_task.get(task["id"], 0)
-        total_minutes = total_minutes_by_task.get(task["id"], 0)
+        has_records = any(record["task_id"] == task["id"] for record in segments)
+        if not has_records and task["legacy_actual_minutes"] is None:
+            continue
+        effective_minutes = (task["legacy_actual_minutes"] or 0) + effective_minutes_by_task.get(task["id"], 0)
+        total_minutes = (task["legacy_actual_minutes"] or 0) + total_minutes_by_task.get(task["id"], 0)
         if task["completion_override"] is not None:
             completed = int(bool(task["completion_override"]))
         else:
             reaches_planned_total = task["estimated_minutes"] > 0 and total_minutes >= task["estimated_minutes"]
-            reaches_sub_threshold = bool(task["is_sub"]) and effective_minutes >= 30
-            completed = 1 if reaches_planned_total or reaches_sub_threshold else task["completed"]
+            if task["task_type"] is None:
+                # 旧记录维持旧完成含义，迁移不重新解释历史结果。
+                completed = task["completed"]
+            elif task["task_type"] == "todo":
+                completed = task["completed"]
+            elif task["task_type"] == "habit":
+                completed = int(task["habit_status"] == "done")
+            else:
+                completed = int(reaches_planned_total)
+        if task["habit_status"] is not None:
+            completed = int(task["habit_status"] == "done")
         connection.execute(
             "UPDATE tasks SET actual_minutes=?, completed=? WHERE id=?",
             (effective_minutes, completed, task["id"]),
@@ -609,7 +663,7 @@ def _build_execution_payload(connection, plan_date: str) -> dict:
     plan_payload = None
     tasks = []
     if plan:
-        _sync_plan_actual_minutes_from_execution(connection, plan["id"], segments)
+        _sync_plan_actual_minutes_from_execution(connection, plan["id"])
         tasks = _get_plan_task_rows(connection, plan["id"])
         plan_payload = _serialize_plan(connection, plan_date)
     return {
@@ -619,7 +673,8 @@ def _build_execution_payload(connection, plan_date: str) -> dict:
         "labels": _serialize_execution_labels(settings),
         "active_segment": _serialize_execution_segment_row(active) if active else None,
         "segments": segments,
-        "task_execution_board": _aggregate_execution_board(tasks, segments),
+        "duration_records": _list_duration_records(connection, plan_date),
+        "task_execution_board": _aggregate_execution_board(tasks, _execution_records(connection, plan_date)),
     }
 
 
@@ -682,12 +737,12 @@ def _serialize_daily_review(connection, plan_date: str) -> dict:
         if _plan_has_execution_segments(connection, plan_date):
             _sync_plan_actual_minutes_from_execution(connection, plan["id"])
         task_rows = connection.execute(
-            "SELECT id,title,category,is_sub,completed,estimated_minutes,actual_minutes FROM tasks WHERE plan_id=?",
+            "SELECT * FROM tasks WHERE plan_id=?",
             (plan["id"],),
         ).fetchall()
         task_board = _aggregate_execution_board(
             [dict(row) | {"completed": bool(row["completed"]), "is_sub": bool(row["is_sub"])} for row in task_rows],
-            _list_execution_segments(connection, plan_date),
+            _execution_records(connection, plan_date),
         )
 
     main_tasks = [row for row in task_rows if _is_planned_main_task(row)]
@@ -707,7 +762,9 @@ def _serialize_daily_review(connection, plan_date: str) -> dict:
         "main_task_count": len(main_tasks),
         "main_completed_count": sum(row["completed"] for row in main_tasks),
         "main_planned_minutes": sum(row["estimated_minutes"] for row in main_tasks),
-        "main_actual_minutes": sum(row["actual_minutes"] or 0 for row in main_tasks),
+        "english_minutes": sum(row["actual_minutes"] or 0 for row in task_rows if row["category"] == "english"),
+        "vocabulary_minutes": sum(label["minutes"] for board in task_board for label in board["effective_labels"] if label["label_id"] == "effective_english_words"),
+        "main_actual_minutes": sum(row["actual_minutes"] or 0 for row in task_rows if not row["is_sub"]),
         "sub_actual_minutes": sum(row["actual_minutes"] or 0 for row in sub_tasks),
         "task_execution_board": task_board,
         "review": _serialize_review_row(review),
@@ -832,7 +889,7 @@ def _insert_tasks(connection, plan_id: int, tasks: list[TaskDraft]) -> None:
     for position, task in enumerate(tasks):
         connection.execute(
             """INSERT INTO tasks(plan_id,title,category,estimated_minutes,priority,
-               completion_criteria,reason,source,position,sub_category,is_sub) VALUES(?,?,?,?,?,?,?,?,?,?,?)""",
+               completion_criteria,reason,source,position,sub_category,is_sub,task_type) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)""",
             (
                 plan_id,
                 task.title,
@@ -845,45 +902,27 @@ def _insert_tasks(connection, plan_id: int, tasks: list[TaskDraft]) -> None:
                 position,
                 task.sub_category,
                 task.is_sub,
+                task.task_type or ("habit" if task.category == "rehab" else "daily_goal"),
             ),
         )
-
-
-def _fit_with_carryovers(tasks: list[TaskDraft], available_minutes: int) -> list[TaskDraft]:
-    fitted = list(tasks)
-    if sum(task.estimated_minutes for task in fitted if not task.is_sub) <= available_minutes:
-        return fitted
-    if any(task.category == "rehab" and task.source != "carryover" for task in fitted):
-        fitted = [task for task in fitted if task.source == "carryover" or task.category != "rehab"]
-    while sum(task.estimated_minutes for task in fitted if not task.is_sub) > available_minutes:
-        candidates = [task for task in fitted if task.source != "carryover" and not task.is_sub and task.estimated_minutes > 10]
-        if not candidates:
-            break
-        largest = max(candidates, key=lambda task: task.estimated_minutes)
-        index = fitted.index(largest)
-        fitted[index] = largest.model_copy(update={"estimated_minutes": largest.estimated_minutes - 5})
-    return fitted
 
 
 def _validate_plan_tasks_for_update(tasks: list[TaskDraft], available_minutes: int) -> None:
     if not tasks or len(tasks) > 15:
         raise HTTPException(422, "任务数量不合规")
-    main_tasks = [task for task in tasks if not task.is_sub]
-    if any(task.estimated_minutes > available_minutes for task in main_tasks):
-        raise HTTPException(422, "单个主航线任务不能超过当天可用时间")
-    if sum(task.estimated_minutes for task in main_tasks) > available_minutes:
-        raise HTTPException(422, "主航线总分钟数不能超过当天可用时间")
     if not validate_ai_tasks(tasks, available_minutes):
         raise HTTPException(422, "任务数量、时长或安全规则不合规")
 
 
 def _compute_weekly_metrics(connection, start: date, end: date) -> dict:
+    for plan in connection.execute("SELECT id FROM plans WHERE plan_date BETWEEN ? AND ?", (start.isoformat(), end.isoformat())).fetchall():
+        _sync_plan_actual_minutes_from_execution(connection, plan["id"])
     review_days = connection.execute(
         "SELECT COUNT(*) FROM reviews WHERE review_date BETWEEN ? AND ?",
         (start.isoformat(), end.isoformat()),
     ).fetchone()[0]
     task_rows = connection.execute(
-        """SELECT t.is_sub,t.completed,t.estimated_minutes,t.actual_minutes
+        """SELECT t.is_sub,t.completed,t.estimated_minutes,t.actual_minutes,t.category
            FROM tasks t JOIN plans p ON p.id=t.plan_id
            WHERE p.status='submitted' AND p.plan_date BETWEEN ? AND ?""",
         (start.isoformat(), end.isoformat()),
@@ -893,6 +932,12 @@ def _compute_weekly_metrics(connection, start: date, end: date) -> dict:
     sub_tasks = [t for t in task_rows if t["is_sub"]]
     total_main = len(main_tasks)
     completed_main = sum(row["completed"] for row in main_tasks)
+    vocabulary_minutes = 0
+    for offset in range((end - start).days + 1):
+        day = (start + timedelta(days=offset)).isoformat()
+        plan = _get_plan_row(connection, day)
+        if plan and plan["status"] == "submitted":
+            vocabulary_minutes += _serialize_daily_review(connection, day)["vocabulary_minutes"]
 
     return {
         "start_date": start.isoformat(),
@@ -903,8 +948,10 @@ def _compute_weekly_metrics(connection, start: date, end: date) -> dict:
         "completed_sub_count": sum(row["completed"] for row in sub_tasks),
         "completion_rate": round(completed_main / total_main, 3) if total_main else 0,
         "planned_minutes": sum(row["estimated_minutes"] for row in main_tasks),
-        "actual_minutes": sum(row["actual_minutes"] or 0 for row in main_tasks),
+        "actual_minutes": sum(row["actual_minutes"] or 0 for row in task_rows if not row["is_sub"]),
         "actual_sub_minutes": sum(row["actual_minutes"] or 0 for row in sub_tasks),
+        "english_minutes": sum(row["actual_minutes"] or 0 for row in task_rows if row["category"] == "english"),
+        "vocabulary_minutes": vocabulary_minutes,
     }
 
 
@@ -998,6 +1045,7 @@ def _build_chatgpt_prompt(snapshot: dict, deepseek_analysis: dict | None, export
         f"主任务计划分钟：{snapshot['planned_minutes']} 分",
         f"主任务实际分钟：{snapshot['actual_minutes']} 分",
         f"副航线实际分钟：{snapshot['actual_sub_minutes']} 分",
+        f"英语 {snapshot['english_minutes']} 分，其中背单词 {snapshot['vocabulary_minutes']} 分（已包含在实际分钟中）",
         f"本周写复盘的天数：{snapshot['review_days']} 天",
         "",
     ]
@@ -1016,6 +1064,7 @@ def _build_chatgpt_prompt(snapshot: dict, deepseek_analysis: dict | None, export
             f"  主任务完成：{day['main_completed_count']} / {day['main_task_count']}",
             f"  主任务分钟：计划 {day['main_planned_minutes']} / 实际 {day['main_actual_minutes']}",
             f"  副航线实际：{day['sub_actual_minutes']} 分",
+            f"  英语 {day['english_minutes']} 分，其中背单词 {day['vocabulary_minutes']} 分",
             f"  情绪：{review['mood'] or '未写'}",
             f"  最卡点：{review['hardest_point'] or '未写'}",
             f"  有效方法：{review['effective_method'] or '未写'}",
@@ -1034,12 +1083,14 @@ def _build_daily_gpt_prompt(connection, plan_date: str, export_template: str) ->
     tasks = []
     if plan:
         task_rows = connection.execute(
-            """SELECT title,category,estimated_minutes,actual_minutes,completed,is_sub,sub_category
+            """SELECT title,category,estimated_minutes,actual_minutes,completed,is_sub,sub_category,task_type,habit_status
                FROM tasks WHERE plan_id=? ORDER BY position,id""",
             (plan["id"],),
         ).fetchall()
         tasks = [
             {
+                "task_type": row["task_type"] or ("habit" if row["category"] == "rehab" else "daily_goal"),
+                "habit_status": row["habit_status"],
                 "title": row["title"],
                 "category": row["category"],
                 "estimated_minutes": row["estimated_minutes"],
@@ -1059,6 +1110,7 @@ def _build_daily_gpt_prompt(connection, plan_date: str, export_template: str) ->
         f"主任务完成：{daily['main_completed_count']} / {daily['main_task_count']}",
         f"主任务分钟：计划 {daily['main_planned_minutes']} / 实际 {daily['main_actual_minutes']}",
         f"副航线实际：{daily['sub_actual_minutes']} 分",
+        f"英语 {daily['english_minutes']} 分，其中背单词 {daily['vocabulary_minutes']} 分（已包含在实际分钟中）",
         "",
         "今天的任务明细：",
     ]
@@ -1067,7 +1119,8 @@ def _build_daily_gpt_prompt(connection, plan_date: str, export_template: str) ->
             route_label = "副航线" if task["is_sub"] else "主航线"
             lines.append(
                 f"- {route_label}｜{task['title']}｜计划 {task['estimated_minutes']} 分｜实际 {task['actual_minutes']} 分｜"
-                f"{'已完成' if task['completed'] else '未完成'}"
+                f"{dict(habit='习惯', daily_goal='每日目标', todo='具体待办')[task['task_type']]}｜"
+                f"{dict(done='做了', missed='没做', rest='休息').get(task['habit_status'], '已完成' if task['completed'] else '未完成')}"
             )
     else:
         lines.append("- 今天还没有保存任务计划。")
@@ -1276,6 +1329,7 @@ def create_draft(payload: DraftRequest, request: Request):
 
         tasks = [task.model_copy(update={"title": settings["task_titles"].get(task.category, task.title)}) for task in tasks]
         tasks = _apply_draft_main_minutes(tasks, settings)
+        tasks = [task.model_copy(update={"estimated_minutes": payload.target_minutes.get(task.category, task.estimated_minutes)}) for task in tasks]
         scheduled = connection.execute(
             """SELECT * FROM carryovers WHERE status='resolved' AND
                ((resolution='reschedule' AND target_date=?) OR
@@ -1291,8 +1345,8 @@ def create_draft(payload: DraftRequest, request: Request):
                 completion_criteria="完成这项经过人工重排的任务",
                 reason="来自待审池的人工决定",
                 source="carryover",
+                task_type="todo",
             ))
-        tasks = _fit_with_carryovers(tasks, payload.available_minutes)
         planner = getattr(request.app.state, "ai_planner", None)
         if planner is not None:
             result = planner.generate(checkin, tasks)
@@ -1397,20 +1451,25 @@ def update_task(task_id: int, payload: TaskUpdate, request: Request):
         if payload.completed is not None:
             completed = int(payload.completed)
             completion_override = completed
-            if not row["is_sub"]:
-                if completed and actual_minutes == 0:
-                    actual_minutes = row["estimated_minutes"]
-                elif not completed and not connection.execute(
-                    "SELECT 1 FROM task_execution_segments WHERE task_id=? LIMIT 1", (task_id,)
-                ).fetchone():
-                    actual_minutes = 0
         if payload.actual_minutes is not None:
             actual_minutes = payload.actual_minutes
-            if row["is_sub"]:
-                completed = 1 if actual_minutes >= 30 else 0
+            if row["is_sub"] and (row["task_type"] or "daily_goal") == "daily_goal":
+                completed = int(row["estimated_minutes"] > 0 and actual_minutes >= row["estimated_minutes"])
         if payload.sub_category is not None:
             sub_category = payload.sub_category
 
+        task_type = payload.task_type or row["task_type"] or ("habit" if row["category"] == "rehab" else "daily_goal")
+        habit_status = payload.habit_status if payload.habit_status is not None else row["habit_status"]
+        if payload.habit_status is not None and task_type != "habit":
+            raise HTTPException(422, "只有习惯可以记录做了、没做或休息")
+        if payload.habit_status is not None:
+            completed = int(habit_status == "done")
+            completion_override = completed
+        if payload.actual_minutes is not None:
+            if connection.execute("SELECT 1 FROM task_execution_segments WHERE task_id=? UNION ALL SELECT 1 FROM task_duration_records WHERE task_id=?", (task_id, task_id)).fetchone():
+                raise HTTPException(409, "已有执行明细，请编辑明细记录")
+            connection.execute("UPDATE tasks SET legacy_actual_minutes=? WHERE id=?", (actual_minutes, task_id))
+        connection.execute("UPDATE tasks SET task_type=?, habit_status=? WHERE id=?", (task_type, habit_status if task_type == "habit" else None, task_id))
         connection.execute(
             "UPDATE tasks SET completed=?, completion_override=?, actual_minutes=?, sub_category=? WHERE id=?",
             (completed, completion_override, actual_minutes, sub_category, task_id),
@@ -1432,9 +1491,15 @@ def daily_execution(plan_date: date, request: Request):
 @router.post("/daily-execution/{plan_date}/tasks/start")
 def start_execution_task(plan_date: date, payload: ExecutionTaskStartInput, request: Request):
     with _db(request) as connection:
+        connection.execute("BEGIN IMMEDIATE")
         task = _get_task_row_for_execution(connection, plan_date.isoformat(), payload.task_id)
+        _prepare_execution_task(connection, task)
         settings = _get_settings(connection)
         label_id, label_name = _resolve_segment_label(settings, task["category"], payload.label_id, "effective")
+        if task["category"] == "english" and label_id == "effective_english_words" and _list_duration_records(connection, plan_date.isoformat()):
+            if payload.duplicate_choice is None:
+                raise HTTPException(409, "当天已有墨墨录入，请明确选择保留哪份背单词记录")
+            _apply_vocabulary_choice(connection, plan_date.isoformat(), payload.duplicate_choice)
         _close_active_execution_segment(connection)
         started_at = _now_iso()
         connection.execute(
@@ -1442,6 +1507,10 @@ def start_execution_task(plan_date: date, payload: ExecutionTaskStartInput, requ
                VALUES(?,?,?,?,?,?)""",
             (plan_date.isoformat(), task["id"], "effective", label_id, label_name, started_at),
         )
+        if payload.duplicate_choice == "manual" and label_id == "effective_english_words" and task["category"] == "english":
+            connection.execute("UPDATE task_execution_segments SET included=0 WHERE id=last_insert_rowid()"
+        )
+        connection.execute("UPDATE plans SET status='approved' WHERE id=? AND status='submitted'", (task["plan_id"],))
         _sync_plan_actual_minutes_from_execution(connection, task["plan_id"])
         return _build_execution_payload(connection, plan_date.isoformat())
 
@@ -1449,6 +1518,7 @@ def start_execution_task(plan_date: date, payload: ExecutionTaskStartInput, requ
 @router.post("/daily-execution/{plan_date}/labels/start")
 def start_execution_label(plan_date: date, payload: ExecutionLabelStartInput, request: Request):
     with _db(request) as connection:
+        connection.execute("BEGIN IMMEDIATE")
         settings = _get_settings(connection)
         label_map = _build_execution_label_map(settings)
         label = label_map.get(payload.label_id)
@@ -1459,6 +1529,7 @@ def start_execution_label(plan_date: date, payload: ExecutionLabelStartInput, re
         if task_id is None:
             raise HTTPException(409, "请先开始一个任务，再切换到标签")
         task = _get_task_row_for_execution(connection, plan_date.isoformat(), task_id)
+        _prepare_execution_task(connection, task)
         _close_active_execution_segment(connection)
         segment_kind = "counted_label" if label["bucket"] == "counted" else "interrupt_label"
         connection.execute(
@@ -1466,6 +1537,7 @@ def start_execution_label(plan_date: date, payload: ExecutionLabelStartInput, re
                VALUES(?,?,?,?,?,?)""",
             (plan_date.isoformat(), task["id"], segment_kind, label["id"], label["name"], _now_iso()),
         )
+        connection.execute("UPDATE plans SET status='approved' WHERE id=? AND status='submitted'", (task["plan_id"],))
         _sync_plan_actual_minutes_from_execution(connection, task["plan_id"])
         return _build_execution_payload(connection, plan_date.isoformat())
 
@@ -1487,8 +1559,13 @@ def create_execution_segment(plan_date: date, payload: ExecutionSegmentCreateInp
     _assert_segment_time_window(payload.started_at, payload.ended_at)
     with _db(request) as connection:
         task = _get_task_row_for_execution(connection, plan_date.isoformat(), payload.task_id)
+        _prepare_execution_task(connection, task)
         settings = _get_settings(connection)
         label_id, label_name = _resolve_segment_label(settings, task["category"], payload.label_id, payload.segment_kind)
+        if task["category"] == "english" and payload.segment_kind == "effective" and label_id == "effective_english_words" and _list_duration_records(connection, plan_date.isoformat()):
+            if payload.duplicate_choice is None:
+                raise HTTPException(409, "当天已有墨墨录入，请明确选择保留哪份背单词记录")
+            _apply_vocabulary_choice(connection, plan_date.isoformat(), payload.duplicate_choice)
         _assert_no_segment_overlap(
             connection,
             plan_date.isoformat(),
@@ -1510,6 +1587,9 @@ def create_execution_segment(plan_date: date, payload: ExecutionSegmentCreateInp
                 payload.ended_at.replace(microsecond=0).isoformat(),
             ),
         )
+        if payload.duplicate_choice == "manual" and label_id == "effective_english_words" and task["category"] == "english":
+            connection.execute("UPDATE task_execution_segments SET included=0 WHERE id=last_insert_rowid()")
+        connection.execute("UPDATE plans SET status='approved' WHERE id=? AND status='submitted'", (task["plan_id"],))
         _sync_plan_actual_minutes_from_execution(connection, task["plan_id"])
         return _build_execution_payload(connection, plan_date.isoformat())
 
@@ -1530,8 +1610,13 @@ def update_execution_segment(plan_date: date, segment_id: int, payload: Executio
         if existing["ended_at"] is None:
             raise HTTPException(409, "请先停止当前正在计时的记录，再编辑它")
         task = _get_task_row_for_execution(connection, plan_date.isoformat(), payload.task_id)
+        _prepare_execution_task(connection, task)
         settings = _get_settings(connection)
         label_id, label_name = _resolve_segment_label(settings, task["category"], payload.label_id, payload.segment_kind)
+        if task["category"] == "english" and payload.segment_kind == "effective" and label_id == "effective_english_words" and _list_duration_records(connection, plan_date.isoformat()):
+            if payload.duplicate_choice is None:
+                raise HTTPException(409, "当天已有墨墨录入，请明确选择保留哪份背单词记录")
+            _apply_vocabulary_choice(connection, plan_date.isoformat(), payload.duplicate_choice)
         _assert_no_segment_overlap(
             connection,
             plan_date.isoformat(),
@@ -1554,8 +1639,14 @@ def update_execution_segment(plan_date: date, segment_id: int, payload: Executio
                 segment_id,
             ),
         )
+        included = existing["included"] if label_id == existing["label_id"] and payload.duplicate_choice is None else 1
+        if payload.duplicate_choice == "manual" and label_id == "effective_english_words" and task["category"] == "english":
+            included = 0
+        connection.execute("UPDATE task_execution_segments SET included=? WHERE id=?", (included, segment_id))
+        connection.execute("UPDATE plans SET status='approved' WHERE id=? AND status='submitted'", (existing["plan_id"],))
         _sync_plan_actual_minutes_from_execution(connection, existing["plan_id"])
         if existing["plan_id"] != task["plan_id"]:
+            connection.execute("UPDATE plans SET status='approved' WHERE id=? AND status='submitted'", (task["plan_id"],))
             _sync_plan_actual_minutes_from_execution(connection, task["plan_id"])
         return _build_execution_payload(connection, plan_date.isoformat())
 
@@ -1575,8 +1666,112 @@ def delete_execution_segment(plan_date: date, segment_id: int, request: Request)
         if existing["ended_at"] is None:
             raise HTTPException(409, "请先停止当前正在计时的记录，再删除它")
         connection.execute("DELETE FROM task_execution_segments WHERE id=?", (segment_id,))
+        connection.execute("UPDATE plans SET status='approved' WHERE id=? AND status='submitted'", (existing["plan_id"],))
         _sync_plan_actual_minutes_from_execution(connection, existing["plan_id"])
         return _build_execution_payload(connection, plan_date.isoformat())
+
+
+def _ensure_recordable_plan(connection, plan_date: str):
+    plan = _get_plan_row(connection, plan_date)
+    if not plan:
+        raise HTTPException(404, "计划不存在")
+    if plan["status"] not in ("approved", "submitted"):
+        raise HTTPException(409, "请先确认当天清单")
+    return plan
+
+
+def _append_temporary_task(connection, plan, payload: TemporaryTaskInput):
+    from .services.task_rules import UNSAFE_REHAB_WORDS
+    title = payload.title.strip()
+    if not title:
+        raise HTTPException(422, "请填写活动名称")
+    if payload.category == "rehab" and (plan["safety_notice"] or any(word in title for word in UNSAFE_REHAB_WORDS)):
+        raise HTTPException(422, "膝盖安全规则不允许添加这项运动")
+    if connection.execute("SELECT COUNT(*) FROM tasks WHERE plan_id=?", (plan["id"],)).fetchone()[0] >= 15:
+        raise HTTPException(422, "当天最多 15 项活动")
+    _insert_tasks(connection, plan["id"], [TaskDraft(title=title, category=payload.category,
+        estimated_minutes=0, priority=4, reason="用户临时添加", task_type=payload.task_type)])
+    task_id = connection.execute("SELECT MAX(id) FROM tasks WHERE plan_id=?", (plan["id"],)).fetchone()[0]
+    connection.execute("UPDATE tasks SET position=(SELECT MAX(position)+1 FROM tasks WHERE plan_id=?) WHERE id=?", (plan["id"], task_id))
+    return connection.execute("SELECT * FROM tasks WHERE id=?", (task_id,)).fetchone()
+
+
+@router.post("/daily-execution/{plan_date}/tasks", status_code=201)
+def add_temporary_task(plan_date: date, payload: TemporaryTaskInput, request: Request):
+    with _db(request) as connection:
+        connection.execute("BEGIN IMMEDIATE")
+        plan = _ensure_recordable_plan(connection, plan_date.isoformat())
+        _append_temporary_task(connection, plan, payload)
+        connection.execute("UPDATE plans SET status='approved' WHERE id=?", (plan["id"],))
+        return _build_execution_payload(connection, plan_date.isoformat())
+
+
+def _apply_vocabulary_choice(connection, plan_date: str, choice: str | None):
+    word_segments = connection.execute(
+        """SELECT s.id,s.ended_at FROM task_execution_segments s JOIN tasks t ON t.id=s.task_id
+           WHERE s.plan_date=? AND t.category='english' AND s.segment_kind='effective'
+           AND s.label_id='effective_english_words'""", (plan_date,)
+    ).fetchall()
+    if word_segments and choice is None:
+        raise HTTPException(409, "当天已有背单词计时，请选择：分别学习保留两份、只保留墨墨或只保留计时")
+    if not choice:
+        return
+    if choice == "manual" and any(row["ended_at"] is None for row in word_segments):
+        raise HTTPException(409, "请先停止正在进行的背单词计时，再选择只保留墨墨")
+    connection.execute(
+        """UPDATE task_execution_segments SET included=? WHERE id IN (
+           SELECT s.id FROM task_execution_segments s JOIN tasks t ON t.id=s.task_id
+           WHERE s.plan_date=? AND t.category='english' AND s.segment_kind='effective'
+           AND s.label_id='effective_english_words')""", (int(choice != "manual"), plan_date)
+    )
+    connection.execute(
+        """UPDATE task_duration_records SET included=? WHERE task_id IN (
+           SELECT t.id FROM tasks t JOIN plans p ON p.id=t.plan_id WHERE p.plan_date=?)""",
+        (int(choice != "timer"), plan_date)
+    )
+
+
+@router.post("/daily-execution/{plan_date}/vocabulary", status_code=201)
+def create_vocabulary_record(plan_date: date, payload: DurationRecordInput, request: Request):
+    with _db(request) as connection:
+        connection.execute("BEGIN IMMEDIATE")
+        day = plan_date.isoformat()
+        plan = _ensure_recordable_plan(connection, day)
+        _apply_vocabulary_choice(connection, day, payload.duplicate_choice)
+        task = connection.execute("SELECT * FROM tasks WHERE plan_id=? AND category='english' ORDER BY is_sub,position,id LIMIT 1", (plan["id"],)).fetchone()
+        if not task:
+            task = _append_temporary_task(connection, plan, TemporaryTaskInput(title="英语", category="english"))
+        _prepare_execution_task(connection, task)
+        connection.execute("INSERT INTO task_duration_records(task_id,minutes,included) VALUES(?,?,?)",
+            (task["id"], payload.minutes, int(payload.duplicate_choice != "timer")))
+        connection.execute("UPDATE plans SET status='approved' WHERE id=?", (plan["id"],))
+        return _build_execution_payload(connection, day)
+
+
+@router.put("/daily-execution/{plan_date}/vocabulary/{record_id}")
+def update_vocabulary_record(plan_date: date, record_id: int, payload: DurationRecordInput, request: Request):
+    with _db(request) as connection:
+        connection.execute("BEGIN IMMEDIATE")
+        day = plan_date.isoformat()
+        plan = _ensure_recordable_plan(connection, day)
+        if not any(row["id"] == record_id for row in _list_duration_records(connection, day)):
+            raise HTTPException(404, "时长记录不存在")
+        _apply_vocabulary_choice(connection, day, payload.duplicate_choice)
+        connection.execute("UPDATE task_duration_records SET minutes=? WHERE id=?", (payload.minutes, record_id))
+        connection.execute("UPDATE plans SET status='approved' WHERE id=?", (plan["id"],))
+        return _build_execution_payload(connection, day)
+
+
+@router.delete("/daily-execution/{plan_date}/vocabulary/{record_id}")
+def delete_vocabulary_record(plan_date: date, record_id: int, request: Request):
+    with _db(request) as connection:
+        day = plan_date.isoformat()
+        plan = _ensure_recordable_plan(connection, day)
+        if not any(row["id"] == record_id for row in _list_duration_records(connection, day)):
+            raise HTTPException(404, "时长记录不存在")
+        connection.execute("DELETE FROM task_duration_records WHERE id=?", (record_id,))
+        connection.execute("UPDATE plans SET status='approved' WHERE id=?", (plan["id"],))
+        return _build_execution_payload(connection, day)
 
 
 @router.get("/carryovers")

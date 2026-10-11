@@ -1,6 +1,6 @@
 # 前端页面与交互速查文档
 
-> 最后更新：2026-07-06
+> 最后更新：2026-10-11
 > 覆盖文件：`app/templates/*.html`、`app/static/style.css`、`app/static/app.js`
 
 ## 模块职责
@@ -54,7 +54,7 @@
 
 ### `app/templates/settings.html`
 
-- **职责**：维护当前阶段、项目起始日、预算、任务名称和执行标签，并说明 GPT 协作主路径。
+- **职责**：维护当前阶段、项目起始日、历史参考值、任务名称和执行标签，并说明 GPT 协作主路径。
 - **关键变化**：
   - 设置页现在有主航线草稿默认分钟编辑区 `#draft-main-minute-fields`。
   - 设置页现在有执行标签编辑区 `#execution-label-fields`，可新增、编辑、删除自定义标签。
@@ -72,7 +72,7 @@
   - `renderTimelineList()` — 执行台时间轴列表，负责激活段展示、补记卡片、时间段编辑与删除。
   - `renderExecutionSubmitList()` — 执行台底部勾选与提交区。
   - `executionTaskSectionHtml()` — 渲染可折叠的执行任务分组容器。
-  - `renderExecutionTasks()` — 执行台任务列表与“开始有效时间”按钮，同时把 `0 分钟主航线` 和 `副航线` 收进折叠组。
+  - `renderExecutionTasks()` — 执行台任务列表与“开始有效时间”按钮，以“今日未安排”展示 0 目标项目，默认展开且可以开始。
   - `renderExecutionLabels()` — 执行台标签按钮区，按计总 / 中断两组渲染。
   - `renderExecutionToolbar()` — 顶部快捷条，负责 `计总 / 中断 / 切回有效` 的单次展开和回切逻辑。
   - `renderExecutionState()` — 执行台总入口，统一处理空态、激活态、任务看板、时间轴和提交区刷新。
@@ -130,3 +130,19 @@ GPT 工作台 → gpt-workbench / settings
 - 设置页的主航线草稿默认分钟现在默认是 0；如果后续觉得太极端，要改的是设置值，不是再把代码默认分钟写死。
 - 单日复盘页和七日复盘页都支持“复制给 GPT -> 粘贴回项目”的手工协作闭环。
 - 当前只做响应式页面，没有 PWA、离线缓存或前端构建链。
+
+## 2026-10-11 交互更新
+
+今天页直接输入目标并动态显示合计，不再有可用时间选择或精力联动预算。草稿与执行卡片都可用一个事项类型选择框表达习惯、每日目标、具体待办；运动卡片另有做了、没做、休息。执行台顶部临时添加和背单词快捷入口保持可见，英语卡片旁也有背单词入口。墨墨表单只需分钟数，同日列表显示合计并支持修改/删除；修改使用 PUT，新增使用 POST。发现明确背单词计时才展示来源选择，反向开始计时也用三选一弹层。
+
+复盘看板显示原目标、有效时间和习惯状态，日周显示英语及其中背单词分钟。手机输入与常用按钮至少 44px；精力单选框限制为标签内 1px 透明控件，避免撑大移动布局视口；保留键盘 focus-visible。390×844 Chromium 流程测试见 tests/mobile_flows.cjs，实体手机/Safari 尚未验证。
+
+浏览器测试需要本机安装 Playwright/Chromium。先在项目目录用明确的临时数据库启动：
+
+```bash
+DATABASE_PATH=/tmp/daily-plan-ui-test.db APP_RUNTIME=development python -m uvicorn app.main:app --host 127.0.0.1 --port 8765
+# 另一终端（可用 NODE_PATH 指向已有 Playwright 安装）：
+DAILY_PLAN_TEST_URL=http://127.0.0.1:8765 node tests/mobile_flows.cjs
+```
+
+不要使用日常开发库或生产库；脚本会清空 2026-10-11 测试日期。可设置 MOBILE_SCREENSHOT_PATH 保存截图。桌面模式和真实设备另行手工验收。

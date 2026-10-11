@@ -21,6 +21,12 @@ def initialize(path: str | Path) -> None:
             cursor.execute("ALTER TABLE tasks ADD COLUMN is_sub INTEGER DEFAULT 0")
         if "completion_override" not in columns:
             cursor.execute("ALTER TABLE tasks ADD COLUMN completion_override INTEGER")
+        for name, sql_type in [("task_type", "TEXT"), ("habit_status", "TEXT"), ("legacy_actual_minutes", "INTEGER")]:
+            if name not in columns:
+                cursor.execute(f"ALTER TABLE tasks ADD COLUMN {name} {sql_type}")
+        cursor.execute("PRAGMA table_info(task_execution_segments)")
+        if "included" not in [row[1] for row in cursor.fetchall()]:
+            cursor.execute("ALTER TABLE task_execution_segments ADD COLUMN included INTEGER NOT NULL DEFAULT 1")
         cursor.execute("PRAGMA table_info(reviews)")
         review_columns = [row[1] for row in cursor.fetchall()]
         for name, ddl in [

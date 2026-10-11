@@ -2,9 +2,9 @@ from app.schemas import MorningCheckIn
 from app.services.task_rules import build_rule_plan, validate_ai_tasks
 
 
-def test_minimum_plan_stays_within_available_time():
+def test_minimum_plan_preserves_goals_despite_old_available_time():
     plan = build_rule_plan(MorningCheckIn(energy="minimum", available_minutes=90, day_type="normal"))
-    assert sum(item.estimated_minutes for item in plan.tasks if not item.is_sub) <= 90
+    assert sum(item.estimated_minutes for item in plan.tasks if not item.is_sub) == 100
     assert {item.category for item in plan.tasks if not item.is_sub} >= {"math", "english", "computer"}
     assert not any(item.category == "vibe_coding" and not item.is_sub for item in plan.tasks)
 
@@ -19,10 +19,10 @@ def test_exercise_omitted_when_knee_alert():
     assert not any(item.category == "rehab" for item in plan.tasks)
 
 
-def test_ai_tasks_reject_unsafe_rehab_and_over_budget():
+def test_ai_tasks_allow_over_budget_but_reject_unsafe_rehab():
     base = build_rule_plan(MorningCheckIn(energy="normal", available_minutes=120, day_type="normal"))
     ai_tasks = [task.model_copy(update={"estimated_minutes": 200}) for task in base.tasks]
-    assert validate_ai_tasks(ai_tasks, available_minutes=120) is False
+    assert validate_ai_tasks(ai_tasks, available_minutes=120) is True
 
     unsafe = [base.tasks[0].model_copy(update={"category": "rehab", "title": "1000 米冲刺"})]
     assert validate_ai_tasks(unsafe, available_minutes=120) is False

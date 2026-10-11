@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import date, datetime
-from typing import Literal
+from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -37,7 +37,7 @@ class EffectiveLabelItem(BaseModel):
 
 class MorningCheckIn(BaseModel):
     energy: Energy
-    available_minutes: int = Field(ge=30, le=720)
+    available_minutes: int = Field(default=240, ge=30, le=720) # 仅兼容历史字段，不限制目标
     day_type: DayType
     knee_alert: bool = False
     plan_date: date | None = None
@@ -45,6 +45,7 @@ class MorningCheckIn(BaseModel):
 
 class DraftRequest(MorningCheckIn):
     date: date
+    target_minutes: dict[Category, Annotated[int, Field(ge=0, le=720)]] = Field(default_factory=dict)
 
 
 class TaskDraft(BaseModel):
@@ -57,6 +58,7 @@ class TaskDraft(BaseModel):
     completion_criteria: str = Field(default="", max_length=240)
     reason: str = Field(default="", max_length=240)
     source: Literal["rule", "ai", "carryover"] = "rule"
+    task_type: Literal["habit", "daily_goal", "todo"] | None = None
     sub_category: str | None = Field(default=None, max_length=50)
     is_sub: int = Field(default=0, ge=0, le=1)
 
@@ -73,7 +75,20 @@ class AIPlanResult(BaseModel):
     degraded_reason: str | None = None
 
 
+class DurationRecordInput(BaseModel):
+    minutes: int = Field(ge=1, le=1440)
+    duplicate_choice: Literal["both", "manual", "timer"] | None = None
+
+
+class TemporaryTaskInput(BaseModel):
+    title: str = Field(min_length=1, max_length=100)
+    category: Category
+    task_type: Literal["habit", "daily_goal", "todo"] | None = None
+
+
 class TaskUpdate(BaseModel):
+    task_type: Literal["habit", "daily_goal", "todo"] | None = None
+    habit_status: Literal["done", "missed", "rest"] | None = None
     completed: bool | None = None
     actual_minutes: int | None = Field(default=None, ge=0, le=720)
     sub_category: str | None = Field(default=None, max_length=50)
@@ -117,6 +132,7 @@ class GPTRecordSaveInput(BaseModel):
 
 
 class ExecutionTaskStartInput(BaseModel):
+    duplicate_choice: Literal["both", "manual", "timer"] | None = None
     task_id: int
     label_id: str | None = Field(default=None, max_length=100)
 
@@ -127,6 +143,7 @@ class ExecutionLabelStartInput(BaseModel):
 
 
 class ExecutionSegmentCreateInput(BaseModel):
+    duplicate_choice: Literal["both", "manual", "timer"] | None = None
     task_id: int
     segment_kind: ExecutionSegmentKind
     label_id: str | None = Field(default=None, max_length=100)
@@ -135,6 +152,7 @@ class ExecutionSegmentCreateInput(BaseModel):
 
 
 class ExecutionSegmentUpdateInput(BaseModel):
+    duplicate_choice: Literal["both", "manual", "timer"] | None = None
     task_id: int
     segment_kind: ExecutionSegmentKind
     label_id: str | None = Field(default=None, max_length=100)

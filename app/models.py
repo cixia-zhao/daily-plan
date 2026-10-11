@@ -26,6 +26,9 @@ CREATE TABLE IF NOT EXISTS tasks (
     position INTEGER NOT NULL DEFAULT 0,
     completed INTEGER NOT NULL DEFAULT 0,
     completion_override INTEGER,
+    task_type TEXT,
+    habit_status TEXT,
+    legacy_actual_minutes INTEGER,
     sub_category TEXT,
     is_sub INTEGER DEFAULT 0
 );
@@ -86,10 +89,21 @@ CREATE TABLE IF NOT EXISTS task_execution_segments (
     label_name TEXT,
     started_at TEXT NOT NULL,
     ended_at TEXT,
+    included INTEGER NOT NULL DEFAULT 1,
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 CREATE INDEX IF NOT EXISTS idx_execution_segments_plan_date ON task_execution_segments(plan_date);
 CREATE INDEX IF NOT EXISTS idx_execution_segments_task_id ON task_execution_segments(task_id);
+CREATE TABLE IF NOT EXISTS task_duration_records (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    task_id INTEGER NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+    minutes INTEGER NOT NULL CHECK(minutes > 0 AND minutes <= 1440),
+    label_id TEXT NOT NULL DEFAULT 'effective_english_words',
+    label_name TEXT NOT NULL DEFAULT '背单词',
+    source TEXT NOT NULL DEFAULT '墨墨',
+    included INTEGER NOT NULL DEFAULT 1,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
 CREATE TABLE IF NOT EXISTS app_settings (
     key TEXT PRIMARY KEY,
     value_json TEXT NOT NULL,

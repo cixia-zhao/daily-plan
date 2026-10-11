@@ -153,12 +153,14 @@ def test_execute_page_assets_exist():
     assert ".submit-zero-group" in styles
 
 
-def test_zero_minute_main_tasks_hide_execution_controls_in_approved_view():
+def test_zero_minute_main_tasks_invite_execution_in_approved_view():
     script = Path("app/static/app.js").read_text(encoding="utf-8")
 
     assert "const zeroMinuteMain = approved && !isSub && Number(task.estimated_minutes) === 0;" in script
     assert "'<span class=\"task-index\" aria-hidden=\"true\">—</span>'" in script
-    assert "'<span>计划 0 分钟</span><span class=\"execution-locked\">今天无需打勾或记录时间</span>'" in script
+    assert "可在执行台开始" in script
+    assert "今日未安排（随时可以开始）" in script
+    assert "const disabled = Number(task.estimated_minutes) === 0" not in script
 
 
 def test_weekly_page_supports_gpt_collaboration_and_history():
@@ -226,7 +228,7 @@ def test_settings_budget_inputs_use_fifteen_minute_steps():
     assert "renderEffectiveLabelFields" in script
     assert "effective_labels_by_category" in script
     assert "downloadBackupFile" in script
-    assert "{minimum:90, normal:150, ample:210}" in script
+    assert "available-minutes" not in script
 
 
 def test_today_page_has_execution_entry_after_confirmation():

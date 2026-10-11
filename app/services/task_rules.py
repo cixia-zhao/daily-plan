@@ -21,41 +21,6 @@ def _task(title, category, minutes, priority, criteria, reason="规则生成", s
     )
 
 
-def _fit_to_budget(tasks: list[TaskDraft], budget: int) -> list[TaskDraft]:
-    fitted = list(tasks)
-    if sum(t.estimated_minutes for t in fitted if not t.is_sub) > budget:
-        if any(t.category == "rehab" for t in fitted):
-            rehab_sum = sum(t.estimated_minutes for t in fitted if t.category != "rehab" and not t.is_sub)
-            if rehab_sum > budget or budget < 80:
-                fitted = [t for t in fitted if t.category != "rehab"]
-
-    total = sum(t.estimated_minutes for t in fitted if not t.is_sub)
-    if total <= budget:
-        return fitted
-
-    scalable = [t for t in fitted if t.category in {"math", "english", "computer"}]
-    fixed = total - sum(t.estimated_minutes for t in scalable)
-    available = max(budget - fixed, 30)
-    original = sum(t.estimated_minutes for t in scalable)
-    ratio = min(1.0, available / original)
-
-    output = []
-    for task in fitted:
-        if task in scalable:
-            minutes = max(10, int(task.estimated_minutes * ratio // 5 * 5))
-            output.append(task.model_copy(update={"estimated_minutes": minutes}))
-        else:
-            output.append(task)
-
-    while sum(t.estimated_minutes for t in output if not t.is_sub) > budget:
-        largest = max((t for t in output if t.category in {"math", "english", "computer"} and t.estimated_minutes > 10), key=lambda t: t.estimated_minutes, default=None)
-        if largest is None:
-            break
-        index = output.index(largest)
-        output[index] = largest.model_copy(update={"estimated_minutes": largest.estimated_minutes - 5})
-    return output
-
-
 def build_rule_plan(checkin: MorningCheckIn) -> RulePlan:
     day = checkin.plan_date or date.today()
 
@@ -84,8 +49,6 @@ def build_rule_plan(checkin: MorningCheckIn) -> RulePlan:
         criteria = "完成低强度动作；出现疼痛或不稳立即停止"
         main_tasks.append(_task("运动", "rehab", 20, 3, criteria))
 
-    # Scale main tasks to budget
-    main_tasks = _fit_to_budget(main_tasks, checkin.available_minutes)
 
     # 4 Sub Route Tasks (is_sub = 1, default 0 minutes)
     sub_tasks = [
@@ -107,8 +70,6 @@ def build_rule_plan(checkin: MorningCheckIn) -> RulePlan:
 
 def validate_ai_tasks(tasks: list[TaskDraft], available_minutes: int) -> bool:
     if not tasks or len(tasks) > 15:
-        return False
-    if sum(task.estimated_minutes for task in tasks if not task.is_sub) > available_minutes:
         return False
     # Ensure key main routes exist
     main_cats = {task.category for task in tasks if not task.is_sub}

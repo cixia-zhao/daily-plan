@@ -11,7 +11,7 @@ from app.services.task_rules import validate_ai_tasks
 
 
 FALLBACK_SYSTEM_PROMPT = """You arrange a small daily task list from approved candidates.
-Return JSON only: {"tasks": [...]}. Keep every task within the supplied categories and time budget.
+Return JSON only: {"tasks": [...]}. Keep every task within the supplied categories and preserve goal minutes.
 Do not diagnose health conditions, increase physical intensity, or publish tasks without user review.
 Each task must contain title, category, estimated_minutes, priority, completion_criteria, reason and source.
 """
@@ -41,7 +41,7 @@ class AIPlanner:
         fallback = AIPlanResult(tasks=candidates, degraded=True)
         payload_state = {
             "energy": checkin.energy,
-            "available_minutes": checkin.available_minutes,
+            "planning_note": "候选分钟是用户目标，不设当天时间上限，不缩减已填写的目标",
             "day_type": checkin.day_type,
             "knee_alert": checkin.knee_alert,
         }
@@ -70,6 +70,10 @@ class AIPlanner:
             tasks = [TaskDraft.model_validate({**item, "source": "ai"}) for item in parsed["tasks"]]
             if not validate_ai_tasks(tasks, checkin.available_minutes) or (checkin.knee_alert and any(task.category == "rehab" for task in tasks)):
                 raise ValueError("AI task list violates local constraints")
+            for candidate in candidates:
+                matching = next((task for task in tasks if task.category == candidate.category and task.is_sub == candidate.is_sub and task.title == candidate.title), None)
+                if not matching or matching.estimated_minutes != candidate.estimated_minutes:
+                    raise ValueError("AI cannot change user goals")
             return AIPlanResult(tasks=tasks)
         except (httpx.HTTPError, KeyError, IndexError, TypeError, ValueError, json.JSONDecodeError, ValidationError) as exc:
             return fallback.model_copy(update={"degraded_reason": type(exc).__name__})

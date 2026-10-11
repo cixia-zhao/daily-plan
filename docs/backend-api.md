@@ -1,6 +1,6 @@
 # 后端接口与数据层速查文档
 
-> 最后更新：2026-07-06
+> 最后更新：2026-10-11
 > 覆盖文件：`app/main.py`、`app/api.py`、`app/database.py`、`app/models.py`、`app/schemas.py`、`app/launcher.py`、`启动今日航线.cmd`、`termux-install.sh`、`termux-start.sh`、`termux-update.sh`、`termux-register-commands.sh`、`share-to-phone.ps1`
 
 ## 模块职责
@@ -151,11 +151,11 @@ share-to-phone.ps1 → zip 打包 + 临时 HTTP 文件服务
   - `counted_label`：计入任务总时间的标签段。
   - `interrupt_label`：不计入任务总时间的中断段。
 - `effective` 段现在也允许带 `label_id / label_name`，但它取的是“任务类别级有效细分标签”，不是计总 / 中断标签。
-- 任务总时间不单独存库，而是实时聚合为：`effective + counted_label`。
+- 任务总时间实时聚合为：有效时间段 + 正常时长录入 + 计总标签；actual_minutes 缓存有效分钟（含正常录入），不含计总与中断。
 - 标签次数不单独建表，直接按同标签时间段条数累计。
 - 标签名采用“写入时间段时快照保存”，避免后续改名导致历史记录失真。
 - 同一时刻全局只允许一个未结束段；任何开始/切换动作都会先关闭旧段。
-- 当前有效分钟同步规则只看 `effective` 段，不把 `counted_label` 和 `interrupt_label` 写回 `tasks.actual_minutes`。
+- 有效分钟同步合并 effective 段、时长录入和旧版无明细分钟，尊重 included；计总和中断不写回 actual_minutes。
 
 ## 执行接口返回范围
 
@@ -194,7 +194,7 @@ share-to-phone.ps1 → zip 打包 + 临时 HTTP 文件服务
 
 ## 已知问题与注意事项
 
-- 已确认计划不可再编辑草稿结构，任务也只能在确认后勾选或进入执行台。
+- 已确认计划不重建草稿结构；临时添加只追加 0 目标任务，保留任务 ID 与已有执行明细。
 - 主航线草稿默认分钟现在可以被设置成 0，所以不少旧逻辑里的“主航线一定 > 0 分钟”假设已经不成立。
 - “重置今日”会真正删除该日期数据，而不是只把完成状态归零。
 - 今天页不再鼓励直接填主任务实际分钟；白天执行应该走执行台。
@@ -202,3 +202,13 @@ share-to-phone.ps1 → zip 打包 + 临时 HTTP 文件服务
 - `PUT /api/daily-plans/{date}` 现在既可能返回字符串错误，也可能返回 FastAPI 的数组型 `detail`；前端已经兼容这两类返回。
 - ChatGPT Plus 仍只通过手工复制提示词使用，不走项目内 API 调用。
 - `main.py` 的全局 `app` 会在导入时创建默认数据库。
+
+## 2026-10-11 接口与数据约定
+
+- DraftRequest.target_minutes 按类别接收 0–720 分目标；available_minutes 可省略，保留兼容字段但不约束合计。PlanUpdate、规则和 AI 校验均取消时间硬上限，仍校验任务数量、核心类别及运动安全。
+- TaskDraft/TaskUpdate.task_type 为 habit、daily_goal、todo；TaskUpdate.habit_status 为 done、missed、rest。习惯和具体待办不因分钟达标自动完成。新 0 目标任务不因有效分钟达 30 自动完成。
+- POST /daily-execution/{date}/tasks 接收 title/category/task_type，追加临时活动。当天最多 15 项，草稿不可执行，膝盖安全规则仍适用。
+- POST /daily-execution/{date}/vocabulary 接收 minutes（1–1440）；PUT/DELETE /vocabulary/{id} 按日期校验归属。默认当前日英语任务，缺失时追加英语 0 目标任务，默认背单词细分及墨墨来源；不保存虚构时间段。
+- 同日明确背单词计时与录入同时存在时，duplicate_choice 必须显式选 both/manual/timer；新增真实计时、导入或编辑时间段也有反向校验。只影响英语 effective_english_words 时间段和该日墨墨条目，不影响英语阅读。不计入的明细保留 included=0。
+- GET 执行台返回 segments（真实时间段）和 duration_records（只有分钟数）；聚合用内部统一记录列表，但录入不会混入时间轴。日周 english_minutes 包含 vocabulary_minutes，不能再相加；周汇总沿用 submitted 日期。
+- initialize 只补字段与表，原始字段不更新，旧 task_type 保持 NULL；旧待审项可处理，新增生成仅查询显式 todo。详见 tests/test_product_flows.py 的副本迁移验收。

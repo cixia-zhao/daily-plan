@@ -42,3 +42,21 @@ main{width:min(var(--content),calc(100% - 40px));margin:0 auto;padding:44px 0 64
 /* 登录与响应式 */
 .login-page{display:grid;min-height:100vh;place-items:center;padding:24px}.login-shell{width:min(420px,100%)}.login-card{display:grid;gap:14px;padding:28px;background:#fff;border:1px solid var(--line);border-radius:18px;box-shadow:var(--shadow)}.login-card h1{font-size:30px}.login-intro{margin:0;color:var(--muted)}.login-form{display:grid;gap:10px}.login-error{margin:0;padding:10px;border-radius:10px;background:var(--danger-soft);color:var(--danger)}
 @media (max-width:760px){.site-header{min-height:58px;padding:0 16px;gap:8px}.brand{font-size:14px}.site-nav{gap:0}.primary-nav>a,.nav-more summary{padding:7px 7px;font-size:13px}main{width:min(100% - 28px,var(--content));padding:28px 0 44px}.hero{display:grid;gap:16px}.hero h1{font-size:29px}.date-actions{justify-content:flex-start}.panel{margin-top:12px;padding:17px;border-radius:14px}.section-heading{margin-bottom:14px}.section-heading h2{font-size:18px}.form-grid,.columns-layout,.execute-layout,.workbench-grid{grid-template-columns:1fr}.metrics{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.metrics article{padding:11px}.metrics strong{font-size:19px}.segmented{grid-template-columns:1fr}.segmented label span{min-height:56px}.plan-footer{align-items:flex-start;flex-direction:column}.execution-mobile-toolbar{display:flex;gap:7px;margin-bottom:10px}.execution-mobile-toolbar .ghost-button{flex:1;padding:8px 7px;font-size:12px}.execution-label-zone{display:none}.execution-mobile-label-panel{padding:10px;margin-bottom:10px;border:1px solid var(--line);border-radius:10px;background:#fbfcfa}.execution-task-head{align-items:stretch;flex-direction:column}.task-start-button{width:100%}.execute-side{order:-1}.execution-board-lists{grid-template-columns:1fr}.weekly-analysis-grid{grid-template-columns:1fr}.weekly-progress-head{display:grid}.action-buttons,.actions{width:100%}.action-buttons>*{flex:1}.calendar-dialog,.confirm-dialog{padding:18px}.calendar-day{font-size:12px}body[data-page=settings] main{padding-bottom:56px}}
+
+/* 轻量记录表单与手机触控 */
+.record-form { padding: 16px; margin: 12px 0; border: 1px solid var(--line); border-radius: 12px; }
+.record-form label { display: flex; flex-direction: column; gap: 6px; margin: 10px 0; }
+.record-form input, .record-form select, .task-type-controls select { min-height: 44px; max-width: 100%; }
+.task-type-controls { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin-top: 12px; }
+.task-type-controls label { display: flex; flex-direction: column; gap: 6px; }
+.duration-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 10px 0; }
+.duration-row button, .record-form button, .vocabulary-open, #temporary-open, #vocabulary-shortcut { min-height: 44px; }
+@media(max-width: 600px) { .record-form { padding: 12px; } .record-form input, .record-form select { width: 100%; min-width: 0; } .task-type-controls { align-items: stretch; } .task-type-controls label { flex: 1 1 130px; } }
+/* 精力单选框限定在标签内，防止透明输入撑大手机布局视口。 */
+.segmented label { position: relative; }
+.segmented label input { width: 1px; height: 1px; min-width: 0; padding: 0; margin: 0; }
+.segmented label input:focus-visible + span { outline: 2px solid var(--accent); outline-offset: 2px; }
+#checkin-form { display: grid; gap: 14px; }
+#checkin-form fieldset { min-width: 0; border: 0; padding: 0; margin: 0; }
+#checkin-form label { font-size: 14px; }
+#checkin-form button { min-height: 44px; }

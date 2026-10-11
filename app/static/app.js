@@ -171,6 +171,10 @@ function dateToLocalDateTimeValue(date) {
   return `${year}-${month}-${day}T${hours}:${minutes}:${seconds}`;
 }
 
+function taskTypeLabel(value) { return {habit:'习惯', daily_goal:'每日目标', todo:'具体待办'}[value] || '每日目标'; }
+function habitStatusLabel(value) { return {done:'做了', missed:'没做', rest:'休息'}[value] || '未记录'; }
+function taskTypeOptions(selected='daily_goal') { return ['habit','daily_goal','todo'].map(value => `<option value="${value}" ${value === selected ? 'selected' : ''}>${taskTypeLabel(value)}</option>`).join(''); }
+
 function taskBoardRatio(value, total) {
   if (!total) return 0;
   return Math.max(0, Math.min(100, Math.round((Number(value || 0) / total) * 100)));
@@ -199,6 +203,8 @@ function renderTaskExecutionBoard(container, boards, emptyHtml='') {
           <strong>${formatMinutes(board.total_minutes)}</strong>
         </div>
         <div class="execution-board-stats">
+          <span>原目标 ${board.estimated_minutes || 0} 分</span>
+          ${board.habit_status ? `<span>${habitStatusLabel(board.habit_status)}</span>` : ''}
           <span>有效 ${formatMinutes(board.effective_minutes)}</span>
           <span>计总标签 ${formatMinutes(board.counted_label_minutes)}</span>
           <span>中断 ${formatMinutes(board.interrupt_minutes)}</span>
@@ -424,6 +430,7 @@ if (page === 'today') {
         estimated_minutes: Number($('.minutes-input', card)?.value ?? original.estimated_minutes),
         completion_criteria: $('.criteria-input', card)?.value ?? original.completion_criteria,
         sub_category: activeTab?.dataset.val || original.sub_category,
+        task_type: $('.task-type-input', card)?.value || original.task_type,
         is_sub: card.closest('#sub-route-list') ? true : false,
       };
     });
@@ -446,7 +453,7 @@ if (page === 'today') {
       return;
     }
     summary.classList.remove('hidden');
-    summary.textContent = `可用 ${currentPlan.available_minutes} 分 / 当前计划 ${currentEstimatedMinutes()} 分`;
+    summary.textContent = `计划合计 ${currentEstimatedMinutes()} 分（目标可以超过，实际另行记录）`;
   }
 
   function taskPayload() {
@@ -459,6 +466,7 @@ if (page === 'today') {
       completion_criteria: task.completion_criteria,
       reason: task.reason || '',
       source: task.source || 'rule',
+      task_type: task.task_type,
       is_sub: task.is_sub ? 1 : 0,
       sub_category: task.sub_category || null,
     }));
@@ -522,6 +530,8 @@ if (page === 'today') {
       ? '<span class="task-bullet">•</span>'
       : zeroMinuteMain
         ? '<span class="task-index" aria-hidden="true">—</span>'
+        : approved && task.task_type === 'habit'
+        ? `<span class="task-index">${habitStatusLabel(task.habit_status)}</span>`
         : approved
         ? `<input class="task-check" type="checkbox" ${task.completed ? 'checked' : ''} aria-label="完成任务">`
         : `<span class="task-index">${index + 1}</span>`;
@@ -529,11 +539,11 @@ if (page === 'today') {
     if (!approved) {
       timeBlock = isSub
         ? '<span class="execution-locked">确认后记录实际时间</span>'
-        : `<label class="minutes-label"><input class="minutes-input" type="number" min="5" value="${task.estimated_minutes}"> 分钟</label>`;
+        : `<label class="minutes-label"><input class="minutes-input" type="number" min="0" max="720" value="${task.estimated_minutes}"> 分钟</label>`;
     } else if (isSub) {
       timeBlock = `<label class="actual-minutes-label">实际 <input class="actual-minutes-input" type="number" min="0" value="${task.actual_minutes || 0}"> 分钟</label>`;
     } else if (zeroMinuteMain) {
-      timeBlock = '<span>计划 0 分钟</span><span class="execution-locked">今天无需打勾或记录时间</span>';
+      timeBlock = `<span>目标 0 分钟</span><span>实际 ${task.actual_minutes || 0} 分 · 可在执行台开始</span>`;
     } else {
       timeBlock = `<span>计划 ${task.estimated_minutes} 分钟</span><span class="actual-minutes-readonly">有效 ${task.actual_minutes || 0} 分</span>`;
     }
@@ -555,6 +565,7 @@ if (page === 'today') {
           ${subCategoryTabs(task)}
         </div>
         <div class="task-meta task-paper-tags"><span>${esc(taskTitle(task))}</span>${timeBlock}</div>
+        ${approved ? `<span>${taskTypeLabel(task.task_type)}</span>` : `<label>事项类型<select class="task-type-input">${taskTypeOptions(task.task_type)}</select></label>`}
         ${criteriaBlock}
       </div>
       ${taskControls(task, index, routeLength)}
@@ -717,7 +728,8 @@ if (page === 'today') {
       try {
         const updated = await api(`/api/tasks/${card.dataset.taskId}`, {method:'PATCH', body:JSON.stringify({completed:checkbox.checked})});
         card.classList.toggle('completed', updated.completed);
-        $('.actual-minutes-input', card).value = updated.actual_minutes || 0;
+        const actualInput = $('.actual-minutes-input', card);
+        if (actualInput) actualInput.value = updated.actual_minutes || 0;
         Object.assign(taskById(card.dataset.taskId), updated);
         invalidateCalendarMonth(dateInput.value);
         markPlanDirtyAfterSubmission();
@@ -741,19 +753,12 @@ if (page === 'today') {
     });
   }
 
-  const updateAvailableMinutes = () => {
-    if (!settings) return;
-    const energy = $('input[name=energy]:checked').value;
-    const budget = settings[`budget_${energy}`] || {minimum:90, normal:150, ample:210}[energy];
-    const select = $('#available-minutes');
-    if (![...select.options].some(option => Number(option.value) === budget)) {
-      const option = document.createElement('option');
-      option.value = budget;
-      option.textContent = `约 ${(budget / 60).toFixed(1)} 小时 (${budget} 分)`;
-      select.appendChild(option);
-    }
-    select.value = budget;
-  };
+  function renderMorningTargets() {
+    $('#morning-targets').innerHTML = ['math', 'english', 'computer', 'rehab'].filter(category => category !== 'rehab' || settings.rehab_enabled).map(category => `<label>${esc(settings.task_titles[category] || category)}目标（分钟）<input type="number" min="0" max="720" required data-target-category="${category}" value="${settings.draft_main_minutes_by_category?.[category] || 0}"></label>`).join('');
+    const update = () => { $('#morning-total').textContent = `计划合计 ${$$('[data-target-category]').reduce((sum, input) => sum + Number(input.value || 0), 0)} 分`; };
+    $$('[data-target-category]').forEach(input => input.oninput = update);
+    update();
+  }
 
   async function loadCarryovers() {
     carryoverItems = await api('/api/carryovers');
@@ -805,7 +810,7 @@ if (page === 'today') {
       const plan = await api('/api/daily-plans/draft', {method:'POST', body:JSON.stringify({
         date:dateInput.value,
         energy:$('input[name=energy]:checked').value,
-        available_minutes:Number($('#available-minutes').value),
+        target_minutes:Object.fromEntries($$('[data-target-category]').map(input => [input.dataset.targetCategory, Number(input.value)])),
         day_type:$('#day-type').value,
         knee_alert:$('#knee-alert').checked,
       })});
@@ -844,8 +849,7 @@ if (page === 'today') {
   loadCarryovers();
   api('/api/settings').then(result => {
     settings = result;
-    $$('input[name=energy]').forEach(radio => radio.addEventListener('change', updateAvailableMinutes));
-    updateAvailableMinutes();
+    renderMorningTargets();
     bindSharedCalendarTrigger(dateButton, () => dateInput.value, async nextDate => {
       dateInput.value = nextDate;
       updateDateTrigger(dateButton, nextDate);
@@ -864,8 +868,8 @@ if (page === 'execute') {
   let showDraftSegment = false;
   function defaultExecutionUiState() {
     return {
-      collapsedZeroMain: true,
-      collapsedSub: true,
+      collapsedZeroMain: false,
+      collapsedSub: false,
       expandedLabelBucket: null,
       collapsedTimeline: true,
       collapsedZeroMinuteSubmit: true,
@@ -947,11 +951,27 @@ if (page === 'execute') {
     return tasks.filter(task => Number(task.estimated_minutes) === 0 && Number(task.actual_minutes || 0) === 0);
   }
 
+  function chooseVocabularySource() {
+    return new Promise(resolve => {
+      const dialog = document.createElement('dialog');
+      dialog.className = 'record-form';
+      dialog.innerHTML = '<form method="dialog"><h3>当天已有墨墨录入</h3><p>这次背单词计时与墨墨记录，保留哪份？英语阅读不受影响。</p><label>保留方式<select name="choice"><option value="both">分别学习，保留两份</option><option value="manual">只保留墨墨录入</option><option value="timer">只保留背单词计时</option></select></label><button value="continue" class="primary">确认并开始</button><button value="cancel" class="ghost-button">取消</button></form>';
+      document.body.appendChild(dialog);
+      dialog.addEventListener('close', () => { const choice = dialog.returnValue === 'continue' ? dialog.querySelector('select').value : null; dialog.remove(); resolve(choice); }, {once:true});
+      dialog.showModal();
+    });
+  }
+
   async function startEffectiveTask(taskId, successMessage='已开始记录有效时间', labelId=selectedEffectiveLabelId(taskId)) {
     selectedTaskId = taskId;
     executionUiState.expandedLabelBucket = null;
     rememberEffectiveLabelSelection(taskId, labelId || '');
-    executionState = await api(`/api/daily-execution/${dateInput.value}/tasks/start`, {method:'POST', body:JSON.stringify({task_id:taskId, label_id:labelId || null})});
+    let duplicateChoice = null;
+    if (labelId === 'effective_english_words' && executionState.duration_records?.length) {
+      duplicateChoice = await chooseVocabularySource();
+      if (!duplicateChoice) return;
+    }
+    executionState = await api(`/api/daily-execution/${dateInput.value}/tasks/start`, {method:'POST', body:JSON.stringify({task_id:taskId, label_id:labelId || null, duplicate_choice:duplicateChoice})});
     renderExecutionState(executionState);
     toast(successMessage);
   }
@@ -963,6 +983,7 @@ if (page === 'execute') {
     const labelLabel = segment.segment_kind === 'effective' ? '细分' : '标签';
     return `
       <article class="timeline-card ${isDraft ? 'draft' : ''}" data-segment-id="${segment.id}">
+        <p class="muted">${!isDraft && segment.included === false ? '此段保留记录，不计入统计' : ''}</p>
         <div class="timeline-form">
           <label>开始<input class="segment-start" type="datetime-local" value="${toDateTimeInputValue(segment.started_at)}"></label>
           <label>结束<input class="segment-end" type="datetime-local" value="${toDateTimeInputValue(segment.ended_at)}"></label>
@@ -1006,7 +1027,7 @@ if (page === 'execute') {
             <div>
               <strong>${esc(segment.task_title)}</strong>
               <p class="muted">${segment.segment_kind === 'effective' ? esc(segment.label_name ? `有效时间 / ${segment.label_name}` : '有效时间') : esc(segment.label_name || '标签')} · 已累计 ${formatMinutes(segment.minutes)}</p>
-              <p class="muted">${segment.started_at.replace('T', ' ')}</p>
+              <p class="muted">${segment.included ? '计入统计' : '保留记录，不计入统计'} · ${segment.started_at.replace('T', ' ')}</p>
             </div>
             <div class="timeline-actions"><button class="ghost-button active-segment-stop" type="button">停止</button></div>
           </article>
@@ -1043,6 +1064,10 @@ if (page === 'execute') {
         ended_at: fromDateTimeInputValue($('.segment-end', row).value),
       };
       if (segmentKind === 'effective') rememberEffectiveLabelSelection(body.task_id, body.label_id || '');
+      if (body.label_id === 'effective_english_words' && executionState.duration_records?.length) {
+        body.duplicate_choice = await chooseVocabularySource();
+        if (!body.duplicate_choice) return;
+      }
       try {
         executionState = row.dataset.segmentId === 'draft'
           ? await api(`/api/daily-execution/${dateInput.value}/segments`, {method:'POST', body:JSON.stringify(body)})
@@ -1091,7 +1116,7 @@ if (page === 'execute') {
     const active = executionState?.active_segment?.task_id === task.id;
     const selected = selectedExecutionTask();
     const selectedClass = selected && String(selected.id) === String(task.id) ? 'selected' : '';
-    const disabled = Number(task.estimated_minutes) === 0 ? 'disabled' : '';
+    const disabled = '';
     const effectiveLabels = effectiveLabelsForTask(task.id);
     const selectedLabelId = selectedEffectiveLabelId(task.id);
     const selectedLabel = effectiveLabels.find(label => label.id === selectedLabelId);
@@ -1126,6 +1151,9 @@ if (page === 'execute') {
           <span>有效 ${task.actual_minutes || 0} 分</span>
           <span>总计 ${board ? formatMinutes(board.total_minutes) : '0 分'}</span>
         </div>
+        <div class="task-type-controls"><label>事项类型<select class="execute-task-type">${taskTypeOptions(task.task_type)}</select></label>
+        ${task.task_type === 'habit' ? `<label>当天状态<select class="habit-status"><option value="">未记录</option>${['done','missed','rest'].map(value => `<option value="${value}" ${task.habit_status === value ? 'selected' : ''}>${habitStatusLabel(value)}</option>`).join('')}</select></label>` : ''}
+        ${task.category === 'english' ? '<button class="ghost-button vocabulary-open" type="button">背单词 · 录入分钟</button>' : ''}</div>
         ${inlineLabelPicker}
       </article>
     `;
@@ -1147,7 +1175,7 @@ if (page === 'execute') {
 
   function bindExecutionTaskCardEvents(root=document) {
     $$('.execution-task-card', root).forEach(card => card.onclick = event => {
-      if (event.target.closest('.task-start-button')) return;
+      if (event.target.closest('button, select, input')) return;
       if (event.target.closest('.effective-label-button')) return;
       selectedTaskId = Number(card.dataset.executionTaskId);
       renderExecutionState(executionState);
@@ -1171,19 +1199,19 @@ if (page === 'execute') {
   }
 
   function executionSubmitCardHtml(task) {
-    const canComplete = !task.is_sub && (Number(task.estimated_minutes) > 0 || Number(task.actual_minutes || 0) > 0);
+    const canComplete = task.task_type !== 'habit';
     const disabled = !canComplete ? 'disabled' : '';
     const board = (executionState?.task_execution_board || []).find(item => Number(item.task_id) === Number(task.id));
     const totalMinutes = Number(board?.total_minutes || task.actual_minutes || 0);
     const summary = task.is_sub
-      ? `<span>有效 ${task.actual_minutes || 0} 分</span><span>总计 ${totalMinutes} 分</span><span>${task.completed ? '已完成' : '未完成'}</span>`
+      ? `<span>有效 ${task.actual_minutes || 0} 分</span><span>总计 ${totalMinutes} 分</span><span>${task.task_type === 'habit' ? habitStatusLabel(task.habit_status) : task.completed ? '已完成' : '未完成'}</span>`
       : `<span>计划 ${task.estimated_minutes} 分</span><span>有效 ${task.actual_minutes || 0} 分</span><span>总计 ${totalMinutes} 分</span>`;
     return `
       <article class="task-card ${task.completed ? 'completed' : ''}" data-submit-task-id="${task.id}">
         <input class="task-check execute-submit-check" type="checkbox" ${task.completed ? 'checked' : ''} ${disabled} aria-label="完成任务">
         <div class="task-content">
           <div class="task-title-row"><strong>${esc(task.title)}</strong></div>
-          <div class="task-meta submit-task-meta"><span>${esc(settings?.task_titles?.[task.category] || task.category)}</span>${summary}</div>
+          <div class="task-meta submit-task-meta"><span>${esc(settings?.task_titles?.[task.category] || task.category)}</span>${summary}${task.task_type === 'habit' ? `<span>${habitStatusLabel(task.habit_status)}</span>` : ''}</div>
         </div>
       </article>
     `;
@@ -1252,7 +1280,7 @@ if (page === 'execute') {
     if (zeroMinuteMainTasks.length) {
       sections.push(executionTaskSectionHtml(
         'zero-main',
-        '今日暂不执行主航线',
+        '今日未安排（随时可以开始）',
         `${zeroMinuteMainTasks.length} 项`,
         zeroMinuteMainTasks,
         zeroMainCollapsed,
@@ -1275,6 +1303,15 @@ if (page === 'execute') {
       renderExecutionTasks();
     });
     bindExecutionTaskCardEvents(list);
+    $$('.vocabulary-open', list).forEach(button => button.onclick = () => openVocabulary());
+    $$('.execute-task-type, .habit-status', list).forEach(input => input.onchange = async () => {
+      if (!input.value) return;
+      const taskId = input.closest('[data-execution-task-id]').dataset.executionTaskId;
+      try {
+        await api(`/api/tasks/${taskId}`, {method:'PATCH', body:JSON.stringify(input.classList.contains('habit-status') ? {habit_status:input.value} : {task_type:input.value})});
+        await loadExecution();
+      } catch (error) { toast(error.message); }
+    });
   }
 
   function renderExecutionLabelButtons(bucket, rootId) {
@@ -1375,6 +1412,7 @@ if (page === 'execute') {
     renderTaskExecutionBoard($('#execute-task-board'), result.task_execution_board, '<p class="muted">开始记录后，这里会出现每个任务的时间结构。</p>');
     renderTimelineSection();
     renderExecutionSubmitList();
+    renderVocabulary();
   }
 
   async function loadExecution() {
@@ -1382,6 +1420,74 @@ if (page === 'execute') {
       renderExecutionState(await api(`/api/daily-execution/${dateInput.value}`));
     } catch (error) { toast(error.message); }
   }
+
+  let editingVocabularyId = null;
+  function openVocabulary(record=null) {
+    editingVocabularyId = record?.id || null;
+    const form = $('#vocabulary-form');
+    form.minutes.value = record?.minutes || '';
+    form.duplicate_choice.value = '';
+    form.querySelector('[type=submit]').textContent = record ? '保存修改' : '保存时长';
+    $('#vocabulary-panel').classList.remove('hidden');
+    renderVocabulary();
+    form.minutes.focus();
+  }
+  function renderVocabulary() {
+    const words = (executionState?.segments || []).filter(row => row.segment_kind === 'effective' && row.label_id === 'effective_english_words');
+    $('#vocabulary-choice-label').classList.toggle('hidden', !words.length);
+    $('#vocabulary-form').duplicate_choice.required = Boolean(words.length);
+    const records = executionState?.duration_records || [];
+    const timerMinutes = words.filter(row => row.included).reduce((sum, row) => sum + row.minutes, 0);
+    const manualMinutes = records.filter(row => row.included).reduce((sum, row) => sum + row.minutes, 0);
+    $('#vocabulary-summary').textContent = `${dateInput.value} · 背单词合计 ${manualMinutes + timerMinutes} 分（墨墨 ${manualMinutes} / 计时 ${timerMinutes}）。只有分钟数，不生成时间段。`;
+    $('#vocabulary-record-list').innerHTML = records.map(row => `<div class="duration-row"><span>墨墨 ${row.minutes} 分 · ${row.included ? '计入统计' : '保留记录，不计入统计'}</span><button type="button" class="ghost-button vocabulary-edit" data-id="${row.id}">修改</button><button type="button" class="ghost-button vocabulary-delete" data-id="${row.id}">删除</button></div>`).join('');
+    $$('.vocabulary-edit').forEach(button => button.onclick = () => openVocabulary(records.find(row => String(row.id) === button.dataset.id)));
+    $$('.vocabulary-delete').forEach(button => button.onclick = async () => {
+      if (!await confirmAction('删除这条背单词时长记录？', {title:'删除时长记录', confirmLabel:'删除'})) return;
+      try {
+        renderExecutionState(await api(`/api/daily-execution/${dateInput.value}/vocabulary/${button.dataset.id}`, {method:'DELETE'}));
+        editingVocabularyId = null;
+        $('#vocabulary-form').reset();
+        toast('记录已删除');
+      } catch (error) { toast(error.message); }
+    });
+  }
+  $('#vocabulary-shortcut').onclick = () => openVocabulary();
+  $('#vocabulary-form').onsubmit = async event => {
+    event.preventDefault();
+    const form = event.target;
+    const submit = form.querySelector('[type=submit]');
+    submit.disabled = true;
+    try {
+      const path = `/api/daily-execution/${dateInput.value}/vocabulary${editingVocabularyId ? '/' + editingVocabularyId : ''}`;
+      renderExecutionState(await api(path, {method:editingVocabularyId ? 'PUT' : 'POST', body:JSON.stringify({minutes:Number(form.minutes.value), duplicate_choice:form.duplicate_choice.value || null})}));
+      editingVocabularyId = null;
+      form.reset();
+      submit.textContent = '保存时长';
+      toast('背单词时长已保存');
+    } catch (error) { toast(error.message); }
+    finally { submit.disabled = false; }
+  };
+  $('#temporary-open').onclick = () => {
+    const form = $('#temporary-form');
+    form.category.innerHTML = Object.entries(settings.task_titles).map(([value, label]) => `<option value="${esc(value)}">${esc(label)}</option>`).join('');
+    form.classList.remove('hidden');
+    form.elements.namedItem('title').focus();
+  };
+  $('#temporary-form').category.onchange = event => { $('#temporary-form').task_type.value = event.target.value === 'rehab' ? 'habit' : 'daily_goal'; };
+  $('#temporary-form').onsubmit = async event => {
+    event.preventDefault();
+    const form = event.target;
+    try {
+      const result = await api(`/api/daily-execution/${dateInput.value}/tasks`, {method:'POST', body:JSON.stringify({title:form.elements.namedItem('title').value, category:form.category.value, task_type:form.task_type.value})});
+      selectedTaskId = result.tasks[result.tasks.length - 1].id;
+      renderExecutionState(result);
+      form.classList.add('hidden');
+      form.reset();
+      toast('活动已添加，点开始即可记录');
+    } catch (error) { toast(error.message); }
+  };
+  $$('.record-cancel').forEach(button => button.onclick = () => button.closest('.record-form').classList.add('hidden'));
 
   $('#execute-stop').onclick = async () => {
     try {
@@ -1426,6 +1532,10 @@ if (page === 'execute') {
     bindSharedCalendarTrigger(dateButton, () => dateInput.value, async nextDate => {
       dateInput.value = nextDate;
       selectedTaskId = null;
+      editingVocabularyId = null;
+      $('#vocabulary-form').reset();
+      $('#vocabulary-panel').classList.add('hidden');
+      $('#temporary-form').classList.add('hidden');
       showDraftSegment = false;
       executionUiState = defaultExecutionUiState();
       updateDateTrigger(dateButton, nextDate);
@@ -1540,6 +1650,7 @@ if (page === 'review') {
     $('#daily-total').textContent = `共 ${result.main_task_count} 项主任务`;
     $('#daily-main-minutes').textContent = `${result.main_planned_minutes} 分`;
     $('#daily-main-actual').textContent = `实际 ${result.main_actual_minutes} 分`;
+    $('#daily-vocabulary-summary').textContent = `英语 ${result.english_minutes || 0} 分，其中背单词 ${result.vocabulary_minutes || 0} 分（已包含在实际中）`;
     $('#daily-sub-minutes').textContent = `${result.sub_actual_minutes} 分`;
     form.mood.value = result.review.mood;
     form.hardest_point.value = result.review.hardest_point;
@@ -1625,6 +1736,7 @@ if (page === 'weekly') {
     $('#metric-rate').textContent = `${Math.round(result.completion_rate * 100)}%`;
     $('#metric-completed').innerHTML = `<div>${result.completed_count}项 (主)</div><div style="font-size:16px;color:var(--muted)">${result.completed_sub_count || 0}项 (副)</div>`;
     $('#metric-total').textContent = `共 ${result.task_count} 项主任务`;
+    $('#weekly-vocabulary-summary').textContent = `英语 ${result.english_minutes || 0} 分，其中背单词 ${result.vocabulary_minutes || 0} 分（已包含在实际中）`;
     $('#metric-time').innerHTML = `<div>${result.actual_minutes}分 (主)</div><div style="font-size:16px;color:var(--muted)">${result.actual_sub_minutes || 0}分 (副)</div>`;
     $('#metric-planned').textContent = `主计划 ${result.planned_minutes} 分`;
     $('#metric-days').textContent = result.review_days;

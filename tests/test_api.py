@@ -31,7 +31,7 @@ def make_production_client(database_path, backup_dir):
 def editable_tasks(draft):
     editable_fields = {
         "id", "title", "category", "estimated_minutes", "priority",
-        "completion_criteria", "reason", "source", "sub_category", "is_sub",
+        "completion_criteria", "reason", "source", "sub_category", "is_sub", "task_type",
     }
     return [{key: value for key, value in task.items() if key in editable_fields} for task in draft["tasks"]]
 
@@ -73,6 +73,8 @@ def test_unfinished_tasks_enter_review_pool_without_automatic_rollover(tmp_path)
         "date": first_day.isoformat(), "energy": "minimum", "available_minutes": 90, "day_type": "normal"
     }).json()
     first_tasks = set_main_minutes(editable_tasks(first), {"math": 30, "english": 20, "computer": 30, "rehab": 10})
+    for task in first_tasks:
+        task["task_type"] = "todo"
     client.put(f"/api/daily-plans/{first_day.isoformat()}", json={"tasks": first_tasks})
     client.post(f"/api/daily-plans/{first_day.isoformat()}/approve")
 
@@ -80,7 +82,7 @@ def test_unfinished_tasks_enter_review_pool_without_automatic_rollover(tmp_path)
         "date": second_day.isoformat(), "energy": "minimum", "available_minutes": 90, "day_type": "normal"
     }).json()
     pool = client.get("/api/carryovers").json()
-    assert len(pool) == len([t for t in first["tasks"] if not t["is_sub"]])
+    assert len(pool) == len(first["tasks"])
     assert not {item["title"] for item in first["tasks"] if not item["is_sub"]} & {item["title"] for item in second["tasks"] if item.get("source") == "carryover"}
 
 
@@ -230,7 +232,7 @@ def test_daily_review_summarizes_plan_and_saved_review(tmp_path):
     assert body["main_task_count"] == len([task for task in draft["tasks"] if not task["is_sub"]])
     assert body["main_completed_count"] == 1
     assert body["main_planned_minutes"] == sum(task["estimated_minutes"] for task in draft["tasks"] if not task["is_sub"])
-    assert body["main_actual_minutes"] == main_task["estimated_minutes"]
+    assert body["main_actual_minutes"] == 0 # 勾完成不虚构时长
     assert body["sub_actual_minutes"] == 30
     assert body["review"]["mood"] == "平稳"
     assert body["review"]["hardest_point"] == "等 AI 时想刷视频"
@@ -355,6 +357,7 @@ def test_explicitly_rescheduled_task_is_added_on_target_day(tmp_path):
         "date": day1.isoformat(), "energy": "minimum", "available_minutes": 90, "day_type": "normal"
     }).json()
     first_tasks = set_main_minutes(editable_tasks(first), {"math": 30, "english": 20, "computer": 30, "rehab": 10})
+    first_tasks[0]["task_type"] = "todo"
     client.put(f"/api/daily-plans/{day1.isoformat()}", json={"tasks": first_tasks})
     client.post(f"/api/daily-plans/{day1.isoformat()}/approve")
     client.post("/api/daily-plans/draft", json={
@@ -387,13 +390,14 @@ def test_submit_flow_and_sub_route_rules(tmp_path):
 
     res1 = client.patch(f"/api/tasks/{main_task['id']}", json={"completed": True})
     assert res1.json()["completed"] is True
-    assert res1.json()["actual_minutes"] == main_task["estimated_minutes"]
+    assert res1.json()["actual_minutes"] == 0
 
     res2 = client.patch(f"/api/tasks/{sub_task['id']}", json={"actual_minutes": 29})
     assert res2.json()["completed"] is False
 
     res3 = client.patch(f"/api/tasks/{sub_task['id']}", json={"actual_minutes": 30})
-    assert res3.json()["completed"] is True
+    assert res3.json()["completed"] is False # 0 目标不自动完成
+    client.patch(f"/api/tasks/{sub_task['id']}", json={"completed": True})
 
     review = client.get("/api/weekly-review").json()
     assert review["task_count"] == 0
@@ -593,7 +597,7 @@ def test_execution_submit_syncs_effective_minutes_and_sub_completion(tmp_path):
     synced_sub = next(task for task in plan["tasks"] if task["id"] == sub_task["id"])
     assert synced_main["actual_minutes"] == 70
     assert synced_sub["actual_minutes"] == 30
-    assert synced_sub["completed"] is True
+    assert synced_sub["completed"] is False
 
 
 def test_execution_segment_can_be_updated_deleted_and_cannot_overlap(tmp_path):
@@ -664,7 +668,7 @@ def test_saving_draft_keeps_original_available_time_capacity(tmp_path):
     assert restored.json()["available_minutes"] == 180
 
 
-def test_saving_draft_rejects_main_route_minutes_over_available_time(tmp_path):
+def test_saving_draft_allows_main_route_minutes_over_old_available_time(tmp_path):
     client = make_client(tmp_path)
     today = date.today().isoformat()
     draft = client.post("/api/daily-plans/draft", json={
@@ -672,7 +676,7 @@ def test_saving_draft_rejects_main_route_minutes_over_available_time(tmp_path):
     }).json()
     editable_fields = {
         "id", "title", "category", "estimated_minutes", "priority",
-        "completion_criteria", "reason", "source", "sub_category", "is_sub",
+        "completion_criteria", "reason", "source", "sub_category", "is_sub", "task_type",
     }
     tasks = [{key: value for key, value in task.items() if key in editable_fields} for task in draft["tasks"]]
     main_tasks = [task for task in tasks if not task["is_sub"]]
@@ -681,8 +685,8 @@ def test_saving_draft_rejects_main_route_minutes_over_available_time(tmp_path):
     main_tasks[2]["estimated_minutes"] = 0
 
     saved = client.put(f"/api/daily-plans/{today}", json={"tasks": tasks})
-    assert saved.status_code == 422
-    assert saved.json()["detail"] == "单个主航线任务不能超过当天可用时间"
+    assert saved.status_code == 200
+    assert saved.json()["tasks"][0]["estimated_minutes"] == tasks[0]["estimated_minutes"]
 
 
 def test_saving_draft_allows_single_main_task_to_use_full_available_time(tmp_path):
@@ -693,7 +697,7 @@ def test_saving_draft_allows_single_main_task_to_use_full_available_time(tmp_pat
     }).json()
     editable_fields = {
         "id", "title", "category", "estimated_minutes", "priority",
-        "completion_criteria", "reason", "source", "sub_category", "is_sub",
+        "completion_criteria", "reason", "source", "sub_category", "is_sub", "task_type",
     }
     tasks = [{key: value for key, value in task.items() if key in editable_fields} for task in draft["tasks"]]
     for task in tasks:
@@ -709,7 +713,7 @@ def test_saving_draft_allows_single_main_task_to_use_full_available_time(tmp_pat
     assert planned_math["estimated_minutes"] == 300
 
 
-def test_saving_draft_rejects_single_main_task_above_available_time(tmp_path):
+def test_saving_draft_allows_single_main_task_above_old_available_time(tmp_path):
     client = make_client(tmp_path)
     today = date.today().isoformat()
     draft = client.post("/api/daily-plans/draft", json={
@@ -717,7 +721,7 @@ def test_saving_draft_rejects_single_main_task_above_available_time(tmp_path):
     }).json()
     editable_fields = {
         "id", "title", "category", "estimated_minutes", "priority",
-        "completion_criteria", "reason", "source", "sub_category", "is_sub",
+        "completion_criteria", "reason", "source", "sub_category", "is_sub", "task_type",
     }
     tasks = [{key: value for key, value in task.items() if key in editable_fields} for task in draft["tasks"]]
     for task in tasks:
@@ -726,8 +730,8 @@ def test_saving_draft_rejects_single_main_task_above_available_time(tmp_path):
         task["estimated_minutes"] = 301 if task["category"] == "math" else 0
 
     saved = client.put(f"/api/daily-plans/{today}", json={"tasks": tasks})
-    assert saved.status_code == 422
-    assert saved.json()["detail"] == "单个主航线任务不能超过当天可用时间"
+    assert saved.status_code == 200
+    assert saved.json()["tasks"][0]["estimated_minutes"] == tasks[0]["estimated_minutes"]
 
 
 def test_zero_minute_main_tasks_are_excluded_from_daily_and_weekly_review_counts(tmp_path):
@@ -789,8 +793,7 @@ def test_zero_minute_main_tasks_do_not_enter_carryover_pool(tmp_path):
     carryovers = client.get("/api/carryovers")
     assert carryovers.status_code == 200
     pool = carryovers.json()
-    assert len(pool) == 2
-    assert {item["estimated_minutes"] for item in pool} == {20, 60}
+    assert pool == [] # 习惯、每日目标均不欠到次日
 
 
 def test_weekly_review_returns_report_archive_and_prompt(tmp_path):

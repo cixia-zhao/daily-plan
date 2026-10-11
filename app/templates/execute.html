@@ -24,6 +24,7 @@
     <div><p class="step">01 · 白天执行</p><h2>一次只追踪一个激活项</h2></div>
     <span id="execute-active-badge" class="status">当前空闲</span>
   </div>
+  <p class="muted">习惯记录做了、没做或休息；每日目标不会欠到明天。具体待办完成后请主动勾选。</p>
   <div class="execute-layout">
     <div class="execute-main">
       <div id="execute-mobile-toolbar" class="execution-mobile-toolbar hidden">
@@ -37,6 +38,23 @@
       <div id="mobile-interrupt-panel" class="execution-mobile-label-panel hidden">
         <div id="mobile-interrupt-label-list" class="pill-list"></div>
       </div>
+      <div class="actions"><button id="temporary-open" class="secondary" type="button">临时添加活动</button><button id="vocabulary-shortcut" class="ghost-button" type="button">背单词 · 录入分钟</button></div>
+      <form id="temporary-form" class="record-form hidden">
+        <h3>临时添加</h3><p class="muted">不改原计划，也不删除已有记录。添加后可以直接开始。</p>
+        <label>活动名称<input name="title" maxlength="100" required></label>
+        <label>归入类别<select name="category"></select></label>
+        <label>事项类型<select name="task_type"><option value="daily_goal">每日目标</option><option value="habit">习惯</option><option value="todo">具体待办</option></select></label>
+        <button class="primary" type="submit">添加活动</button><button class="ghost-button record-cancel" type="button">取消</button>
+      </form>
+      <section id="vocabulary-panel" class="record-form hidden">
+        <h3>背单词</h3><p id="vocabulary-summary" class="muted"></p>
+        <form id="vocabulary-form">
+          <label>墨墨学习分钟数<input name="minutes" type="number" min="1" max="1440" inputmode="numeric" required></label>
+          <label id="vocabulary-choice-label" class="hidden">当天背单词计时与墨墨记录<select name="duplicate_choice"><option value="">请选择保留方式</option><option value="both">分别学习，保留两份</option><option value="manual">只保留墨墨录入</option><option value="timer">只保留背单词计时</option></select></label>
+          <button class="primary" type="submit">保存时长</button><button class="ghost-button record-cancel" type="button">取消</button>
+        </form>
+        <div id="vocabulary-record-list" class="stack"></div>
+      </section>
       <div id="execute-task-list" class="execution-task-list"></div>
       <div class="execution-label-zone">
         <div class="execution-label-group">

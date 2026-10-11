@@ -10,8 +10,8 @@
       <div class="details-content">
         <div class="form-grid"><label>当前阶段<input name="current_stage" required maxlength="100"></label><label>AI 项目每周上限<input name="ai_project_weekly_frequency" type="number" min="0" max="7"></label><label>项目起始日<input name="project_start_date" type="date" required></label></div>
         <label class="alert-check"><input name="rehab_enabled" type="checkbox"><span><strong>主航线包含运动</strong><small>关闭后，草稿不再自动生成运动；膝盖异常日仍由本地安全规则自动停用。</small></span></label>
-        <h2>主航线精力档预算（分钟）</h2><div class="form-grid"><label>保底档总时间<input name="budget_minimum" type="number" min="30" max="720" step="15" required></label><label>普通档总时间<input name="budget_normal" type="number" min="30" max="720" step="15" required></label><label>充足档总时间<input name="budget_ample" type="number" min="30" max="720" step="15" required></label></div>
-        <h2>主航线草稿默认分钟</h2><p class="muted">控制数学、英语、408、运动默认分钟；默认是 0，可按当天情况修改。</p><div id="draft-main-minute-fields" class="form-grid"></div>
+        <details><summary>历史精力档参考值（不限制目标）</summary><div class="form-grid"><label>保底档总时间<input name="budget_minimum" type="number" min="30" max="720" step="15" required></label><label>普通档总时间<input name="budget_normal" type="number" min="30" max="720" step="15" required></label><label>充足档总时间<input name="budget_ample" type="number" min="30" max="720" step="15" required></label></div></details>
+        <h2>主航线草稿默认分钟</h2><p class="muted">控制晨间数学、英语、408、运动默认目标；默认是 0，目标没有合计上限。</p><div id="draft-main-minute-fields" class="form-grid"></div>
         <h2>任务名称</h2><div id="task-title-fields" class="form-grid"></div>
       </div>
     </details>
