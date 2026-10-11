@@ -1,0 +1,134 @@
+/* 今天页：清晰的内容层级，移动端清单，平板侧边概览。 */
+body[data-page=today] { background: var(--paper); }
+body[data-page=today] main { max-width: 980px; padding: 20px 0 16px; }
+.today-plan-shell { background: transparent; border: 0; padding: 0; margin: 0; }
+#plan-section .section-heading { align-items: center; margin-bottom: 18px; gap: 8px; }
+#plan-section .section-heading h2 { font: 500 28px/1.25 Georgia,"Noto Serif CJK SC","Songti SC","STSong",serif; letter-spacing: -.04em; }
+.plan-day-caption { margin: 0 0 4px; color: var(--muted); font-size: 12px; }
+#plan-section .plan-status-actions { display: flex; align-items: center; gap: 8px; }
+#plan-section .plan-status-actions .status { display: none; }
+#adjust-checkin { min-height: 44px; color: var(--muted); font-weight: 500; border: 0; padding: 8px 0 8px 10px; }
+#adjust-checkin:hover { background: transparent; color: var(--accent); }
+.plan-overview { display: flex; align-items: center; justify-content: space-between; padding: 10px 16px; margin-bottom: 12px; border-radius: 8px; background: #e3dacc; }
+.plan-overview > div:first-child { display: flex; align-items: baseline; gap: 14px; }
+.overview-label { font-size: 12px; color: #5e5d59; }
+#plan-total-display { font-size: 24px; line-height: 1.2; font-weight: 650; letter-spacing: -.04em; color: #141413; font-variant-numeric: tabular-nums; }
+#plan-total-display small { font-size: 12px; font-weight: 400; letter-spacing: 0; }
+.overview-count { margin: 0; font-size: 12px; color: #5e5d59; }
+.overview-note { display: none; }
+.plan-route-tabs { display: flex; align-items: center; gap: 24px; margin: 0; padding: 0 4px; }
+.plan-route-tab { position: relative; min-height: 44px; padding: 8px 0; border: 0; border-radius: 0; background: transparent; color: var(--muted); font-size: 14px; }
+.plan-route-tab.active { color: var(--ink); font-weight: 650; }
+.plan-route-tab.active::after { content: ''; position: absolute; bottom: 0; left: 0; right: 0; height: 2px; background: var(--accent); border-radius: 2px; }
+#compact-sub-count { padding: 1px 6px; margin-left: 4px; border-radius: 5px; background: var(--soft); font-size: 11px; }
+#plan-section .columns-layout { display: block; margin: 0; }
+#plan-section .column-title, #plan-section .sub-route-details > summary { display: none; }
+#plan-section[data-route=main] .sub-column, #plan-section[data-route=sub] .main-column { display: none; }
+#plan-section .sub-route-details { border: 0; background: transparent; }
+#plan-section .sub-route-details-content { padding: 0; border: 0; display: block; }
+#plan-section .task-list { display: block; border: 0; border-radius: 0; background: transparent; overflow: clip; }
+#plan-section .task-archive-card { display: grid; grid-template-columns: 34px minmax(0,1fr) 44px; align-items: center; gap: 10px; min-height: 64px; padding: 8px 12px; border: 0; border-bottom: 1px solid #e8e6dc; border-radius: 0; background: transparent; box-shadow: none; }
+#plan-section .task-archive-card:last-of-type { border-bottom: 0; }
+#plan-section .task-archive-card::before { display: none; }
+#plan-section .task-content { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.task-name-group { min-width: 0; flex: 1; }
+#plan-section .task-title-row { min-width: 0; }
+#plan-section .task-archive-title { font: 600 17px/1.3 "PingFang SC","Microsoft YaHei",system-ui,sans-serif; letter-spacing: -.025em; }
+#plan-section input.task-archive-title { width: 100%; min-height: 24px; padding: 0; border: 0; background: transparent; }
+#plan-section input.task-archive-title:focus { box-shadow: none; text-decoration: underline; text-underline-offset: 4px; }
+.task-kind-caption { display: block; margin-top: 2px; font-size: 11px; line-height: 1.3; color: var(--muted); }
+.subject-icon { display: grid; place-items: center; width: 32px; height: 32px; border-radius: 10px; background: transparent; color: #5e5d59; font-size: 15px; font-weight: 600; }
+.subject-math { background: transparent; color: #5e5d59; font-size: 21px; }
+.subject-english { background: transparent; color: #5e5d59; }
+.subject-computer { background: transparent; color: #5e5d59; font-size: 11px; }
+.subject-rehab, .subject-writing { background: transparent; color: #5e5d59; font-size: 13px; }
+#plan-section .task-paper-tags { flex: 0 0 auto; font-size: 11px; margin: 0; max-width: 120px; }
+#plan-section .task-paper-tags > span { padding: 0; background: transparent; border-radius: 0; }
+#plan-section .task-paper-tags .execution-locked { display: none; }
+#plan-section .task-paper-tags label { background: transparent; color: var(--muted); padding: 0; gap: 4px; }
+#plan-section .task-paper-tags input { width: 52px; min-height: 44px; padding: 0 3px; border: 1px solid transparent; border-radius: 8px; background: #f5f4ed; font-size: 17px; font-weight: 600; color: var(--ink); font-variant-numeric: tabular-nums; }
+#plan-section .task-paper-tags input:focus { border-color: var(--accent); }
+.task-edit-open { display: grid; place-items: center; width: 44px; height: 44px; padding: 0; border: 0; border-radius: 8px; color: #5e5d59; background: transparent; }
+.task-edit-open svg { fill: currentColor; }
+.task-edit-open:hover, .task-edit-open:focus-visible { background: var(--soft); color: var(--ink); }
+#plan-section .route-placeholder { display: none; }
+#plan-section .route-placeholder:has(.placeholder-target:not(:disabled)) { display: block; margin: 8px; min-height: 44px; }
+#plan-section .plan-footer { display: block; border: 0; margin-top: 12px; padding: 0; }
+#time-summary { display: none; }
+#plan-section .actions, #plan-section .action-buttons { width: 100%; }
+#plan-section .action-buttons { display: flex; gap: 12px; }
+#plan-section .action-buttons > button { min-height: 48px; border-radius: 12px; }
+#approve-plan, #open-execution-desk { flex: 2; background: var(--ink); border-color: var(--ink); color: var(--paper); box-shadow: none; }
+#save-draft { flex: 1; background: transparent; color: var(--ink); border: 1px solid var(--line); font-weight: 500; }
+#plan-section .plan-methods { margin-top: 6px; border: 0; background: transparent; color: var(--muted); }
+#plan-section .plan-methods summary { min-height: 32px; padding: 6px 4px; font-size: 12px; font-weight: 400; }
+.task-edit-dialog { width: min(460px,calc(100% - 24px)); max-height: calc(100dvh - 32px); overflow: auto; padding: 20px; border: 1px solid var(--line); border-radius: 20px; background: var(--surface); color: var(--ink); box-shadow: var(--shadow); }
+.task-edit-dialog::backdrop { background: rgba(20,20,19,.3); }
+.task-edit-dialog[open] { display: grid; gap: 18px; }
+.task-edit-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.task-edit-heading h3 { font-size: 20px; }
+.task-edit-heading button { min-height: 44px; padding: 8px 14px; border: 0; border-radius: 9px; background: var(--accent-soft); color: var(--accent); }
+.task-edit-dialog .task-type-field { display: grid; gap: 8px; }
+.task-edit-dialog select { width: 100%; min-width: 0; min-height: 44px; }
+#plan-section .task-edit-dialog .task-controls { display: flex; justify-content: flex-start; gap: 8px; border: 0; padding: 0; }
+#plan-section .task-edit-dialog button { min-height: 44px; }
+#plan-section .task-edit-dialog .task-archive-note { width: 100%; border: 1px solid var(--line); background: #f5f4ed; border-radius: 9px; padding: 10px; }
+#plan-section .route-target { grid-column: 2 / -1; min-height: 44px; background: var(--accent-soft); border: 0; border-radius: 8px; color: var(--accent); }
+/* 晨间同一视觉系统，四项目标直接编辑，其余保持轻量。 */
+#today-checkin-stage .hero { margin: 0 0 12px; gap: 10px; }
+#today-checkin-stage .hero h1 { font: 500 26px/1.2 Georgia,"Noto Serif CJK SC","Songti SC","STSong",serif; margin-bottom: 4px; }
+#today-checkin-stage .hero p { font-size: 12px; }
+#today-checkin-stage .checkin-panel { max-width: none; padding: 16px; margin-top: 0; border-radius: 16px; }
+#today-checkin-stage .section-heading { margin-bottom: 12px; }
+#today-checkin-stage .step, #checkin-form > h3 { display: none; }
+#checkin-form { gap: 10px; }
+#checkin-form .form-grid { grid-template-columns: repeat(2,minmax(0,1fr)); gap: 10px; }
+#checkin-form .segmented { grid-template-columns: repeat(3,minmax(0,1fr)); gap: 6px; background: #f0eee6; padding: 4px; border-radius: 12px; }
+#checkin-form .segmented label span { min-height: 44px; padding: 8px; text-align: center; border: 0; background: transparent; }
+#checkin-form .segmented label input:checked + span { background: var(--surface); color: var(--accent); box-shadow: none; }
+#checkin-form .segmented small { display: none; }
+#checkin-form input[type=number], #checkin-form select { min-height: 44px; padding: 8px 10px; background: #f5f4ed; }
+#checkin-form .knee-alert-label { align-items: center; padding: 0; }
+@media (min-width: 760px) {
+  .today-plan-shell { display: grid; grid-template-columns: minmax(0,1fr) 240px; column-gap: 32px; align-items: start; }
+  #plan-section .section-heading, #safety-notice, #degraded-notice { grid-column: 1 / -1; }
+  .plan-overview { grid-column: 2; grid-row: 2 / span 4; display: block; padding: 24px; margin: 0; border-radius: 10px; }
+  .plan-overview > div:first-child { display: grid; gap: 16px; }
+  #plan-total-display { font-size: 42px; }
+  .overview-count { margin-top: 12px; }
+  .overview-note { display: flex; gap: 10px; margin-top: 32px; padding-top: 20px; border-top: 0; color: #5e5d59; }
+  .overview-note p { margin: 0; font-size: 12px; line-height: 1.8; }
+  .overview-note-mark { font-size: 22px; }
+  .plan-route-tabs, #plan-section .columns-layout, #plan-section .plan-footer, #plan-section .plan-methods { grid-column: 1; }
+  #plan-section .task-archive-card { min-height: 72px; padding: 12px 16px; }
+  #plan-section .plan-methods { width: 100%; }
+  #today-checkin-stage { max-width: 740px; margin: auto; }
+}
+@media (max-width: 759px) {
+  body[data-page=today] main { width: calc(100% - 32px); padding: 12px 0 8px; }
+  .today-list-stage #plan-section { padding: 0; margin: 0; }
+  #today-checkin-stage .hero { display: grid; gap: 8px; }
+  #today-checkin-stage .hero p { display: none; }
+  #today-checkin-stage .checkin-panel { padding: 12px; }
+  #today-checkin-stage .section-heading h2 { font-size: 18px; }
+  .date-actions { gap: 6px; }
+}
+@media (max-height: 680px) and (max-width: 759px) {
+  body[data-page=today] main { padding-top: 8px; padding-bottom: 4px; }
+  #plan-section .section-heading { margin-bottom: 8px; }
+  #plan-section .section-heading h2 { font-size: 25px; }
+  .plan-overview { padding: 8px 12px; margin-bottom: 6px; }
+  #plan-total-display { font-size: 22px; }
+  #plan-section .task-archive-card { min-height: 56px; padding-top: 6px; padding-bottom: 6px; }
+  #plan-section .plan-footer { margin-top: 10px; }
+  #today-checkin-stage .hero { margin-bottom: 6px; }
+  #today-checkin-stage .section-heading { margin-bottom: 6px; }
+  #checkin-form { gap: 6px; }
+}
+
+#today-checkin-stage .carryover-button { display: inline-flex; align-items: center; gap: 6px; min-height: 44px; font-weight: 500; }
+
+.subject-icon { border-radius: 6px; font-weight: 500; }
+#plan-section .action-buttons > button { border-radius: 8px; }
+#plan-total-display { font-weight: 500; }
+.primary-nav > a, .nav-more summary { font-weight: 500; }

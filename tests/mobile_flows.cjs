@@ -13,6 +13,12 @@ if (!['127.0.0.1','localhost','[::1]'].includes(new URL(baseUrl).hostname)) thro
   await page.goto(`${baseUrl}/?date=2026-10-11`);
   await page.waitForSelector('[data-target-category=math]');
   assert.equal(await page.locator('#available-minutes').count(),0);
+  for(const size of [{width:360,height:640},{width:768,height:1024},{width:1024,height:680}]) {
+    await page.setViewportSize(size);
+    const submit=await page.locator('#checkin-form button[type=submit]').boundingBox();
+    assert(submit.y+submit.height<=size.height,`晨间生成按钮不在首屏: ${JSON.stringify(size)} / ${submit.y+submit.height}`);
+  }
+  await page.setViewportSize({width:390,height:844});
   await page.locator('[data-target-category=math]').fill('240');
   await page.locator('[data-target-category=english]').fill('30');
   await page.locator('[data-target-category=computer]').fill('60');
@@ -20,6 +26,45 @@ if (!['127.0.0.1','localhost','[::1]'].includes(new URL(baseUrl).hostname)) thro
   await noOverflow();
   await page.locator('#checkin-form button[type=submit]').click();
   await page.waitForSelector('#save-draft:visible');
+  // 一屏确认，详细设置保留在弹窗，主副清单切换不叠加高度。
+  for(const size of [{width:360,height:640},{width:390,height:720},{width:768,height:1024},{width:1024,height:680},{width:1280,height:720}]) {
+    await page.setViewportSize(size);
+    await page.locator('.plan-route-tab[data-route=main]').click();
+    await page.evaluate(()=>scrollTo(0,0));
+    const confirm=await page.locator('#approve-plan').boundingBox();
+    assert(await page.evaluate(()=>document.documentElement.scrollHeight<=innerHeight),'默认清单应完整处于一屏');
+    assert(confirm.y+confirm.height<=size.height,`确认按钮不在首屏: ${JSON.stringify(size)} / ${confirm.y+confirm.height}`);
+    assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),'清单横向溢出');
+    await page.locator('.plan-route-tab[data-route=sub]').click();
+    assert.equal(await page.locator('#sub-route-list .task-card:visible').count(),4);
+    const subConfirm=await page.locator('#approve-plan').boundingBox();
+    assert(subConfirm.y+subConfirm.height<=size.height,'副航线确认按钮须在首屏');
+    await page.locator('#sub-route-list .task-edit-open').first().click();
+    await page.waitForSelector('.task-edit-dialog[open]');
+    const select=await page.locator('.task-edit-dialog[open] select').boundingBox();
+    assert(select.width>=140&&select.height>=44,'详细选择框需宽且易点');
+    await page.locator('.task-edit-dialog[open] .task-edit-close').click();
+  }
+  await page.locator('.plan-route-tab[data-route=main]').click();
+  await page.locator('.task-card[data-category=rehab] .task-edit-open').click();
+  await page.locator('.task-edit-dialog[open] .route-swap-button').click();
+  assert.equal(await page.locator('.task-edit-dialog[open]').count(),0);
+  await page.locator('.task-card[data-category=reading] .route-target').click();
+  assert.equal(await page.locator('#main-route-list .task-card[data-category=reading]').count(),1);
+  // 换回原来的分组，保留后续习惯休息验收场景。
+  await page.locator('.task-card[data-category=reading] .task-edit-open').click();
+  await page.locator('.task-edit-dialog[open] .route-swap-button').click();
+  await page.locator('.task-card[data-category=rehab] .route-target').click();
+  await page.locator('.task-card[data-category=math] .task-edit-open').click();
+  await page.locator('.task-edit-dialog[open] .criteria-input').fill('预览编辑的完成标准');
+  await page.locator('.task-edit-dialog[open] .task-edit-close').click();
+  await page.locator('#save-draft').click();
+  await page.waitForFunction(()=>document.querySelector('.task-card[data-category=math] .criteria-input')?.value==='预览编辑的完成标准');
+  await page.locator('.plan-route-tab[data-route=sub]').click();
+  await page.setViewportSize({width:360,height:640});
+  if(process.env.DRAFT_SCREENSHOT_PATH) await page.screenshot({path:process.env.DRAFT_SCREENSHOT_PATH,fullPage:true});
+  await page.locator('.plan-route-tab[data-route=main]').click();
+  await page.setViewportSize({width:390,height:844});
   // 408 is unplanned in final targets; sum becomes 270, goal still stays 0 while running.
   await page.locator('.task-card[data-category=computer] .minutes-input').fill('0');
   await page.locator('#approve-plan').click();

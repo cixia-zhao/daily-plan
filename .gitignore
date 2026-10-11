@@ -13,3 +13,4 @@ backups/
 *.egg-info/
 .vscode/
 .idea/
+data/ui-preview-backups/

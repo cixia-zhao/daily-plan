@@ -1,10 +1,11 @@
 {% extends "base.html" %}
 {% block title %}今天 · 今日航线{% endblock %}
 {% block page %}today{% endblock %}
+{% block page_styles %}<link rel="stylesheet" href="/static/today.css?v={{ static_version('today.css') }}">{% endblock %}
 {% block content %}
 <div id="today-checkin-stage">
 <section class="hero">
-  <div><h1>先看清今天，再决定做什么。</h1><p>填写各项目目标，查看合计，确认后记录实际做了什么。</p></div>
+  <div><h1>今天的目标</h1><p>填写各项目目标，查看合计，确认后记录实际做了什么。</p></div>
   <div class="date-actions">
     <details class="day-options">
       <summary>当天操作</summary>
@@ -51,12 +52,20 @@
 </div>
 
 <div id="today-review-stage" class="hidden">
-<section id="plan-section" class="panel">
-  <div class="section-heading"><div><p class="step">02 · 人工审阅</p><h2 id="plan-title">任务草稿</h2></div><div class="plan-status-actions"><span id="plan-status" class="status">草稿</span><button id="adjust-checkin" class="ghost-button hidden" type="button">调整晨间条件</button></div></div>
+<section id="plan-section" class="panel today-plan-shell">
+  <div class="section-heading"><div><p id="plan-day-caption" class="plan-day-caption"></p><h2 id="plan-title">安排今天</h2></div><div class="plan-status-actions"><span id="plan-status" class="status">草稿</span><button id="adjust-checkin" class="ghost-button hidden" type="button">调整目标</button></div></div>
   <div id="safety-notice" class="notice warning hidden"></div>
   <div id="degraded-notice" class="notice hidden">AI 暂时没有成功响应，当前使用稳定的本地规则版。</div>
 
-  <p class="muted">习惯与每日目标留在当天；只有明确选择“具体待办”的未完成事项进入待审池。</p>
+  <aside class="plan-overview" aria-label="今日目标概览">
+    <div><span class="overview-label">目标合计</span><strong id="plan-total-display">0 <small>分钟</small></strong></div>
+    <p id="plan-main-count" class="overview-count"></p>
+    <div class="overview-note"><p>实际时间在执行台记录。<br>未安排的活动也可以开始。</p></div>
+  </aside>
+  <div class="plan-route-tabs" aria-label="清单分组">
+    <button type="button" class="plan-route-tab active" data-route="main" aria-pressed="true">主要安排</button>
+    <button type="button" class="plan-route-tab" data-route="sub" aria-pressed="false">其他活动 <span id="compact-sub-count"></span></button>
+  </div>
   <div class="columns-layout">
     <div class="main-column">
       <div class="column-title"><h3>主航线</h3><span class="badge">基准/日常</span></div>
@@ -66,7 +75,7 @@
       <details id="sub-route-details" class="sub-route-details">
         <summary><span>副航线</span><span id="sub-route-count" class="badge">0 项</span></summary>
         <div class="sub-route-details-content">
-          <p class="muted">平时先收好；需要调整或补记时再展开。</p>
+
           <div id="sub-route-list" class="task-list"></div>
         </div>
       </details>
@@ -78,12 +87,12 @@
     <div id="draft-actions" class="actions draft-actions">
       <div class="action-buttons">
         <button id="save-draft" class="secondary">保存修改</button>
-        <button id="approve-plan" class="primary">确认今日清单</button>
+        <button id="approve-plan" class="primary">确认计划</button>
         <button id="open-execution-desk" class="primary btn-submit hidden">进入执行台</button>
       </div>
     </div>
   </div>
-  <details class="methods plan-methods"><summary>查看今天的执行方法</summary><ul id="method-list"></ul></details>
+  <details class="methods plan-methods"><summary>执行建议</summary><ul id="method-list"></ul></details>
 </section>
 </div>
 {% endblock %}

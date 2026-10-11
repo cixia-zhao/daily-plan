@@ -368,6 +368,7 @@ if (page === 'today') {
     const showingReview = stage === 'review';
     checkinStage.classList.toggle('hidden', showingReview);
     reviewStage.classList.toggle('hidden', !showingReview);
+    document.body.classList.toggle('today-list-stage', showingReview);
     if (showingReview) window.scrollTo({top: 0, behavior: 'smooth'});
   }
 
@@ -453,7 +454,12 @@ if (page === 'today') {
       return;
     }
     summary.classList.remove('hidden');
-    summary.textContent = `计划合计 ${currentEstimatedMinutes()} 分（目标可以超过，实际另行记录）`;
+    const total = currentEstimatedMinutes();
+    summary.textContent = `计划合计 ${total} 分`;
+    const display = $('#plan-total-display');
+    if (display) display.innerHTML = `${total} <small>分钟</small>`;
+    $('#plan-main-count').textContent = `${currentPlan.tasks.filter(task => !task.is_sub).length} 项主要安排`;
+
   }
 
   function taskPayload() {
@@ -517,7 +523,6 @@ if (page === 'today') {
       <button type="button" class="order-button move-up" ${index === 0 ? 'disabled' : ''} aria-label="上移">↑</button>
       <button type="button" class="order-button move-down" ${index === routeLength - 1 ? 'disabled' : ''} aria-label="下移">↓</button>
       ${coreLocked ? '<span class="route-locked" title="核心主线不可降级">已锁定</span>' : `<button type="button" class="route-swap-button" data-id="${task.id}">调整航线</button>`}
-      <button type="button" class="route-target hidden" data-id="${task.id}">与此项交换</button>
       ${coreLocked ? '' : '<button type="button" class="delete-task" aria-label="删除任务">×</button>'}
     </div>`;
   }
@@ -526,7 +531,10 @@ if (page === 'today') {
     const approved = currentPlan.status !== 'draft';
     const isSub = Boolean(task.is_sub);
     const zeroMinuteMain = approved && !isSub && Number(task.estimated_minutes) === 0;
-    const lead = isSub
+    const subjectMarks = {math:'∑',english:'Aa',computer:'408',rehab:'动',vibe_coding:'⌘',algorithm:'ƒ',reading:'读',writing:'写',ai_project:'AI'};
+    const lead = !approved
+      ? `<span class="subject-icon subject-${esc(task.category)}" aria-hidden="true">${subjectMarks[task.category] || '·'}</span>`
+      : isSub
       ? '<span class="task-bullet">•</span>'
       : zeroMinuteMain
         ? '<span class="task-index" aria-hidden="true">—</span>'
@@ -539,7 +547,7 @@ if (page === 'today') {
     if (!approved) {
       timeBlock = isSub
         ? '<span class="execution-locked">确认后记录实际时间</span>'
-        : `<label class="minutes-label"><input class="minutes-input" type="number" min="0" max="720" value="${task.estimated_minutes}"> 分钟</label>`;
+        : `<label class="minutes-label"><input class="minutes-input" aria-label="${esc(task.title)}目标分钟" type="number" min="0" max="720" value="${task.estimated_minutes}"> 分钟</label>`;
     } else if (isSub) {
       timeBlock = `<label class="actual-minutes-label">实际 <input class="actual-minutes-input" type="number" min="0" value="${task.actual_minutes || 0}"> 分钟</label>`;
     } else if (zeroMinuteMain) {
@@ -549,26 +557,27 @@ if (page === 'today') {
     }
     const titleBlock = approved
       ? `<h3 class="task-archive-title">${esc(task.title)}</h3>`
-      : `<input class="task-archive-title title-input" type="text" value="${esc(task.title)}">`;
+      : `<input class="task-archive-title title-input" type="text" aria-label="${esc(task.title)}名称" value="${esc(task.title)}">`;
     const criteriaBlock = isSub
       ? ''
       : approved
         ? `<p class="task-archive-note">${esc(task.completion_criteria)}</p>`
         : `<input class="task-archive-note criteria-input" type="text" value="${esc(task.completion_criteria)}" placeholder="完成标准">`;
+    const editor = `<dialog class="task-edit-dialog" aria-label="${esc(task.title)}设置">
+      <div class="task-edit-heading"><h3>项目设置</h3><button type="button" class="task-edit-close">完成</button></div>
+      ${subCategoryTabs(task)}
+      ${approved ? `<span>${taskTypeLabel(task.task_type)}</span>` : `<label class="task-type-field">事项类型<select class="task-type-input">${taskTypeOptions(task.task_type)}</select></label>`}
+      ${criteriaBlock}
+      ${taskControls(task, index, routeLength)}
+    </dialog>`;
     return `<article class="task-card task-archive-card ${isSub ? 'sub-route-task' : 'main-route-task'} ${task.completed ? 'completed' : ''}" data-task-id="${task.id}" data-category="${esc(task.category)}">
       ${lead}
-      <div class="task-content">
-        <div class="task-archive-head">
-          <div class="task-title-row">
-            ${titleBlock}
-          </div>
-          ${subCategoryTabs(task)}
-        </div>
-        <div class="task-meta task-paper-tags"><span>${esc(taskTitle(task))}</span>${timeBlock}</div>
-        ${approved ? `<span>${taskTypeLabel(task.task_type)}</span>` : `<label>事项类型<select class="task-type-input">${taskTypeOptions(task.task_type)}</select></label>`}
-        ${criteriaBlock}
+      <div class="task-content"><div class="task-name-group"><div class="task-title-row">${titleBlock}</div><small class="task-kind-caption">${taskTypeLabel(task.task_type)}</small></div>
+        <div class="task-meta task-paper-tags">${timeBlock}</div>
       </div>
-      ${taskControls(task, index, routeLength)}
+      <button type="button" class="task-edit-open" aria-label="${esc(task.title)}设置" title="项目设置"><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><circle cx="5" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/></svg></button>
+      <button type="button" class="route-target hidden" data-id="${task.id}">与此项交换</button>
+      ${editor}
     </article>`;
   }
 
@@ -595,9 +604,11 @@ if (page === 'today') {
     currentPlan = plan;
     swapSourceId = null;
     setTodayStage('review');
-    $('#sub-route-details').open = false;
+    $('#sub-route-details').open = true;
+    selectPlanRoute('main');
     renderSubmitButton(plan);
-    $('#plan-title').textContent = plan.status === 'draft' ? '任务草稿' : '今天就走这条航线';
+    $('#plan-title').textContent = plan.status === 'draft' ? '安排今天' : '今天的清单';
+    $('#plan-day-caption').textContent = `${formatDateLabel(plan.date || dateInput.value)} · ${plan.status === 'draft' ? '草稿' : '已确认'}`;
     $('#draft-actions').classList.remove('hidden');
     $('#save-draft').classList.toggle('hidden', plan.status !== 'draft');
     $('#approve-plan').classList.toggle('hidden', plan.status !== 'draft');
@@ -610,11 +621,22 @@ if (page === 'today') {
     const mainTasks = plan.tasks.filter(task => !task.is_sub);
     const subTasks = plan.tasks.filter(task => task.is_sub);
     $('#sub-route-count').textContent = `${subTasks.length} 项`;
+    $('#compact-sub-count').textContent = `${subTasks.length} 项`;
     renderRoute($('#main-route-list'), mainTasks, false);
     renderRoute($('#sub-route-list'), subTasks, true);
     bindTaskEvents();
     updateTimeSummary();
   }
+
+  function selectPlanRoute(route) {
+    $('#plan-section').dataset.route = route;
+    $$('.plan-route-tab').forEach(button => {
+      const selected = button.dataset.route === route;
+      button.classList.toggle('active', selected);
+      button.setAttribute('aria-pressed', String(selected));
+    });
+  }
+  $$('.plan-route-tab').forEach(button => button.onclick = () => selectPlanRoute(button.dataset.route));
 
   function markPlanDirtyAfterSubmission() {
     if (currentPlan?.status === 'submitted') {
@@ -640,6 +662,8 @@ if (page === 'today') {
     const sourceCard = $(`.task-card[data-task-id="${sourceId}"]`);
     const sourceIsSub = Boolean(sourceCard.closest('#sub-route-list'));
     sourceCard.classList.add('swap-source');
+    $('.task-edit-dialog', sourceCard)?.close();
+    selectPlanRoute(sourceIsSub ? 'main' : 'sub');
     $$('.task-card[data-task-id]', sourceIsSub ? $('#main-route-list') : $('#sub-route-list')).forEach(card => {
       const target = taskById(card.dataset.taskId);
       const targetWouldDemoteCore = sourceIsSub && CORE_MAIN_CATEGORIES.has(target.category);
@@ -692,6 +716,10 @@ if (page === 'today') {
   }
 
   function bindTaskEvents() {
+    $$('.task-type-input').forEach(input => input.onchange = () => { $('.task-kind-caption', input.closest('.task-card')).textContent = taskTypeLabel(input.value); });
+    $$('.task-edit-open').forEach(button => button.onclick = () => $('.task-edit-dialog', button.closest('.task-card')).showModal());
+    $$('.task-edit-close').forEach(button => button.onclick = () => button.closest('dialog').close());
+
     $$('.sub-category-tabs button').forEach(button => button.onclick = async () => {
       const container = button.closest('.sub-category-tabs');
       const card = button.closest('.task-card');
