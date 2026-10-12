@@ -128,8 +128,6 @@ def test_execute_page_assets_exist():
     assert 'id="mobile-return-effective"' in execute
     assert 'id="mobile-counted-label-list"' in execute
     assert 'id="mobile-interrupt-label-list"' in execute
-    assert 'id="counted-label-list"' in execute
-    assert 'id="interrupt-label-list"' in execute
     assert 'id="timeline-list"' in execute
     assert 'id="timeline-toggle"' in execute
     assert 'id="timeline-content"' in execute
@@ -219,8 +217,7 @@ def test_settings_budget_inputs_use_fifteen_minute_steps():
     assert 'name="project_start_date" type="date" required' in settings_page
     assert 'id="draft-main-minute-fields"' in settings_page
     assert 'id="execution-label-fields"' in settings_page
-    assert 'id="add-counted-label"' in settings_page
-    assert 'id="add-interrupt-label"' in settings_page
+    assert 'id="add-execution-label"' in settings_page
     assert 'id="effective-label-category-fields"' in settings_page
     assert 'id="export-backup"' in settings_page
     assert "draft_main_minutes_by_category" in script

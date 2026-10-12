@@ -19,6 +19,7 @@
   <p id="execute-empty-message" class="muted">当前日期还没有可执行的已确认清单。</p>
 </section>
 
+<div class="execute-workspace">
 <section id="execute-panel" class="panel execute-focus hidden">
   <div class="section-heading">
     <div><p class="step">01 · 白天执行</p><h2>一次只追踪一个激活项</h2></div>
@@ -28,15 +29,15 @@
   <div class="execute-layout">
     <div class="execute-main">
       <div id="execute-mobile-toolbar" class="execution-mobile-toolbar hidden">
-        <button id="mobile-counted-toggle" class="ghost-button" type="button">计总</button>
-        <button id="mobile-interrupt-toggle" class="ghost-button" type="button">中断</button>
+        <button id="mobile-counted-toggle" class="ghost-button" type="button" aria-expanded="false" aria-controls="mobile-counted-panel">计总</button>
+        <button id="mobile-interrupt-toggle" class="ghost-button" type="button" aria-expanded="false" aria-controls="mobile-interrupt-panel">中断</button>
         <button id="mobile-return-effective" class="ghost-button" type="button" disabled>切回有效</button>
-      </div>
-      <div id="mobile-counted-panel" class="execution-mobile-label-panel hidden">
-        <div id="mobile-counted-label-list" class="pill-list"></div>
-      </div>
-      <div id="mobile-interrupt-panel" class="execution-mobile-label-panel hidden">
-        <div id="mobile-interrupt-label-list" class="pill-list"></div>
+        <div id="mobile-counted-panel" class="execution-mobile-label-panel hidden" role="group" aria-label="选择计总标签">
+          <div id="mobile-counted-label-list" class="pill-list"></div>
+        </div>
+        <div id="mobile-interrupt-panel" class="execution-mobile-label-panel hidden" role="group" aria-label="选择中断标签">
+          <div id="mobile-interrupt-label-list" class="pill-list"></div>
+        </div>
       </div>
       <div class="actions"><button id="temporary-open" class="secondary" type="button">临时添加活动</button><button id="vocabulary-shortcut" class="ghost-button" type="button">背单词 · 录入分钟</button></div>
       <form id="temporary-form" class="record-form hidden">
@@ -56,25 +57,7 @@
         <div id="vocabulary-record-list" class="stack"></div>
       </section>
       <div id="execute-task-list" class="execution-task-list"></div>
-      <div class="execution-label-zone">
-        <div class="execution-label-group">
-          <h3>计总标签</h3>
-          <div id="counted-label-list" class="pill-list"></div>
-        </div>
-        <div class="execution-label-group">
-          <h3>中断标签</h3>
-          <div id="interrupt-label-list" class="pill-list"></div>
-        </div>
-      </div>
     </div>
-    <aside class="execute-side">
-      <details id="execute-board-details" class="execution-details">
-        <summary>查看任务进度</summary>
-        <div class="details-content">
-          <div id="execute-task-board" class="execution-board-grid"></div>
-        </div>
-      </details>
-    </aside>
   </div>
 </section>
 
@@ -88,6 +71,8 @@
     <div id="timeline-list" class="timeline-list"></div>
   </div>
 </section>
+
+</div>
 
 <section id="execute-submit-panel" class="panel hidden">
   <div class="section-heading"><div><p class="step">收尾</p><h2>确认完成情况，交给复盘</h2></div></div>

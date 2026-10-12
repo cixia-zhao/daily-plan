@@ -1124,3 +1124,42 @@ def test_backup_export_downloads_valid_sqlite_snapshot(tmp_path):
     assert plan_count == 1
     assert task_count > 0
     assert any(path.name.startswith("daily_plan-") for path in backup_dir.iterdir())
+
+
+def test_reclassified_default_label_keeps_editable_historical_snapshot(tmp_path):
+    client = make_client(tmp_path)
+    today = date.today().isoformat()
+    draft = client.post('/api/daily-plans/draft', json={
+        'date': today, 'energy': 'normal', 'day_type': 'normal'
+    }).json()
+    task = next(task for task in draft['tasks'] if not task['is_sub'])
+    client.post(f'/api/daily-plans/{today}/approve')
+    segment = {
+        'task_id': task['id'], 'segment_kind': 'counted_label', 'label_id': 'counted_toilet',
+        'started_at': f'{today}T08:00:00', 'ended_at': f'{today}T08:10:00'
+    }
+    created = client.post(f'/api/daily-execution/{today}/segments', json=segment)
+    assert created.status_code == 200
+    segment_id = created.json()['segments'][0]['id']
+    settings = client.get('/api/settings').json()
+    label = next(label for label in settings['execution_labels'] if label['id'] == 'counted_toilet')
+    label.update(bucket='interrupt', name='休息')
+    assert client.put('/api/settings', json=settings).status_code == 200
+
+    updated = client.put(f'/api/daily-execution/{today}/segments/{segment_id}', json={
+        **segment, 'ended_at': f'{today}T08:12:00'
+    })
+    assert updated.status_code == 200
+    historical = updated.json()['segments'][0]
+    assert (historical['segment_kind'], historical['label_name'], historical['minutes']) == ('counted_label', '上厕所', 12)
+    # 新记录必须使用修改后的归类；保留旧快照不能放宽新建验证。
+    rejected = client.post(f'/api/daily-execution/{today}/segments', json={
+        **segment, 'started_at': f'{today}T09:00:00', 'ended_at': f'{today}T09:05:00'
+    })
+    assert rejected.status_code == 422
+    started = client.post(f'/api/daily-execution/{today}/labels/start', json={
+        'task_id': task['id'], 'label_id': 'counted_toilet'
+    })
+    assert started.status_code == 200
+    assert started.json()['active_segment']['segment_kind'] == 'interrupt_label'
+    assert started.json()['active_segment']['label_name'] == '休息'

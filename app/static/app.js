@@ -896,8 +896,8 @@ if (page === 'execute') {
   let showDraftSegment = false;
   function defaultExecutionUiState() {
     return {
-      collapsedZeroMain: false,
-      collapsedSub: false,
+      collapsedZeroMain: true,
+      collapsedSub: true,
       expandedLabelBucket: null,
       collapsedTimeline: true,
       collapsedZeroMinuteSubmit: true,
@@ -946,7 +946,7 @@ if (page === 'execute') {
     return '';
   }
 
-  function labelOptionsForKind(kind, taskId, selectedId='') {
+  function labelOptionsForKind(kind, taskId, selectedId='', snapshot=null) {
     if (kind === 'effective') {
       const options = ['<option value="">未细分</option>'];
       effectiveLabelsForTask(taskId).forEach(label => {
@@ -955,10 +955,12 @@ if (page === 'execute') {
       return options.join('');
     }
     const bucket = kind === 'counted_label' ? 'counted' : 'interrupt';
-    return (executionState?.labels || [])
-      .filter(label => label.bucket === bucket)
-      .map(label => `<option value="${esc(label.id)}" ${label.id === selectedId ? 'selected' : ''}>${esc(label.name)}</option>`)
-      .join('');
+    const labels = (executionState?.labels || []).filter(label => label.bucket === bucket);
+    const options = labels.map(label => `<option value="${esc(label.id)}" ${label.id === selectedId ? 'selected' : ''}>${esc(label.name)}</option>`);
+    if (snapshot?.segment_kind === kind && snapshot.label_id && !labels.some(label => label.id === snapshot.label_id)) {
+      options.unshift(`<option value="${esc(snapshot.label_id)}" ${snapshot.label_id === selectedId ? 'selected' : ''}>${esc(snapshot.label_name)}（原归类）</option>`);
+    }
+    return options.join('');
   }
 
   function taskBoardSummary(taskId) {
@@ -1022,7 +1024,7 @@ if (page === 'execute') {
             <option value="interrupt_label" ${segment.segment_kind === 'interrupt_label' ? 'selected' : ''}>中断标签</option>
           </select></label>
           <label class="segment-label-field"><span class="segment-label-title">${labelLabel}</span>
-            <select class="segment-label-id">${labelOptionsForKind(segment.segment_kind, segment.task_id, segment.label_id || '')}</select>
+            <select class="segment-label-id">${labelOptionsForKind(segment.segment_kind, segment.task_id, segment.label_id || '', isDraft ? null : segment)}</select>
           </label>
         </div>
         <div class="timeline-actions">
@@ -1071,7 +1073,8 @@ if (page === 'execute') {
       const title = $('.segment-label-title', row);
       const labelSelect = $('.segment-label-id', row);
       title.textContent = kind === 'effective' ? '细分' : '标签';
-      labelSelect.innerHTML = labelOptionsForKind(kind, taskId, labelSelect.value || '');
+      const snapshot = executionState.segments.find(segment => String(segment.id) === row.dataset.segmentId);
+      labelSelect.innerHTML = labelOptionsForKind(kind, taskId, labelSelect.value || '', snapshot);
     };
 
     $$('.segment-kind', list).forEach(select => select.onchange = event => {
@@ -1351,25 +1354,43 @@ if (page === 'execute') {
       <button class="ghost-button execution-label-button ${active?.label_id === label.id ? 'active' : ''}" type="button" data-label-id="${esc(label.id)}">
         ${esc(label.name)}
       </button>
-    `).join('');
+    `).join('') || '<p class="muted">暂无标签，可在设置中添加。</p>';
     $$('.execution-label-button', root).forEach(button => button.onclick = async () => {
-      const task = selectedExecutionTask();
+      const taskId = executionState?.active_segment?.task_id || selectedExecutionTask()?.id;
+      const labelName = button.textContent.trim();
       try {
+        $$('.execution-label-button', toolbarRoot()).forEach(item => item.disabled = true);
         executionState = await api(`/api/daily-execution/${dateInput.value}/labels/start`, {
           method:'POST',
-          body:JSON.stringify({label_id:button.dataset.labelId, task_id:task?.id || null}),
+          body:JSON.stringify({label_id:button.dataset.labelId, task_id:taskId || null}),
         });
         executionUiState.expandedLabelBucket = null;
         renderExecutionState(executionState);
-        toast(`已切到${button.textContent}`);
-      } catch (error) { toast(error.message); }
+        toast(`已切到${labelName}`);
+      } catch (error) {
+        toast(error.message);
+        renderExecutionToolbar();
+      }
     });
   }
 
-  function renderExecutionLabels() {
-    renderExecutionLabelButtons('counted', '#counted-label-list');
-    renderExecutionLabelButtons('interrupt', '#interrupt-label-list');
+  function toolbarRoot() { return $('#execute-mobile-toolbar'); }
+
+  function closeExecutionLabelPicker() {
+    if (!executionUiState.expandedLabelBucket) return;
+    executionUiState.expandedLabelBucket = null;
+    renderExecutionToolbar();
   }
+
+  document.addEventListener('click', event => {
+    if (!event.target.closest('#execute-mobile-toolbar')) closeExecutionLabelPicker();
+  });
+  document.addEventListener('keydown', event => {
+    if (event.key !== 'Escape' || !executionUiState.expandedLabelBucket) return;
+    const trigger = executionUiState.expandedLabelBucket === 'counted' ? $('#mobile-counted-toggle') : $('#mobile-interrupt-toggle');
+    closeExecutionLabelPicker();
+    trigger.focus();
+  });
 
   function renderExecutionToolbar() {
     const toolbar = $('#execute-mobile-toolbar');
@@ -1382,6 +1403,8 @@ if (page === 'execute') {
 
     $('#mobile-counted-toggle').classList.toggle('active', executionUiState.expandedLabelBucket === 'counted');
     $('#mobile-interrupt-toggle').classList.toggle('active', executionUiState.expandedLabelBucket === 'interrupt');
+    $('#mobile-counted-toggle').setAttribute('aria-expanded', String(executionUiState.expandedLabelBucket === 'counted'));
+    $('#mobile-interrupt-toggle').setAttribute('aria-expanded', String(executionUiState.expandedLabelBucket === 'interrupt'));
     $('#mobile-return-effective').disabled = !canReturnToEffective;
 
     countedPanel.classList.toggle('hidden', executionUiState.expandedLabelBucket !== 'counted');
@@ -1401,6 +1424,7 @@ if (page === 'execute') {
     $('#mobile-return-effective').onclick = async () => {
       if (!canReturnToEffective) return;
       try {
+        executionUiState.expandedLabelBucket = null;
         await startEffectiveTask(active.task_id, '已切回有效时间', latestEffectiveLabelIdForTask(active.task_id));
       } catch (error) { toast(error.message); }
     };
@@ -1435,9 +1459,7 @@ if (page === 'execute') {
         ? `正在做：${active.task_title}${active.label_name ? ` / ${active.label_name}` : ''}`
         : `正在切到：${active.task_title} / ${active.label_name}`;
     renderExecutionTasks();
-    renderExecutionLabels();
     renderExecutionToolbar();
-    renderTaskExecutionBoard($('#execute-task-board'), result.task_execution_board, '<p class="muted">开始记录后，这里会出现每个任务的时间结构。</p>');
     renderTimelineSection();
     renderExecutionSubmitList();
     renderVocabulary();
@@ -1678,7 +1700,6 @@ if (page === 'review') {
     $('#daily-total').textContent = `共 ${result.main_task_count} 项主任务`;
     $('#daily-main-minutes').textContent = `${result.main_planned_minutes} 分`;
     $('#daily-main-actual').textContent = `实际 ${result.main_actual_minutes} 分`;
-    $('#daily-vocabulary-summary').textContent = `英语 ${result.english_minutes || 0} 分，其中背单词 ${result.vocabulary_minutes || 0} 分（已包含在实际中）`;
     $('#daily-sub-minutes').textContent = `${result.sub_actual_minutes} 分`;
     form.mood.value = result.review.mood;
     form.hardest_point.value = result.review.hardest_point;
@@ -1764,7 +1785,6 @@ if (page === 'weekly') {
     $('#metric-rate').textContent = `${Math.round(result.completion_rate * 100)}%`;
     $('#metric-completed').innerHTML = `<div>${result.completed_count}项 (主)</div><div style="font-size:16px;color:var(--muted)">${result.completed_sub_count || 0}项 (副)</div>`;
     $('#metric-total').textContent = `共 ${result.task_count} 项主任务`;
-    $('#weekly-vocabulary-summary').textContent = `英语 ${result.english_minutes || 0} 分，其中背单词 ${result.vocabulary_minutes || 0} 分（已包含在实际中）`;
     $('#metric-time').innerHTML = `<div>${result.actual_minutes}分 (主)</div><div style="font-size:16px;color:var(--muted)">${result.actual_sub_minutes || 0}分 (副)</div>`;
     $('#metric-planned').textContent = `主计划 ${result.planned_minutes} 分`;
     $('#metric-days').textContent = result.review_days;
@@ -2111,15 +2131,14 @@ if (page === 'settings') {
   function renderExecutionLabelFields() {
     $('#execution-label-fields').innerHTML = (settingsState?.execution_labels || []).map(label => `
       <div class="execution-label-row" data-label-id="${esc(label.id)}">
-        <label>名称<input class="execution-label-name" value="${esc(label.name)}"></label>
+        <label>名称<input class="execution-label-name" maxlength="50" required value="${esc(label.name)}"></label>
         <label>归类
-          <select class="execution-label-bucket" ${label.is_system ? 'disabled' : ''}>
+          <select class="execution-label-bucket">
             <option value="counted" ${label.bucket === 'counted' ? 'selected' : ''}>计总标签</option>
             <option value="interrupt" ${label.bucket === 'interrupt' ? 'selected' : ''}>中断标签</option>
           </select>
         </label>
-        <span class="status">${label.is_system ? '系统默认' : '自定义'}</span>
-        <button class="ghost-button execution-label-delete" type="button" ${label.is_system ? 'disabled' : ''}>删除</button>
+        ${label.is_system ? '<span class="status execution-label-origin">默认</span>' : '<button class="ghost-button execution-label-delete" type="button">删除</button>'}
       </div>
     `).join('');
     $$('.execution-label-name').forEach(input => input.oninput = event => {
@@ -2142,11 +2161,14 @@ if (page === 'settings') {
   function addExecutionLabel(bucket) {
     settingsState.execution_labels.push({
       id: `custom_${bucket}_${Date.now()}`,
-      name: bucket === 'counted' ? '新计总标签' : '新中断标签',
+      name: '新标签',
       bucket,
       is_system: false,
     });
     renderExecutionLabelFields();
+    const input = $$('.execution-label-name').at(-1);
+    input.focus();
+    input.select();
   }
 
   function effectiveLabelsForCategoryState(category) {
@@ -2221,8 +2243,7 @@ if (page === 'settings') {
     renderExecutionLabelFields();
     renderEffectiveLabelFields();
   });
-  $('#add-counted-label').onclick = () => addExecutionLabel('counted');
-  $('#add-interrupt-label').onclick = () => addExecutionLabel('interrupt');
+  $('#add-execution-label').onclick = () => addExecutionLabel('counted');
   $('#export-backup').onclick = async () => {
     try {
       await downloadBackupFile();
@@ -2231,7 +2252,7 @@ if (page === 'settings') {
   };
   $('#settings-form').onsubmit = async event => {
     event.preventDefault();
-    const task_titles = Object.fromEntries($$('[data-category]').map(input => [input.dataset.category, input.value]));
+    const task_titles = Object.fromEntries($$('#task-title-fields input[data-category]').map(input => [input.dataset.category, input.value]));
     const draft_main_minutes_by_category = Object.fromEntries($$('[data-draft-main-category]').map(input => [input.dataset.draftMainCategory, Number(input.value || 0)]));
     try {
       settingsState = await api('/api/settings', {method:'PUT', body:JSON.stringify({

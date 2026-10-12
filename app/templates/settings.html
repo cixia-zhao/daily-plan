@@ -18,7 +18,11 @@
     <details class="settings-group">
       <summary>执行标签</summary>
       <div class="details-content">
-        <p class="muted">计总标签并入任务总时间；中断标签单独统计。</p><div id="execution-label-fields" class="stack"></div><div class="actions"><button id="add-counted-label" class="ghost-button" type="button">新增计总标签</button><button id="add-interrupt-label" class="ghost-button" type="button">新增中断标签</button></div>
+        <div class="execution-label-heading">
+          <p class="muted">计总标签并入任务总时间；中断标签单独统计。</p>
+          <button id="add-execution-label" class="ghost-button icon-button" type="button" aria-label="新增执行标签" title="新增执行标签"><span aria-hidden="true">＋</span></button>
+        </div>
+        <div id="execution-label-fields" class="stack"></div>
         <h2>有效细分标签</h2><p class="muted">按任务类别补充细分；不选也能直接开始有效时间。</p><div id="effective-label-category-fields" class="stack"></div>
       </div>
     </details>

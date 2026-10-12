@@ -6,6 +6,7 @@ if (!['127.0.0.1','localhost','[::1]'].includes(new URL(baseUrl).hostname)) thro
 (async () => {
   const browser = await chromium.launch({headless:true});
   const page = await browser.newPage({viewport:{width:390,height:844},isMobile:true,hasTouch:true});
+  await page.clock.setFixedTime(new Date('2026-10-11T12:00:00+08:00'));
   const errors=[];page.on('pageerror',error=>{errors.push(error.message); console.log('JS error:',error.message)});
   async function stable() { await page.waitForTimeout(180); }
   async function noOverflow() { assert(await page.evaluate(()=>document.documentElement.scrollWidth <= 390 && innerWidth <= 390), 'horizontal overflow'); }
@@ -71,6 +72,7 @@ if (!['127.0.0.1','localhost','[::1]'].includes(new URL(baseUrl).hostname)) thro
   await page.waitForSelector('#open-execution-desk:visible');
   await page.locator('#open-execution-desk').click();
   await page.waitForSelector('#execute-panel:visible');
+  await page.locator('[data-section-key=zero-main]').click();
   const computer = page.locator('.execution-task-card').filter({has:page.locator('h3', {hasText:'408'})});
   assert(await computer.locator('.task-start-button').isEnabled());
   await computer.locator('.task-start-button').click();
@@ -110,14 +112,17 @@ if (!['127.0.0.1','localhost','[::1]'].includes(new URL(baseUrl).hostname)) thro
   const exercise=page.locator('.execution-task-card').filter({has:page.locator('h3',{hasText:'运动'})});
   await exercise.locator('.habit-status').selectOption('rest');await stable();
   await page.locator('#execute-submit').click();await stable();
-  await page.locator('#enter-review').click();await page.waitForSelector('#daily-vocabulary-summary');await stable();
-  assert.match(await page.locator('#daily-vocabulary-summary').innerText(),/英语 10 分，其中背单词 10 分/);
+  await page.locator('#enter-review').click();await page.waitForSelector('#daily-review-metrics');await stable();
+  const dayResult=await (await page.request.get(`${baseUrl}/api/daily-review/2026-10-11`)).json();
+  assert.equal(dayResult.english_minutes,10);assert.equal(dayResult.vocabulary_minutes,10);
   await page.waitForFunction(()=>document.querySelector('#daily-execution-board')?.textContent.includes('休息'));
   await page.locator('details').filter({has:page.locator('#daily-execution-board')}).locator('summary').click();
   assert.match(await page.locator('#daily-execution-board').innerText(),/休息/);
   await noOverflow();
   await page.goto(`${baseUrl}/weekly?date=2026-10-11`);
-  await page.waitForFunction(()=>document.querySelector('#weekly-vocabulary-summary')?.textContent.includes('英语 10 分'));
+  await page.waitForFunction(()=>document.querySelector('#metric-time')?.textContent.includes('分'));
+  const weekResult=await (await page.request.get(`${baseUrl}/api/weekly-review?anchor_date=2026-10-11`)).json();
+  assert.equal(weekResult.english_minutes,10);assert.equal(weekResult.vocabulary_minutes,10);
   await noOverflow();
   await page.goto(`${baseUrl}/settings`);await stable();await noOverflow();
   assert.deepEqual(errors,[]);

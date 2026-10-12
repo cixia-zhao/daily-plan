@@ -1599,7 +1599,7 @@ def update_execution_segment(plan_date: date, segment_id: int, payload: Executio
     _assert_segment_time_window(payload.started_at, payload.ended_at)
     with _db(request) as connection:
         existing = connection.execute(
-            """SELECT s.*, t.plan_id
+            """SELECT s.*, t.plan_id, t.category AS task_category
                FROM task_execution_segments s
                JOIN tasks t ON t.id=s.task_id
                WHERE s.id=? AND s.plan_date=?""",
@@ -1612,7 +1612,16 @@ def update_execution_segment(plan_date: date, segment_id: int, payload: Executio
         task = _get_task_row_for_execution(connection, plan_date.isoformat(), payload.task_id)
         _prepare_execution_task(connection, task)
         settings = _get_settings(connection)
-        label_id, label_name = _resolve_segment_label(settings, task["category"], payload.label_id, payload.segment_kind)
+        # 只改时间或任务时保留原标签快照；设置中的改名/归类仅影响新记录。
+        keep_label_snapshot = (
+            payload.label_id == existing["label_id"]
+            and payload.segment_kind == existing["segment_kind"]
+            and (payload.segment_kind != "effective" or task["category"] == existing["task_category"])
+        )
+        if keep_label_snapshot:
+            label_id, label_name = existing["label_id"], existing["label_name"]
+        else:
+            label_id, label_name = _resolve_segment_label(settings, task["category"], payload.label_id, payload.segment_kind)
         if task["category"] == "english" and payload.segment_kind == "effective" and label_id == "effective_english_words" and _list_duration_records(connection, plan_date.isoformat()):
             if payload.duplicate_choice is None:
                 raise HTTPException(409, "当天已有墨墨录入，请明确选择保留哪份背单词记录")
