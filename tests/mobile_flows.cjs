@@ -27,6 +27,12 @@ if (!['127.0.0.1','localhost','[::1]'].includes(new URL(baseUrl).hostname)) thro
   await noOverflow();
   await page.locator('#checkin-form button[type=submit]').click();
   await page.waitForSelector('#save-draft:visible');
+  // 标题区保留调整目标入口，切回晨间后仍能重新生成草稿。
+  await page.locator('#adjust-checkin').click();
+  await page.locator('#today-checkin-stage').waitFor({state:'visible'});
+  await page.locator('#checkin-form button[type=submit]').click();
+  await page.locator('#confirm-accept').click();
+  await page.waitForSelector('#save-draft:visible');
   // 一屏确认，详细设置保留在弹窗，主副清单切换不叠加高度。
   for(const size of [{width:360,height:640},{width:390,height:720},{width:768,height:1024},{width:1024,height:680},{width:1280,height:720}]) {
     await page.setViewportSize(size);
@@ -110,13 +116,13 @@ if (!['127.0.0.1','localhost','[::1]'].includes(new URL(baseUrl).hostname)) thro
   await page.waitForFunction(()=>document.querySelectorAll('.duration-row').length===1);
   assert.match(await page.locator('#vocabulary-summary').innerText(),/合计 10 分/);
   const exercise=page.locator('.execution-task-card').filter({has:page.locator('h3',{hasText:'运动'})});
+  await exercise.locator('.execution-task-details > summary').click();
   await exercise.locator('.habit-status').selectOption('rest');await stable();
   await page.locator('#execute-submit').click();await stable();
   await page.locator('#enter-review').click();await page.waitForSelector('#daily-review-metrics');await stable();
   const dayResult=await (await page.request.get(`${baseUrl}/api/daily-review/2026-10-11`)).json();
   assert.equal(dayResult.english_minutes,10);assert.equal(dayResult.vocabulary_minutes,10);
   await page.waitForFunction(()=>document.querySelector('#daily-execution-board')?.textContent.includes('休息'));
-  await page.locator('details').filter({has:page.locator('#daily-execution-board')}).locator('summary').click();
   assert.match(await page.locator('#daily-execution-board').innerText(),/休息/);
   await noOverflow();
   await page.goto(`${baseUrl}/weekly?date=2026-10-11`);

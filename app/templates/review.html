@@ -3,20 +3,22 @@
 {% block page %}review{% endblock %}
 {% block content %}
 <section class="hero compact">
-  <div><h1>单日复盘</h1><p>先留下今天的结论；想写得更细，再慢慢补充。</p></div>
+  <div><h1>单日复盘</h1><p>先看今天的数据，再留下结论与下一步。</p></div>
   <div class="date-actions">
-    <details class="day-options">
-      <summary>当天操作</summary>
-      <button id="reset-day" class="danger-soft" type="button">重置当天</button>
-    </details>
+    <button id="reset-day" class="danger-soft reset-day-button" type="button">重置今天</button>
     <div class="date-chip date-chip-button">
-      <span>日期</span>
       <button id="review-date-button" class="date-trigger" type="button"></button>
       <input id="review-date" type="hidden">
     </div>
   </div>
 </section>
 
+<div class="review-section-tabs" role="tablist" aria-label="复盘内容">
+  <button id="review-data-tab" class="review-section-tab" type="button" role="tab" aria-selected="true" aria-controls="review-data-panel">数据看板</button>
+  <button id="review-reflection-tab" class="review-section-tab" type="button" role="tab" aria-selected="false" aria-controls="review-reflection-panel" tabindex="-1">收尾与深聊</button>
+</div>
+
+<div id="review-data-panel" class="review-tab-panel" role="tabpanel" aria-labelledby="review-data-tab">
 <section class="metrics review-metrics" id="daily-review-metrics">
   <article><span>计划状态</span><strong id="daily-status">—</strong><small id="daily-status-note">还没有当天计划</small></article>
   <article><span>主任务完成</span><strong id="daily-completed">—</strong><small id="daily-total">共 — 项</small></article>
@@ -24,6 +26,14 @@
   <article><span>副航线实际</span><strong id="daily-sub-minutes">—</strong><small>只统计已记录分钟</small></article>
 </section>
 
+<section class="panel review-support">
+  <div class="section-heading"><div><h2>执行结构</h2><p class="muted">各项任务的实际投入与时间分配。</p></div></div>
+  <div id="daily-execution-board-empty" class="muted">这一天还没有执行记录。</div>
+  <div id="daily-execution-board" class="execution-board-grid hidden"></div>
+</section>
+</div>
+
+<div id="review-reflection-panel" class="review-tab-panel" role="tabpanel" aria-labelledby="review-reflection-tab" hidden>
 <section class="panel review-closeout">
   <div class="section-heading"><div><p class="step">收尾</p><h2>今天先留下这三件事</h2></div></div>
   <form id="daily-review-form" class="review-form">
@@ -55,17 +65,6 @@
   </form>
 </section>
 
-<section class="panel review-support">
-  <details class="review-details">
-    <summary>查看执行结构</summary>
-    <div class="details-content">
-      <p class="muted">需要回头看时间分配时，再展开这一部分。</p>
-      <div id="daily-execution-board-empty" class="muted">这一天还没有执行记录。</div>
-      <div id="daily-execution-board" class="execution-board-grid hidden"></div>
-    </div>
-  </details>
-</section>
-
 <section class="panel gpt-collab-panel">
   <details class="review-details">
     <summary>与 GPT 深聊</summary>
@@ -84,4 +83,5 @@
     </div>
   </details>
 </section>
+</div>
 {% endblock %}

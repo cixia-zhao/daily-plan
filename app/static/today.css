@@ -5,8 +5,9 @@ body[data-page=today] main { max-width: 980px; padding: 20px 0 16px; }
 #plan-section .section-heading { align-items: center; margin-bottom: 18px; gap: 8px; }
 #plan-section .section-heading h2 { font: 500 28px/1.25 Georgia,"Noto Serif CJK SC","Songti SC","STSong",serif; letter-spacing: -.04em; }
 .plan-day-caption { margin: 0 0 4px; color: var(--muted); font-size: 12px; }
-#plan-section .plan-status-actions { display: flex; align-items: center; gap: 8px; }
-#plan-section .plan-status-actions .status { display: none; }
+.plan-status-actions { display: flex; align-items: center; gap: 8px; }
+.plan-status-actions .status { display: none; }
+.today-secondary-actions { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 6px; }
 #adjust-checkin { min-height: 44px; color: var(--muted); font-weight: 500; border: 0; padding: 8px 0 8px 10px; }
 #adjust-checkin:hover { background: transparent; color: var(--accent); }
 .plan-overview { display: flex; align-items: center; justify-content: space-between; padding: 10px 16px; margin-bottom: 12px; border-radius: 8px; background: #e3dacc; }
@@ -75,9 +76,14 @@ body[data-page=today] main { max-width: 980px; padding: 20px 0 16px; }
 #plan-section .task-edit-dialog .task-archive-note { width: 100%; border: 1px solid var(--line); background: #f5f4ed; border-radius: 9px; padding: 10px; }
 #plan-section .route-target { grid-column: 2 / -1; min-height: 44px; background: var(--accent-soft); border: 0; border-radius: 8px; color: var(--accent); }
 /* 晨间同一视觉系统，四项目标直接编辑，其余保持轻量。 */
-#today-checkin-stage .hero { margin: 0 0 12px; gap: 10px; }
-#today-checkin-stage .hero h1 { font: 500 26px/1.2 Georgia,"Noto Serif CJK SC","Songti SC","STSong",serif; margin-bottom: 4px; }
-#today-checkin-stage .hero p { font-size: 12px; }
+#today-page-header { margin: 0 0 12px; gap: 10px; }
+#today-page-header h1 { font: 500 26px/1.2 Georgia,"Noto Serif CJK SC","Songti SC","STSong",serif; margin-bottom: 4px; }
+#today-page-header p { font-size: 12px; }
+body:not(.today-list-stage) #today-page-header { max-width: 740px; margin-left: auto; margin-right: auto; }
+.today-list-stage #today-page-header { display: flex; justify-content: flex-end; }
+.today-list-stage #today-page-header > div:first-child { display: none; }
+.today-list-stage #today-page-header > .date-actions { display: flex; }
+.today-list-stage .plan-day-caption { display: none; }
 #today-checkin-stage .checkin-panel { max-width: none; padding: 16px; margin-top: 0; border-radius: 16px; }
 #today-checkin-stage .section-heading { margin-bottom: 12px; }
 #today-checkin-stage .step, #checkin-form > h3 { display: none; }
@@ -107,8 +113,13 @@ body[data-page=today] main { max-width: 980px; padding: 20px 0 16px; }
 @media (max-width: 759px) {
   body[data-page=today] main { width: calc(100% - 32px); padding: 12px 0 8px; }
   .today-list-stage #plan-section { padding: 0; margin: 0; }
-  #today-checkin-stage .hero { display: grid; gap: 8px; }
-  #today-checkin-stage .hero p { display: none; }
+  #today-page-header { display: grid; gap: 8px; }
+  .today-list-stage #today-page-header { display: grid; }
+  .today-list-stage #today-page-header > div:first-child { display: contents; }
+  .today-list-stage #plan-section > .section-heading { display: none; }
+  #today-page-header p { display: none; }
+  #today-page-header > .date-actions, .today-list-stage #today-page-header > .date-actions { display: contents; }
+  #today-page-header .today-secondary-actions { grid-column: 1 / -1; grid-row: 2; justify-self: end; }
   #today-checkin-stage .checkin-panel { padding: 12px; }
   #today-checkin-stage .section-heading h2 { font-size: 18px; }
   .date-actions { gap: 6px; }
@@ -121,7 +132,7 @@ body[data-page=today] main { max-width: 980px; padding: 20px 0 16px; }
   #plan-total-display { font-size: 22px; }
   #plan-section .task-archive-card { min-height: 56px; padding-top: 6px; padding-bottom: 6px; }
   #plan-section .plan-footer { margin-top: 10px; }
-  #today-checkin-stage .hero { margin-bottom: 6px; }
+  #today-page-header { margin-bottom: 6px; }
   #today-checkin-stage .section-heading { margin-bottom: 6px; }
   #checkin-form { gap: 6px; }
 }

@@ -98,6 +98,41 @@ main{width:min(var(--content),calc(100% - 40px));margin:0 auto;padding:44px 0 64
 .execute-workspace #timeline-panel input, .execute-workspace #timeline-panel select { width: 100%; min-width: 0; min-height: 44px; }
 .execute-workspace #timeline-panel .form-grid { grid-template-columns: 1fr; }
 .execution-section-toggle { min-height: 44px; align-items: center; }
+.effective-label-button { min-height: 44px; min-width: 44px; touch-action: manipulation; }
+
+/* 日期固定在标题区右侧，窄屏的附属操作在下方继续右对齐。 */
+.hero { display: grid; grid-template-columns: minmax(0, 1fr) auto; }
+.hero > .date-actions { justify-self: end; justify-content: flex-end; align-items: flex-start; }
+.carryover-button { display: inline-flex; align-items: center; gap: 6px; min-height: 44px; }
+.reset-day-button { min-height: 44px; padding: 8px 10px; font-size: 13px; }
+.date-chip-button { gap: 0; flex-shrink: 0; }
+.date-trigger { width: auto; white-space: nowrap; }
+.execution-task-details { margin-top: 12px; border-top: 1px solid var(--line); }
+.execution-task-details > summary { display: flex; align-items: center; justify-content: space-between; min-height: 44px; list-style: none; color: var(--muted); font-size: 14px; cursor: pointer; }
+.execution-task-details > summary::-webkit-details-marker { display: none; }
+.execution-task-details > summary::after { content: '＋'; }
+.execution-task-details[open] > summary::after { content: '－'; }
+.execution-task-details .task-type-controls { margin-top: 0; }
+.review-section-tabs { display: flex; gap: 24px; border-bottom: 1px solid var(--line); margin-bottom: 24px; }
+.review-section-tab { min-height: 44px; padding: 10px 0; border: 0; border-bottom: 2px solid transparent; border-radius: 0; background: transparent; color: var(--muted); font-size: 16px; user-select: none; }
+.review-section-tab[aria-selected=true] { border-bottom-color: var(--accent); color: var(--ink); font-weight: 700; }
+.review-tab-panel[hidden] { display: none; }
+.review-tab-panel > .panel:first-child { margin-top: 0; }
+.review-tab-panel .review-closeout { max-width: none; }
+.review-tab-panel .review-support { padding: 24px; }
+@media (max-width: 760px) {
+  .hero { gap: 12px; }
+  .review-tab-panel .review-support { padding: 17px; }
+  .hero:has(> .date-actions) > div:first-child { display: contents; }
+  .hero:has(> .date-actions) > div:first-child > h1 { grid-column: 1; grid-row: 1; }
+  .hero:has(> .date-actions) > div:first-child > p { grid-column: 1 / -1; grid-row: 2; }
+  .hero > .date-actions { display: flex; grid-column: 2; grid-row: 1; }
+  .hero > .date-actions > .date-chip { grid-column: 2; grid-row: 1; justify-self: end; }
+  .hero > .date-actions > :not(.date-chip) { grid-row: 2; justify-self: end; }
+  .hero > .date-actions > :not(.date-chip):first-child { grid-column: 1; }
+  .hero > .date-actions > .carryover-entry { grid-column: 2; }
+  .hero > .date-actions > #execute-stop, body[data-page=review] .hero > .date-actions > .reset-day-button { grid-column: 1 / -1; }
+}
 .execution-section-toggle small::after { content: ' · 展开'; }
 .execution-section-toggle[aria-expanded=true] small::after { content: ' · 收起'; }
 .execution-label-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 14px; }

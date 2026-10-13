@@ -3,14 +3,11 @@
 {% block page %}today{% endblock %}
 {% block page_styles %}<link rel="stylesheet" href="/static/today.css?v={{ static_version('today.css') }}">{% endblock %}
 {% block content %}
-<div id="today-checkin-stage">
-<section class="hero">
+<section id="today-page-header" class="hero">
   <div><h1>今天的目标</h1><p>填写各项目目标，查看合计，确认后记录实际做了什么。</p></div>
   <div class="date-actions">
-    <details class="day-options">
-      <summary>当天操作</summary>
-      <button id="reset-day" class="danger-soft" type="button">重置当天</button>
-    </details>
+    <div class="today-secondary-actions">
+    <button id="reset-day" class="danger-soft reset-day-button" type="button">重置今天</button>
     <div class="carryover-entry">
       <button id="carryover-button" class="ghost-button carryover-button" type="button" aria-haspopup="dialog" aria-expanded="false">
         <span class="carryover-button-icon" aria-hidden="true">待</span>
@@ -25,14 +22,16 @@
         <div id="carryover-popover-list" class="stack"></div>
       </div>
     </div>
+    <div class="plan-status-actions hidden"><span id="plan-status" class="status">草稿</span><button id="adjust-checkin" class="ghost-button hidden" type="button">调整目标</button></div>
+    </div>
     <div class="date-chip date-chip-button">
-      <span>日期</span>
       <button id="plan-date-button" class="date-trigger" type="button"></button>
       <input id="plan-date" type="hidden">
     </div>
   </div>
 </section>
 
+<div id="today-checkin-stage">
 <section class="panel checkin-panel">
   <div class="section-heading"><div><p class="step">01 · 晨间校准</p><h2>填写今天的目标</h2></div></div>
   <form id="checkin-form">
@@ -53,7 +52,7 @@
 
 <div id="today-review-stage" class="hidden">
 <section id="plan-section" class="panel today-plan-shell">
-  <div class="section-heading"><div><p id="plan-day-caption" class="plan-day-caption"></p><h2 id="plan-title">安排今天</h2></div><div class="plan-status-actions"><span id="plan-status" class="status">草稿</span><button id="adjust-checkin" class="ghost-button hidden" type="button">调整目标</button></div></div>
+  <div class="section-heading"><div><p id="plan-day-caption" class="plan-day-caption"></p><h2 id="plan-title">安排今天</h2></div></div>
   <div id="safety-notice" class="notice warning hidden"></div>
   <div id="degraded-notice" class="notice hidden">AI 暂时没有成功响应，当前使用稳定的本地规则版。</div>
 

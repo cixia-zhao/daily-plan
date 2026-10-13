@@ -250,6 +250,7 @@ async function fetchCalendarMonth(monthKey) {
 function updateDateTrigger(button, dateValue) {
   if (!button) return;
   button.textContent = formatDateLabel(dateValue);
+  button.setAttribute('aria-label', `选择日期，当前 ${formatDateLabel(dateValue)}`);
 }
 
 function closeCalendar() {
@@ -369,6 +370,9 @@ if (page === 'today') {
     checkinStage.classList.toggle('hidden', showingReview);
     reviewStage.classList.toggle('hidden', !showingReview);
     document.body.classList.toggle('today-list-stage', showingReview);
+    $('#today-page-header .plan-status-actions').classList.toggle('hidden', !showingReview);
+    $('#today-page-header h1').textContent = showingReview
+      ? (currentPlan?.status === 'draft' ? '安排今天' : '今天的清单') : '今天的目标';
     if (showingReview) window.scrollTo({top: 0, behavior: 'smooth'});
   }
 
@@ -894,6 +898,7 @@ if (page === 'execute') {
   let executionState = null;
   let selectedTaskId = null;
   let showDraftSegment = false;
+  let switchingEffectiveLabel = false;
   function defaultExecutionUiState() {
     return {
       collapsedZeroMain: true,
@@ -902,6 +907,7 @@ if (page === 'execute') {
       collapsedTimeline: true,
       collapsedZeroMinuteSubmit: true,
       effectiveLabelSelections: {},
+      expandedTaskDetails: {},
     };
   }
   let executionUiState = defaultExecutionUiState();
@@ -1144,6 +1150,7 @@ if (page === 'execute') {
 
   function executionTaskCardHtml(task) {
     const board = taskBoardSummary(task.id);
+    const categoryTitle = settings?.task_titles?.[task.category] || task.category;
     const active = executionState?.active_segment?.task_id === task.id;
     const selected = selectedExecutionTask();
     const selectedClass = selected && String(selected.id) === String(task.id) ? 'selected' : '';
@@ -1152,7 +1159,7 @@ if (page === 'execute') {
     const selectedLabelId = selectedEffectiveLabelId(task.id);
     const selectedLabel = effectiveLabels.find(label => label.id === selectedLabelId);
     const startLabelSuffix = selectedLabel ? ` · ${selectedLabel.name}` : '';
-    const inlineLabelPicker = selectedClass && effectiveLabels.length
+    const inlineLabelPicker = effectiveLabels.length
       ? `
         <div class="effective-label-picker">
           <p class="muted">有效细分</p>
@@ -1162,6 +1169,7 @@ if (page === 'execute') {
                 class="ghost-button effective-label-button ${label.id === selectedLabelId ? 'active' : ''}"
                 type="button"
                 data-effective-label-id="${esc(label.id)}"
+                aria-pressed="${String(label.id === selectedLabelId)}"
               >${esc(label.name)}</button>
             `).join('')}
           </div>
@@ -1173,7 +1181,7 @@ if (page === 'execute') {
         <div class="execution-task-head">
           <div>
             <h3>${esc(task.title)}</h3>
-            <p class="muted">${esc(settings?.task_titles?.[task.category] || task.category)}</p>
+            ${task.title !== categoryTitle ? `<p class="muted">${esc(categoryTitle)}</p>` : ''}
           </div>
           <button class="primary task-start-button" type="button" ${disabled}>开始有效时间${esc(startLabelSuffix)}</button>
         </div>
@@ -1182,10 +1190,13 @@ if (page === 'execute') {
           <span>有效 ${task.actual_minutes || 0} 分</span>
           <span>总计 ${board ? formatMinutes(board.total_minutes) : '0 分'}</span>
         </div>
+        <details class="execution-task-details" ${executionUiState.expandedTaskDetails[String(task.id)] ? 'open' : ''}>
+        <summary>任务设置</summary>
         <div class="task-type-controls"><label>事项类型<select class="execute-task-type">${taskTypeOptions(task.task_type)}</select></label>
         ${task.task_type === 'habit' ? `<label>当天状态<select class="habit-status"><option value="">未记录</option>${['done','missed','rest'].map(value => `<option value="${value}" ${task.habit_status === value ? 'selected' : ''}>${habitStatusLabel(value)}</option>`).join('')}</select></label>` : ''}
         ${task.category === 'english' ? '<button class="ghost-button vocabulary-open" type="button">背单词 · 录入分钟</button>' : ''}</div>
         ${inlineLabelPicker}
+        </details>
       </article>
     `;
   }
@@ -1205,20 +1216,41 @@ if (page === 'execute') {
   }
 
   function bindExecutionTaskCardEvents(root=document) {
+    $$('.execution-task-details', root).forEach(details => details.ontoggle = () => {
+      if (!details.isConnected) return;
+      const taskId = details.closest('.execution-task-card').dataset.executionTaskId;
+      executionUiState.expandedTaskDetails[taskId] = details.open;
+    });
     $$('.execution-task-card', root).forEach(card => card.onclick = event => {
-      if (event.target.closest('button, select, input')) return;
+      if (event.target.closest('button, select, input, details')) return;
       if (event.target.closest('.effective-label-button')) return;
       selectedTaskId = Number(card.dataset.executionTaskId);
       renderExecutionState(executionState);
     });
-    $$('.effective-label-button', root).forEach(button => button.onclick = event => {
+    $$('.effective-label-button', root).forEach(button => button.onclick = async event => {
       event.stopPropagation();
+      if (switchingEffectiveLabel) return;
       const card = button.closest('.execution-task-card');
       const taskId = Number(card.dataset.executionTaskId);
       const nextLabelId = button.dataset.effectiveLabelId;
+      const active = executionState?.active_segment;
+      if (active?.task_id === taskId) {
+        if (active.segment_kind === 'effective' && active.label_id === nextLabelId) return;
+        switchingEffectiveLabel = true;
+        $$('.effective-label-button, .task-start-button', root).forEach(item => item.disabled = true);
+        try {
+          await startEffectiveTask(taskId, `已切到${button.textContent.trim()}`, nextLabelId);
+        } catch (error) {
+          toast(error.message);
+        } finally {
+          switchingEffectiveLabel = false;
+          renderExecutionState(executionState);
+        }
+        return;
+      }
       rememberEffectiveLabelSelection(taskId, selectedEffectiveLabelId(taskId) === nextLabelId ? '' : nextLabelId);
       selectedTaskId = taskId;
-      renderExecutionState(executionState);
+      renderExecutionTasks();
     });
     $$('.task-start-button', root).forEach(button => button.onclick = async event => {
       event.stopPropagation();
@@ -1691,6 +1723,28 @@ if (page === 'review') {
   let reviewState = null;
   dateInput.value = todayIso();
   updateDateTrigger(dateButton, dateInput.value);
+
+  const reviewTabs = $$('.review-section-tab');
+  function selectReviewTab(tab) {
+    reviewTabs.forEach(item => {
+      const selected = item === tab;
+      item.setAttribute('aria-selected', String(selected));
+      item.tabIndex = selected ? 0 : -1;
+      document.getElementById(item.getAttribute('aria-controls')).hidden = !selected;
+    });
+  }
+  reviewTabs.forEach(tab => {
+    tab.onclick = () => selectReviewTab(tab);
+    tab.onkeydown = event => {
+      if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
+      event.preventDefault();
+      const current = reviewTabs.indexOf(tab);
+      const next = event.key === 'Home' ? 0 : event.key === 'End' ? reviewTabs.length - 1
+        : (current + (event.key === 'ArrowRight' ? 1 : -1) + reviewTabs.length) % reviewTabs.length;
+      selectReviewTab(reviewTabs[next]);
+      reviewTabs[next].focus();
+    };
+  });
 
   function renderDailyReview(result) {
     reviewState = result;
