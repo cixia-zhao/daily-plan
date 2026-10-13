@@ -67,4 +67,5 @@ Termux
 
 - 根目录 `DESIGN.md`：用户认可的布局、暖纸色主题、减少模板感与后续 Agent 视觉约定。
 
-- `releases/2026-10-13-execution-ui.md`：最新执行台与标签设置正式发布、数据库备份、验收和回退记录。
+- `releases/2026-10-14-compact-ui.md`：最新手机细分与紧凑界面正式发布、数据库备份、验收和回退记录。
+- `releases/2026-10-13-execution-ui.md`：上一轮执行台与标签设置发布记录。
