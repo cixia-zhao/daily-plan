@@ -12,7 +12,7 @@ def make_client(tmp_path):
 
 def test_pages_are_available(tmp_path):
     client = make_client(tmp_path)
-    for path, marker in [("/", "生成今天的草稿"), ("/execute", "执行台"), ("/review", "单日复盘"), ("/weekly", "七日复盘"), ("/gpt-workbench", "GPT 协作工作台"), ("/settings", "任务设置")]:
+    for path, marker in [("/", "生成今天的草稿"), ("/execute", "执行台"), ("/review", "本周复盘导航"), ("/weekly", "本周复盘导航"), ("/gpt-workbench", "GPT 协作工作台"), ("/settings", "任务设置")]:
         response = client.get(path)
         assert response.status_code == 200
         assert marker in response.text
@@ -88,7 +88,7 @@ def test_date_change_reloads_the_selected_plan():
 
 
 def test_review_page_assets_exist():
-    script = Path("app/static/app.js").read_text(encoding="utf-8")
+    script = Path("app/static/review.js").read_text(encoding="utf-8")
     review = Path("app/templates/review.html").read_text(encoding="utf-8")
     base = Path("app/templates/base.html").read_text(encoding="utf-8")
 
@@ -161,35 +161,19 @@ def test_zero_minute_main_tasks_invite_execution_in_approved_view():
     assert "const disabled = Number(task.estimated_minutes) === 0" not in script
 
 
-def test_weekly_page_supports_gpt_collaboration_and_history():
-    script = Path("app/static/app.js").read_text(encoding="utf-8")
-    weekly = Path("app/templates/weekly.html").read_text(encoding="utf-8")
-    styles = Path("app/static/style.css").read_text(encoding="utf-8")
-
-    assert "if (page === 'weekly')" in script
-    assert "copy-chatgpt-prompt" in script
-    assert "save-weekly-report" in script
-    assert "save-weekly-gpt-record" in script
-    assert "renderWeeklyProgress" in script
-    assert "calendar-status?month=" in script
-    assert "weekly-review?anchor_date=" in script
-    assert "weekly_gpt_prompts" in script
-    assert 'id="weekly-date-button"' in weekly
-    assert 'id="weekly-title-text"' in weekly
-    assert 'id="weekly-title-range"' in weekly
-    assert 'id="weekly-progress-days"' in weekly
-    assert 'id="weekly-inline-review-form"' in weekly
-    assert 'id="weekly-gpt-response"' in weekly
-    assert 'id="weekly-gpt-adopted"' in weekly
-    assert 'id="save-weekly-gpt-record"' in weekly
-    assert 'id="weekly-final-report"' in weekly
-    assert 'id="weekly-history"' in weekly
-    assert ".analysis-card" in styles
-    assert ".weekly-title-range" in styles
-    assert ".weekly-progress-track" in styles
-    assert ".gpt-collab-panel" in styles
-    assert ".calendar-day" in styles
-    assert ".calendar-legend" in styles
+def test_weekly_links_keep_dates_and_share_the_review_workspace(tmp_path):
+    client = make_client(tmp_path)
+    redirected = client.get('/weekly?date=2026-10-13', follow_redirects=False)
+    assert redirected.status_code == 303
+    assert redirected.headers['location'] == '/review?scope=weekly&date=2026-10-13'
+    page = client.get(redirected.headers['location']).text
+    for marker in ['review-week-steps', 'weekly-total-time', 'weekly-effective-ratio',
+                   'weekly-final-report', 'weekly-history', 'weekly-gpt-response',
+                   'weekly-gpt-adopted', 'save-weekly-gpt-record', 'daily-review-form']:
+        assert f'id="{marker}"' in page
+    assert 'id="daily-status"' not in page
+    assert 'id="metric-days"' not in page
+    assert '周报' not in page
 
 
 def test_gpt_workbench_assets_exist():
@@ -242,7 +226,7 @@ def test_today_page_has_execution_entry_after_confirmation():
 
 def test_settings_and_copy_text_deemphasize_deepseek():
     settings_page = Path("app/templates/settings.html").read_text(encoding="utf-8")
-    weekly_page = Path("app/templates/weekly.html").read_text(encoding="utf-8")
+    weekly_page = Path("app/templates/weekly_reflection.html").read_text(encoding="utf-8")
     styles = Path("app/static/style.css").read_text(encoding="utf-8")
 
     assert "GPT 协作偏好" in settings_page

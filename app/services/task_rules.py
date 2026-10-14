@@ -5,9 +5,6 @@ from datetime import date
 from app.schemas import MorningCheckIn, RulePlan, TaskDraft
 
 
-UNSAFE_REHAB_WORDS = ("冲刺", "跳绳", "跳跃", "1000", "大重量", "急停")
-
-
 def _task(title, category, minutes, priority, criteria, reason="规则生成", sub_category=None, is_sub=0):
     return TaskDraft(
         title=title,
@@ -44,11 +41,7 @@ def build_rule_plan(checkin: MorningCheckIn) -> RulePlan:
             _task("408", "computer", 60, 1, "学习一个主题并亲手完成代码练习", sub_category="数据结构"),
         ]
 
-    # Exercise / rehab is generated daily unless knee_alert is true
-    if not checkin.knee_alert:
-        criteria = "完成低强度动作；出现疼痛或不稳立即停止"
-        main_tasks.append(_task("运动", "rehab", 20, 3, criteria))
-
+    main_tasks.append(_task("运动", "rehab", 20, 3, "完成今天安排的运动"))
 
     # 4 Sub Route Tasks (is_sub = 1, default 0 minutes)
     sub_tasks = [
@@ -60,11 +53,10 @@ def build_rule_plan(checkin: MorningCheckIn) -> RulePlan:
 
     tasks = main_tasks + sub_tasks
 
-    safety = "今天记录了膝盖异常：停止相关训练；如有疼痛、卡住、打软或肿胀，请寻求专业评估。" if checkin.knee_alert else None
     return RulePlan(
         tasks=tasks,
         methods=["学习块开始前写清目标和结束标准", "手机放入书包，休息不刷推荐流", "数学只在关键检查点检查"],
-        safety_notice=safety,
+        safety_notice=None,
     )
 
 
@@ -75,7 +67,4 @@ def validate_ai_tasks(tasks: list[TaskDraft], available_minutes: int) -> bool:
     main_cats = {task.category for task in tasks if not task.is_sub}
     if not {"math", "english", "computer"}.issubset(main_cats):
         return False
-    for task in tasks:
-        if task.category == "rehab" and any(word in f"{task.title}{task.completion_criteria}" for word in UNSAFE_REHAB_WORDS):
-            return False
     return True

@@ -14,18 +14,20 @@ def test_ample_plan_can_include_vibe_coding():
     assert any(item.category == "vibe_coding" for item in plan.tasks)
 
 
-def test_exercise_omitted_when_knee_alert():
+def test_exercise_is_an_ordinary_habit():
     plan = build_rule_plan(MorningCheckIn(energy="normal", available_minutes=180, day_type="normal", knee_alert=True))
-    assert not any(item.category == "rehab" for item in plan.tasks)
+    exercise = next(item for item in plan.tasks if item.category == "rehab")
+    assert exercise.completion_criteria == "完成今天安排的运动"
+    assert plan.safety_notice is None
 
 
-def test_ai_tasks_allow_over_budget_but_reject_unsafe_rehab():
+def test_ai_tasks_allow_goals_and_ordinary_exercise():
     base = build_rule_plan(MorningCheckIn(energy="normal", available_minutes=120, day_type="normal"))
     ai_tasks = [task.model_copy(update={"estimated_minutes": 200}) for task in base.tasks]
     assert validate_ai_tasks(ai_tasks, available_minutes=120) is True
 
-    unsafe = [base.tasks[0].model_copy(update={"category": "rehab", "title": "1000 米冲刺"})]
-    assert validate_ai_tasks(unsafe, available_minutes=120) is False
+    exercise = [task.model_copy(update={"title": "1000 米跑步"}) if task.category == "rehab" else task for task in base.tasks]
+    assert validate_ai_tasks(exercise, available_minutes=120) is True
 
 
 def test_ai_cannot_remove_daily_learning_baseline():

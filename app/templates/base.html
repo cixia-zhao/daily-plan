@@ -22,7 +22,6 @@
       <details class="nav-more">
         <summary>更多<span aria-hidden="true">⌄</span></summary>
         <div class="nav-more-panel">
-          <a href="/weekly" data-nav="weekly">周报</a>
           <a href="/gpt-workbench" data-nav="gpt-workbench">GPT 工作台</a>
           <a href="/settings" data-nav="settings">设置</a>
           {% if request.app.state.auth.required %}
@@ -68,7 +67,7 @@
         <span><i class="legend-dot out-of-range"></i>空白</span>
         <span><i class="legend-dot empty"></i>未开始</span>
         <span><i class="legend-dot planned"></i>已计划</span>
-        <span><i class="legend-dot submitted"></i>待补复盘</span>
+        <span><i class="legend-dot submitted"></i>已提交</span>
         <span><i class="legend-dot reviewed"></i>已复盘</span>
       </div>
       <div class="confirm-actions">
@@ -77,5 +76,6 @@
     </div>
   </div>
   <script src="/static/app.js?v={{ static_version('app.js') }}" defer></script>
+  {% block page_scripts %}{% endblock %}
 </body>
 </html>

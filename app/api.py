@@ -113,6 +113,8 @@ DEFAULT_SETTINGS = {
     "current_stage": "恢复秩序期",
     "ai_project_weekly_frequency": 3,
     "rehab_enabled": True,
+    "weekly_review_mode": "separate",
+    "weekly_review_day": 6,
     "project_start_date": date.today().isoformat(),
     "task_titles": {
         "math": "数学", "english": "英语", "computer": "408",
@@ -686,8 +688,8 @@ def _assert_segment_time_window(started_at: datetime, ended_at: datetime) -> Non
 def _assert_no_segment_overlap(connection, plan_date: str, task_id: int, started_at: str, ended_at: str | None, skip_segment_id: int | None = None) -> None:
     query = (
         """SELECT id FROM task_execution_segments
-           WHERE plan_date=? AND ended_at IS NOT NULL
-             AND NOT (ended_at<=? OR started_at>=?)"""
+           WHERE plan_date=?
+             AND (ended_at IS NULL OR ended_at>?) AND started_at<?"""
     )
     params: list = [plan_date, started_at, ended_at or _now_iso()]
     if skip_segment_id is not None:
@@ -766,6 +768,10 @@ def _serialize_daily_review(connection, plan_date: str) -> dict:
         "vocabulary_minutes": sum(label["minutes"] for board in task_board for label in board["effective_labels"] if label["label_id"] == "effective_english_words"),
         "main_actual_minutes": sum(row["actual_minutes"] or 0 for row in task_rows if not row["is_sub"]),
         "sub_actual_minutes": sum(row["actual_minutes"] or 0 for row in sub_tasks),
+        "main_total_minutes": sum(task["total_minutes"] for task in task_board if not task["is_sub"]),
+        "sub_total_minutes": sum(task["total_minutes"] for task in task_board if task["is_sub"]),
+        "sub_completed_count": sum(row["completed"] for row in sub_tasks),
+        "has_review": bool(review),
         "task_execution_board": task_board,
         "review": _serialize_review_row(review),
     }
@@ -911,58 +917,52 @@ def _validate_plan_tasks_for_update(tasks: list[TaskDraft], available_minutes: i
     if not tasks or len(tasks) > 15:
         raise HTTPException(422, "任务数量不合规")
     if not validate_ai_tasks(tasks, available_minutes):
-        raise HTTPException(422, "任务数量、时长或安全规则不合规")
+        raise HTTPException(422, "任务数量、时长或类别不合规")
 
 
-def _compute_weekly_metrics(connection, start: date, end: date) -> dict:
-    for plan in connection.execute("SELECT id FROM plans WHERE plan_date BETWEEN ? AND ?", (start.isoformat(), end.isoformat())).fetchall():
-        _sync_plan_actual_minutes_from_execution(connection, plan["id"])
-    review_days = connection.execute(
-        "SELECT COUNT(*) FROM reviews WHERE review_date BETWEEN ? AND ?",
-        (start.isoformat(), end.isoformat()),
-    ).fetchone()[0]
-    task_rows = connection.execute(
-        """SELECT t.is_sub,t.completed,t.estimated_minutes,t.actual_minutes,t.category
-           FROM tasks t JOIN plans p ON p.id=t.plan_id
-           WHERE p.status='submitted' AND p.plan_date BETWEEN ? AND ?""",
-        (start.isoformat(), end.isoformat()),
-    ).fetchall()
-
-    main_tasks = [t for t in task_rows if _is_planned_main_task(t)]
-    sub_tasks = [t for t in task_rows if t["is_sub"]]
-    total_main = len(main_tasks)
-    completed_main = sum(row["completed"] for row in main_tasks)
-    vocabulary_minutes = 0
-    for offset in range((end - start).days + 1):
-        day = (start + timedelta(days=offset)).isoformat()
-        plan = _get_plan_row(connection, day)
-        if plan and plan["status"] == "submitted":
-            vocabulary_minutes += _serialize_daily_review(connection, day)["vocabulary_minutes"]
-
+def _compute_weekly_metrics(connection, start: date, end: date, days: list[dict] | None = None) -> dict:
+    days = days if days is not None else [
+        _serialize_daily_review(connection, (start + timedelta(days=offset)).isoformat())
+        for offset in range((end - start).days + 1)
+    ]
+    eligible = [day for day in days if day["date"] <= date.today().isoformat()
+                and day["status"] in ("approved", "submitted")]
+    task_count = sum(day["main_task_count"] for day in eligible)
+    completed = sum(day["main_completed_count"] for day in eligible)
+    effective = sum(day["main_actual_minutes"] for day in eligible)
+    total = sum(day["main_total_minutes"] for day in eligible)
+    distribution: dict[str, dict] = {}
+    for day in eligible:
+        for task in day["task_execution_board"]:
+            if task["is_sub"]:
+                continue
+            item = distribution.setdefault(task["category"], {
+                "category": task["category"], "title": task["task_title"],
+                "total_minutes": 0, "effective_minutes": 0,
+            })
+            item["total_minutes"] += task["total_minutes"]
+            item["effective_minutes"] += task["effective_minutes"]
     return {
-        "start_date": start.isoformat(),
-        "end_date": end.isoformat(),
-        "review_days": review_days,
-        "task_count": total_main,
-        "completed_count": completed_main,
-        "completed_sub_count": sum(row["completed"] for row in sub_tasks),
-        "completion_rate": round(completed_main / total_main, 3) if total_main else 0,
-        "planned_minutes": sum(row["estimated_minutes"] for row in main_tasks),
-        "actual_minutes": sum(row["actual_minutes"] or 0 for row in task_rows if not row["is_sub"]),
-        "actual_sub_minutes": sum(row["actual_minutes"] or 0 for row in sub_tasks),
-        "english_minutes": sum(row["actual_minutes"] or 0 for row in task_rows if row["category"] == "english"),
-        "vocabulary_minutes": vocabulary_minutes,
+        "start_date": start.isoformat(), "end_date": end.isoformat(),
+        "review_days": sum(day["has_review"] for day in days if day["date"] <= date.today().isoformat()),
+        "task_count": task_count, "completed_count": completed,
+        "completed_sub_count": sum(day["sub_completed_count"] for day in eligible),
+        "completion_rate": round(completed / task_count, 3) if task_count else 0,
+        "planned_minutes": sum(day["main_planned_minutes"] for day in eligible),
+        "actual_minutes": effective, "total_minutes": total,
+        "effective_ratio": round(effective / total, 4) if total else 0,
+        "actual_sub_minutes": sum(day["sub_actual_minutes"] for day in eligible),
+        "total_sub_minutes": sum(day["sub_total_minutes"] for day in eligible),
+        "english_minutes": sum(day["english_minutes"] for day in eligible),
+        "vocabulary_minutes": sum(day["vocabulary_minutes"] for day in eligible),
+        "task_distribution": sorted(distribution.values(), key=lambda item: item["total_minutes"], reverse=True),
     }
 
 
 def _build_weekly_snapshot(connection, start: date, end: date) -> dict:
-    metrics = _compute_weekly_metrics(connection, start, end)
-    days = []
-    cursor = start
-    while cursor <= end:
-        days.append(_serialize_daily_review(connection, cursor.isoformat()))
-        cursor += timedelta(days=1)
-    return metrics | {"days": days}
+    days = [_serialize_daily_review(connection, (start + timedelta(days=offset)).isoformat())
+            for offset in range((end - start).days + 1)]
+    return _compute_weekly_metrics(connection, start, end, days) | {"days": days}
 
 
 def _calendar_day_state(day: date, project_start: date, today: date, plan_status: str | None, has_review: bool) -> dict:
@@ -1044,6 +1044,9 @@ def _build_chatgpt_prompt(snapshot: dict, deepseek_analysis: dict | None, export
         f"主任务完成数：{snapshot['completed_count']} / {snapshot['task_count']}",
         f"主任务计划分钟：{snapshot['planned_minutes']} 分",
         f"主任务实际分钟：{snapshot['actual_minutes']} 分",
+        f"主航线总计投入：{snapshot['total_minutes']} 分",
+        f"主航线有效率：{round(snapshot['effective_ratio'] * 100)}%（有效时间总和 / 总计时间总和）",
+        "统计包含已保存执行记录，提交仅表示收尾完成。",
         f"副航线实际分钟：{snapshot['actual_sub_minutes']} 分",
         f"英语 {snapshot['english_minutes']} 分，其中背单词 {snapshot['vocabulary_minutes']} 分（已包含在实际分钟中）",
         f"本周写复盘的天数：{snapshot['review_days']} 天",
@@ -1221,7 +1224,7 @@ def _build_weekday_progress(snapshot: dict) -> dict:
     saved_count = 0
     for index, day in enumerate(snapshot["days"]):
         review = day["review"]
-        has_content = any((review[key] or "").strip() for key in review)
+        has_content = bool(day["has_review"]) and day["date"] <= today
         if has_content:
             saved_count += 1
         days.append({
@@ -1229,7 +1232,8 @@ def _build_weekday_progress(snapshot: dict) -> dict:
             "label": labels[index],
             "has_review": has_content,
             "is_future": day["date"] > today,
-            "is_clickable": has_content and day["date"] <= today,
+            "is_clickable": day["date"] <= today,
+            "has_execution": bool(day["task_execution_board"]),
         })
     return {
         "saved_count": saved_count,
@@ -1690,12 +1694,9 @@ def _ensure_recordable_plan(connection, plan_date: str):
 
 
 def _append_temporary_task(connection, plan, payload: TemporaryTaskInput):
-    from .services.task_rules import UNSAFE_REHAB_WORDS
     title = payload.title.strip()
     if not title:
         raise HTTPException(422, "请填写活动名称")
-    if payload.category == "rehab" and (plan["safety_notice"] or any(word in title for word in UNSAFE_REHAB_WORDS)):
-        raise HTTPException(422, "膝盖安全规则不允许添加这项运动")
     if connection.execute("SELECT COUNT(*) FROM tasks WHERE plan_id=?", (plan["id"],)).fetchone()[0] >= 15:
         raise HTTPException(422, "当天最多 15 项活动")
     _insert_tasks(connection, plan["id"], [TaskDraft(title=title, category=payload.category,
@@ -2075,6 +2076,8 @@ def save_settings(payload: SettingsInput, request: Request):
         existing = _get_settings(connection)
         data = payload.model_dump(mode="json")
         for key in [
+            "weekly_review_mode",
+            "weekly_review_day",
             "execution_labels",
             "effective_labels_by_category",
             "draft_main_minutes_by_category",

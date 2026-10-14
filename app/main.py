@@ -143,7 +143,11 @@ def create_app(
 
     @app.get("/weekly", response_class=HTMLResponse)
     def weekly_page(request: Request):
-        return templates.TemplateResponse(request, "weekly.html", {})
+        anchor = request.query_params.get("anchor_date") or request.query_params.get("date") or request.query_params.get("end_date")
+        target = "/review?scope=weekly"
+        if anchor:
+            target += "&date=" + quote(anchor, safe="")
+        return RedirectResponse(target, status_code=303)
 
     @app.get("/gpt-workbench", response_class=HTMLResponse)
     def gpt_workbench_page(request: Request):

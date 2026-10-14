@@ -43,7 +43,6 @@
     </div></fieldset>
     <div class="form-grid">
       <label>当天类型<select id="day-type"><option value="normal">普通日</option><option value="early_class">早课日</option></select></label>
-      <label class="knee-alert-label"><input id="knee-alert" type="checkbox"><span>膝盖有异常</span></label>
     </div>
     <button class="primary wide" type="submit"><span>生成今天的草稿</span><span aria-hidden="true">→</span></button>
   </form>
@@ -53,7 +52,6 @@
 <div id="today-review-stage" class="hidden">
 <section id="plan-section" class="panel today-plan-shell">
   <div class="section-heading"><div><p id="plan-day-caption" class="plan-day-caption"></p><h2 id="plan-title">安排今天</h2></div></div>
-  <div id="safety-notice" class="notice warning hidden"></div>
   <div id="degraded-notice" class="notice hidden">AI 暂时没有成功响应，当前使用稳定的本地规则版。</div>
 
   <aside class="plan-overview" aria-label="今日目标概览">

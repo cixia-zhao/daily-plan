@@ -103,7 +103,7 @@ async function downloadBackupFile() {
 async function resetDailyDataFor(dateValue) {
   if (!dateValue) return null;
   const confirmed = await confirmAction(
-    `确认清空 ${dateValue} 的计划、完成情况和复盘吗？这会让单日和七日复盘中的该日数据一起消失。`
+    `确认清空 ${dateValue} 的计划、完成情况和复盘吗？这会让日复盘和周复盘中的该日数据一起消失。`
   );
   if (!confirmed) return null;
   return api(`/api/daily-data/${dateValue}`, {method:'DELETE'});
@@ -153,7 +153,7 @@ function formatPercent(value) {
 
 function toDateTimeInputValue(value) {
   if (!value) return '';
-  return String(value).slice(0, 16);
+  return String(value).slice(0, 19);
 }
 
 function fromDateTimeInputValue(value) {
@@ -292,8 +292,9 @@ async function renderCalendarMonth() {
       const nextDate = button.dataset.date;
       if (!calendarState || !nextDate) return;
       calendarState.selectedDate = nextDate;
+      const onSelect = calendarState.onSelect;
       closeCalendar();
-      await calendarState.onSelect(nextDate);
+      try { await onSelect(nextDate); } catch (error) { toast(error.message); }
     };
   });
 }
@@ -585,21 +586,14 @@ if (page === 'today') {
     </article>`;
   }
 
-  function renderPlaceholder(isSub, paused=false) {
-    if (paused) {
-      return `<article class="route-placeholder paused-route" aria-label="今日暂停运动">
-        <span class="task-index">4</span><div><strong>运动已暂停</strong><small>今天记录了膝盖异常，不计入任务和统计。</small></div>
-      </article>`;
-    }
+  function renderPlaceholder(isSub) {
     return `<article class="route-placeholder" data-route="${isSub ? 'sub' : 'main'}">
       <button type="button" class="placeholder-target" disabled>空位</button>
     </article>`;
   }
 
   function renderRoute(list, tasks, isSub) {
-    const showPaused = !isSub && currentPlan.safety_notice && !tasks.some(task => task.category === 'rehab');
     const slots = tasks.map((task, index) => renderTask(task, index, tasks.length));
-    if (showPaused && slots.length < ROUTE_SLOT_COUNT) slots.push(renderPlaceholder(false, true));
     while (slots.length < ROUTE_SLOT_COUNT) slots.push(renderPlaceholder(isSub));
     list.innerHTML = slots.join('');
   }
@@ -617,8 +611,6 @@ if (page === 'today') {
     $('#save-draft').classList.toggle('hidden', plan.status !== 'draft');
     $('#approve-plan').classList.toggle('hidden', plan.status !== 'draft');
     $('#adjust-checkin').classList.toggle('hidden', plan.status !== 'draft');
-    $('#safety-notice').classList.toggle('hidden', !plan.safety_notice);
-    $('#safety-notice').textContent = plan.safety_notice || '';
     $('#degraded-notice').classList.toggle('hidden', !plan.degraded_reason);
     $('#method-list').innerHTML = plan.methods.map(method => `<li>${esc(method)}</li>`).join('');
 
@@ -844,7 +836,6 @@ if (page === 'today') {
         energy:$('input[name=energy]:checked').value,
         target_minutes:Object.fromEntries($$('[data-target-category]').map(input => [input.dataset.targetCategory, Number(input.value)])),
         day_type:$('#day-type').value,
-        knee_alert:$('#knee-alert').checked,
       })});
       invalidateCalendarMonth(dateInput.value);
       renderPlan(plan);
@@ -1021,8 +1012,8 @@ if (page === 'execute') {
       <article class="timeline-card ${isDraft ? 'draft' : ''}" data-segment-id="${segment.id}">
         <p class="muted">${!isDraft && segment.included === false ? '此段保留记录，不计入统计' : ''}</p>
         <div class="timeline-form">
-          <label>开始<input class="segment-start" type="datetime-local" value="${toDateTimeInputValue(segment.started_at)}"></label>
-          <label>结束<input class="segment-end" type="datetime-local" value="${toDateTimeInputValue(segment.ended_at)}"></label>
+          <label>开始<input class="segment-start" type="datetime-local" step="1" value="${toDateTimeInputValue(segment.started_at)}"></label>
+          <label>结束<input class="segment-end" type="datetime-local" step="1" value="${toDateTimeInputValue(segment.ended_at)}"></label>
           <label>任务<select class="segment-task-id">${taskOptions}</select></label>
           <label>类型<select class="segment-kind">
             <option value="effective" ${segment.segment_kind === 'effective' ? 'selected' : ''}>有效时间</option>
@@ -1473,7 +1464,7 @@ if (page === 'execute') {
     $('#execute-panel').classList.toggle('hidden', !runnable);
     $('#timeline-panel').classList.toggle('hidden', !runnable);
     $('#execute-submit-panel').classList.toggle('hidden', !readyToClose);
-    $('#enter-review').disabled = result?.plan?.status !== 'submitted';
+    $('#enter-review').disabled = !runnable;
     emptyPanel.classList.toggle('hidden', runnable);
     if (!result?.plan) {
       emptyMessage.textContent = '当前日期还没有计划。先回今天页生成并确认清单。';
@@ -1600,7 +1591,7 @@ if (page === 'execute') {
       executionState.plan = await api(`/api/daily-plans/${dateInput.value}/submit`, {method:'POST'});
       await loadExecution();
       invalidateCalendarMonth(dateInput.value);
-      toast('今日数据已成功提交到复盘页');
+      toast('今日收尾已提交，执行记录始终自动保存');
     } catch (error) { toast(error.message); }
   };
 
@@ -1714,330 +1705,6 @@ async function persistPromptSettings(promptSettings) {
   };
   settings = await api('/api/settings', {method:'PUT', body:JSON.stringify(payload)});
   return normalizePromptSettings(settings);
-}
-
-if (page === 'review') {
-  const dateInput = $('#review-date');
-  const dateButton = $('#review-date-button');
-  const form = $('#daily-review-form');
-  let reviewState = null;
-  dateInput.value = todayIso();
-  updateDateTrigger(dateButton, dateInput.value);
-
-  const reviewTabs = $$('.review-section-tab');
-  function selectReviewTab(tab) {
-    reviewTabs.forEach(item => {
-      const selected = item === tab;
-      item.setAttribute('aria-selected', String(selected));
-      item.tabIndex = selected ? 0 : -1;
-      document.getElementById(item.getAttribute('aria-controls')).hidden = !selected;
-    });
-  }
-  reviewTabs.forEach(tab => {
-    tab.onclick = () => selectReviewTab(tab);
-    tab.onkeydown = event => {
-      if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
-      event.preventDefault();
-      const current = reviewTabs.indexOf(tab);
-      const next = event.key === 'Home' ? 0 : event.key === 'End' ? reviewTabs.length - 1
-        : (current + (event.key === 'ArrowRight' ? 1 : -1) + reviewTabs.length) % reviewTabs.length;
-      selectReviewTab(reviewTabs[next]);
-      reviewTabs[next].focus();
-    };
-  });
-
-  function renderDailyReview(result) {
-    reviewState = result;
-    $('#daily-status').textContent = result.status_label;
-    $('#daily-status-note').textContent = result.status ? '来自当日计划' : '还没有当天计划';
-    $('#daily-completed').textContent = `${result.main_completed_count} / ${result.main_task_count}`;
-    $('#daily-total').textContent = `共 ${result.main_task_count} 项主任务`;
-    $('#daily-main-minutes').textContent = `${result.main_planned_minutes} 分`;
-    $('#daily-main-actual').textContent = `实际 ${result.main_actual_minutes} 分`;
-    $('#daily-sub-minutes').textContent = `${result.sub_actual_minutes} 分`;
-    form.mood.value = result.review.mood;
-    form.hardest_point.value = result.review.hardest_point;
-    form.effective_method.value = result.review.effective_method;
-    form.optimization_note.value = result.review.optimization_note;
-    form.real_progress.value = result.review.real_progress;
-    form.tomorrow_focus.value = result.review.tomorrow_focus;
-    form.reflection_text.value = result.review.reflection_text;
-    $('#daily-gpt-response').value = result.gpt_record?.response_text || '';
-    $('#daily-gpt-adopted').value = result.gpt_record?.adopted_text || '';
-    $('#daily-execution-board-empty').classList.toggle('hidden', Boolean(result.task_execution_board?.length));
-    $('#daily-execution-board').classList.toggle('hidden', !result.task_execution_board?.length);
-    renderTaskExecutionBoard($('#daily-execution-board'), result.task_execution_board, '');
-  }
-
-  async function loadDailyReview() {
-    try {
-      renderDailyReview(await api(`/api/daily-review/${dateInput.value}`));
-    } catch (error) { toast(error.message); }
-  }
-
-  $('#copy-daily-gpt-prompt').onclick = async () => {
-    try {
-      if (!reviewState?.gpt_prompt_text) throw new Error('当前还没有可复制的单日提示词');
-      await navigator.clipboard.writeText(reviewState.gpt_prompt_text);
-      toast('已复制到剪贴板，直接粘到 ChatGPT 就行');
-    } catch (error) { toast(error.message); }
-  };
-
-  $('#save-daily-gpt-record').onclick = async () => {
-    try {
-      const saved = await api(`/api/daily-review/${dateInput.value}/gpt-record`, {
-        method:'PUT',
-        body:JSON.stringify({
-          response_text: $('#daily-gpt-response').value,
-          adopted_text: $('#daily-gpt-adopted').value,
-        }),
-      });
-      reviewState = reviewState ? {...reviewState, gpt_record: saved} : reviewState;
-      toast('这次 GPT 协作已保存');
-    } catch (error) { toast(error.message); }
-  };
-
-  $('#reset-day').onclick = async () => {
-    try {
-      const result = await resetDailyDataFor(dateInput.value);
-      if (!result) return;
-      invalidateCalendarMonth(dateInput.value);
-      await loadDailyReview();
-      toast(result.message);
-    } catch (error) { toast(error.message); }
-  };
-
-  form.onsubmit = async event => {
-    event.preventDefault();
-    try {
-      await api('/api/daily-reviews', {method:'POST', body:JSON.stringify({date:dateInput.value, ...Object.fromEntries(new FormData(event.target))})});
-      invalidateCalendarMonth(dateInput.value);
-      await loadDailyReview();
-      toast('复盘已保存');
-    } catch (error) { toast(error.message); }
-  };
-
-  bindSharedCalendarTrigger(dateButton, () => dateInput.value, async nextDate => {
-    dateInput.value = nextDate;
-    updateDateTrigger(dateButton, nextDate);
-    await loadDailyReview();
-  }, '选择单日复盘日期');
-  loadDailyReview();
-}
-
-if (page === 'weekly') {
-  let selectedEndDate = todayIso();
-  let selectedAnchorDate = todayIso();
-  let weeklyState = null;
-  let selectedReviewDate = null;
-  const weeklyDateInput = $('#weekly-anchor-date');
-  const weeklyDateButton = $('#weekly-date-button');
-  weeklyDateInput.value = selectedAnchorDate;
-  updateDateTrigger(weeklyDateButton, selectedAnchorDate);
-
-  function renderWeeklyMetrics(result) {
-    $('#metric-rate').textContent = `${Math.round(result.completion_rate * 100)}%`;
-    $('#metric-completed').innerHTML = `<div>${result.completed_count}项 (主)</div><div style="font-size:16px;color:var(--muted)">${result.completed_sub_count || 0}项 (副)</div>`;
-    $('#metric-total').textContent = `共 ${result.task_count} 项主任务`;
-    $('#metric-time').innerHTML = `<div>${result.actual_minutes}分 (主)</div><div style="font-size:16px;color:var(--muted)">${result.actual_sub_minutes || 0}分 (副)</div>`;
-    $('#metric-planned').textContent = `主计划 ${result.planned_minutes} 分`;
-    $('#metric-days').textContent = result.review_days;
-  }
-
-  function renderWeeklyAnalysis(result) {
-    const analysis = result.analysis || {};
-    $('#weekly-title-text').textContent = analysis.summary_title || '本周摘要';
-    $('#weekly-title-range').textContent = `${result.start_date} - ${result.end_date}`;
-    $('#weekly-status-note').textContent = result.ai_status === 'ready'
-      ? '系统已经先整理出一版基础摘要，你可以继续复制给 ChatGPT 深聊。'
-      : '系统先把本周事实整理好，接下来更适合复制给 ChatGPT 一起往下聊。';
-    $('#weekly-load-advice').textContent = analysis.load_advice || '先看真实完成情况，再决定下周是否调量。';
-    $('#weekly-drag-factors').textContent = analysis.drag_factors || '这里暂时没有自动摘要时，可以直接依赖 GPT 协作区往下聊。';
-    $('#weekly-effective-patterns').textContent = analysis.effective_patterns || '等你把更多事实喂给 GPT 后，再一起提炼有效模式。';
-    $('#weekly-real-progress').textContent = analysis.real_progress_assessment || '先不要急着评价好坏，先把这一周真实发生了什么说清楚。';
-    $('#weekly-next-focus').textContent = analysis.next_week_focus || '先保留判断，把重点交给本页的 GPT 协作区继续整理。';
-    $('#weekly-final-report').value = result.final_report_text || [
-      analysis.summary_title,
-      analysis.load_advice && `调量建议：${analysis.load_advice}`,
-      analysis.drag_factors && `主要拖累因素：${analysis.drag_factors}`,
-      analysis.effective_patterns && `有效模式：${analysis.effective_patterns}`,
-      analysis.real_progress_assessment && `真实推进判断：${analysis.real_progress_assessment}`,
-      analysis.next_week_focus && `下周聚焦点：${analysis.next_week_focus}`,
-    ].filter(Boolean).join('\n\n');
-    $('#weekly-gpt-response').value = result.gpt_record?.response_text || '';
-    $('#weekly-gpt-adopted').value = result.gpt_record?.adopted_text || '';
-  }
-
-  function renderWeeklyProgress(result) {
-    const progress = result.weekday_progress;
-    $('#weekly-progress-summary').textContent = `本周已记录 ${progress.saved_count} / ${progress.total} 天`;
-    $('#weekly-progress-fill').style.width = `${progress.progress_ratio * 100}%`;
-    $('#weekly-progress-days').innerHTML = progress.days.map(day => {
-      const classes = ['weekly-day-node'];
-      if (day.has_review) classes.push('has-review');
-      if (day.is_future) classes.push('is-future');
-      if (!day.is_clickable) classes.push('is-disabled');
-      if (selectedReviewDate === day.date) classes.push('is-active');
-      return `<button type="button" class="${classes.join(' ')}" data-date="${day.date}" ${day.is_clickable ? '' : 'disabled'}>
-        <span class="weekly-day-dot"></span>
-        <span class="weekly-day-label">${day.label}</span>
-      </button>`;
-    }).join('');
-    $$('.weekly-day-node').forEach(button => button.onclick = async () => {
-      const targetDate = button.dataset.date;
-      if (!targetDate) return;
-      try {
-        const result = await api(`/api/daily-review/${targetDate}`);
-        selectedReviewDate = targetDate;
-        renderInlineReview(result);
-        renderWeeklyProgress(weeklyState);
-      } catch (error) { toast(error.message); }
-    });
-  }
-
-  function renderInlineReview(result) {
-    const form = $('#weekly-inline-review-form');
-    const hasContent = reviewHasContent(result.review);
-    if (result.date) selectedReviewDate = result.date;
-    $('#weekly-day-review-title').textContent = hasContent ? `${result.date} 的复盘` : `${result.date || '这一天'} 还没有保存复盘`;
-    form.mood.value = result.review.mood;
-    form.real_progress.value = result.review.real_progress;
-    form.hardest_point.value = result.review.hardest_point;
-    form.effective_method.value = result.review.effective_method;
-    form.optimization_note.value = result.review.optimization_note;
-    form.tomorrow_focus.value = result.review.tomorrow_focus;
-    form.reflection_text.value = result.review.reflection_text;
-    $$('input, select, textarea, button', form).forEach(node => node.disabled = !hasContent);
-    $('#save-inline-review').disabled = !hasContent;
-  }
-
-  function renderWeeklyHistory(items) {
-    const container = $('#weekly-history');
-    if (!items.length) {
-      container.innerHTML = '<p class="muted">还没有历史周报。</p>';
-      return;
-    }
-    container.innerHTML = items.map(item => `
-      <button type="button" class="carryover weekly-history-item" data-end-date="${item.end_date}">
-        <div><strong>${item.start_date} → ${item.end_date}</strong><small>基础摘要 ${item.has_ai_draft ? '已整理' : '未整理'} · 最终稿 ${item.has_final_report ? '已保存' : '未保存'}</small></div>
-        <span class="muted">${item.updated_at || ''}</span>
-      </button>
-    `).join('');
-    $$('.weekly-history-item').forEach(button => button.onclick = async () => {
-      try {
-        const report = await api(`/api/weekly-reports/${button.dataset.endDate}`);
-        selectedEndDate = report.end_date;
-        selectedAnchorDate = report.end_date;
-        weeklyDateInput.value = selectedAnchorDate;
-        updateDateTrigger(weeklyDateButton, selectedAnchorDate);
-        weeklyState = weeklyState ? {...weeklyState, ...report, analysis: report.deepseek_analysis} : {...report, analysis: report.deepseek_analysis};
-        renderWeeklyAnalysis(weeklyState);
-        if (report.weekday_progress) {
-          selectedReviewDate = report.weekday_progress.days.find(day => day.has_review)?.date || null;
-          renderWeeklyProgress(report);
-        }
-      } catch (error) { toast(error.message); }
-    });
-  }
-
-  async function loadWeeklyReview() {
-    try {
-      const result = await api(`/api/weekly-review?anchor_date=${selectedAnchorDate}`);
-      weeklyState = result;
-      selectedEndDate = result.end_date;
-      weeklyDateInput.value = selectedAnchorDate;
-      updateDateTrigger(weeklyDateButton, selectedAnchorDate);
-      settings = await api('/api/settings');
-      renderWeeklyMetrics(result);
-      renderWeeklyAnalysis(result);
-      if (!result.weekday_progress.days.some(day => day.date === selectedReviewDate)) {
-        selectedReviewDate = result.weekday_progress.days.find(day => day.date === selectedAnchorDate)?.date
-          || result.weekday_progress.days.find(day => day.has_review)?.date
-          || result.weekday_progress.days[0]?.date
-          || null;
-      }
-      renderWeeklyProgress(result);
-      if (selectedReviewDate) renderInlineReview(await api(`/api/daily-review/${selectedReviewDate}`));
-      else renderInlineReview({date:'', review:{mood:'',real_progress:'',hardest_point:'',effective_method:'',optimization_note:'',tomorrow_focus:'',reflection_text:''}});
-      renderWeeklyHistory(result.history || []);
-    } catch (error) { toast(error.message); }
-  }
-
-  $('#refresh-weekly-report').onclick = async () => {
-    try {
-      const report = await api(`/api/weekly-reports/${selectedEndDate}/refresh`, {method:'POST'});
-      weeklyState = weeklyState ? {...weeklyState, ...report, analysis: report.deepseek_analysis, weekday_progress: report.weekday_progress} : {...report, analysis: report.deepseek_analysis, weekday_progress: report.weekday_progress};
-      invalidateCalendarMonth(selectedEndDate);
-      renderWeeklyAnalysis(weeklyState);
-      renderWeeklyProgress(weeklyState);
-      renderWeeklyHistory(await api('/api/weekly-reports'));
-      toast('本周整理已刷新');
-    } catch (error) { toast(error.message); }
-  };
-
-  $('#copy-chatgpt-prompt').onclick = async () => {
-    try {
-      if (!weeklyState?.gpt_prompt_text) throw new Error('当前还没有可复制的周整理提示词');
-      await navigator.clipboard.writeText(weeklyState.gpt_prompt_text);
-      toast('已复制到剪贴板，直接粘到 ChatGPT 就行');
-    } catch (error) { toast(error.message); }
-  };
-
-  $('#save-weekly-gpt-record').onclick = async () => {
-    try {
-      const saved = await api(`/api/weekly-review/${selectedEndDate}/gpt-record`, {
-        method:'PUT',
-        body:JSON.stringify({
-          response_text: $('#weekly-gpt-response').value,
-          adopted_text: $('#weekly-gpt-adopted').value,
-        }),
-      });
-      weeklyState = weeklyState ? {...weeklyState, gpt_record: saved} : weeklyState;
-      toast('这次 GPT 协作已保存');
-    } catch (error) { toast(error.message); }
-  };
-
-  $('#save-weekly-report').onclick = async () => {
-    try {
-      const saved = await api(`/api/weekly-reports/${selectedEndDate}`, {
-        method:'PUT',
-        body:JSON.stringify({final_report_text:$('#weekly-final-report').value}),
-      });
-      weeklyState = weeklyState ? {...weeklyState, ...saved, analysis: saved.deepseek_analysis} : {...saved, analysis: saved.deepseek_analysis};
-      renderWeeklyHistory(await api('/api/weekly-reports'));
-      toast('这周最终周报已保存');
-    } catch (error) { toast(error.message); }
-  };
-
-  $('#weekly-inline-review-form').onsubmit = async event => {
-    event.preventDefault();
-    if (!selectedReviewDate) return;
-    try {
-      await api('/api/daily-reviews', {
-        method:'POST',
-        body:JSON.stringify({date:selectedReviewDate, ...Object.fromEntries(new FormData(event.target))}),
-      });
-      invalidateCalendarMonth(selectedReviewDate);
-      const refreshed = await api('/api/daily-review/' + selectedReviewDate);
-      renderInlineReview(refreshed);
-      const nextWeekly = await api(`/api/weekly-review?anchor_date=${selectedAnchorDate}`);
-      weeklyState = {...weeklyState, ...nextWeekly};
-      renderWeeklyProgress(weeklyState);
-      renderWeeklyMetrics(weeklyState);
-      renderWeeklyAnalysis(weeklyState);
-      toast('这一天的复盘已保存');
-    } catch (error) { toast(error.message); }
-  };
-
-  bindSharedCalendarTrigger(weeklyDateButton, () => selectedAnchorDate, async nextDate => {
-    selectedAnchorDate = nextDate;
-    selectedReviewDate = nextDate;
-    weeklyDateInput.value = nextDate;
-    updateDateTrigger(weeklyDateButton, nextDate);
-    await loadWeeklyReview();
-  }, '选择七日复盘日期');
-
-  loadWeeklyReview();
 }
 
 if (page === 'gpt-workbench') {
@@ -2287,6 +1954,10 @@ if (page === 'settings') {
     form.ai_project_weekly_frequency.value = result.ai_project_weekly_frequency;
     form.rehab_enabled.checked = result.rehab_enabled;
     form.project_start_date.value = result.project_start_date || todayIso();
+    form.weekly_review_mode.value = result.weekly_review_mode || 'separate';
+    form.weekly_review_day.value = String(result.weekly_review_day ?? 6);
+    $('#weekly-review-day-field').hidden = form.weekly_review_mode.value !== 'replace_day';
+    form.weekly_review_mode.onchange = () => { $('#weekly-review-day-field').hidden = form.weekly_review_mode.value !== 'replace_day'; };
     form.budget_minimum.value = result.budget_minimum || 90;
     form.budget_normal.value = result.budget_normal || 150;
     form.budget_ample.value = result.budget_ample || 210;
@@ -2314,6 +1985,8 @@ if (page === 'settings') {
         ai_project_weekly_frequency:Number(event.target.ai_project_weekly_frequency.value),
         rehab_enabled:event.target.rehab_enabled.checked,
         project_start_date:event.target.project_start_date.value,
+        weekly_review_mode:event.target.weekly_review_mode.value,
+        weekly_review_day:Number(event.target.weekly_review_day.value),
         budget_minimum:Number(event.target.budget_minimum.value),
         budget_normal:Number(event.target.budget_normal.value),
         budget_ample:Number(event.target.budget_ample.value),

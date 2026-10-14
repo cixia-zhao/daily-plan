@@ -43,7 +43,7 @@ if (!baseUrl || !['127.0.0.1','localhost','[::1]'].includes(new URL(baseUrl).hos
           assert(!(await page.locator('#plan-title').isVisible()), '手机只保留一个清单标题');
         }
         assert(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), `${path} 横向溢出`);
-        if (await page.locator('#reset-day').count()) {
+        if (await page.locator('#reset-day').count() && await page.locator('#reset-day').isVisible()) {
           assert.equal(await page.locator('.day-options').count(), 0, '直接显示重置入口');
           assert.equal(await page.locator('#reset-day').innerText(), '重置今天');
           await page.locator('#reset-day').tap();
@@ -77,7 +77,7 @@ if (!baseUrl || !['127.0.0.1','localhost','[::1]'].includes(new URL(baseUrl).hos
       assert.deepEqual(styles[0], styles[1], '相邻次要按钮应使用相同样式');
 
       await page.goto(`${baseUrl}/review`);
-      await page.waitForFunction(() => document.querySelector('#daily-status').textContent !== '—');
+      await page.waitForFunction(() => document.querySelector('#daily-completed').textContent !== '—');
       assert(await page.locator('#review-data-panel').isVisible());
       assert(!(await page.locator('#review-reflection-panel').isVisible()));
       assert(await page.locator('#daily-execution-board').isVisible(), '执行结构应在数据看板中直接展示');
@@ -111,12 +111,13 @@ if (!baseUrl || !['127.0.0.1','localhost','[::1]'].includes(new URL(baseUrl).hos
         await page.screenshot({path:`${process.env.COMPACT_SCREENSHOT_DIR}/review-${size.width}.png`,fullPage:true});
       }
       await page.reload();
+      await page.waitForFunction(() => document.querySelector('#review-workspace-content')?.getAttribute('aria-busy') === 'false' && document.querySelector('.review-week-step.is-active'));
       assert(await page.locator('#review-data-panel').isVisible());
     }
     // 最后只清空本机临时数据库中的测试日期，验证确认后才执行重置。
     await page.locator('#reset-day').tap();
     await page.locator('#confirm-accept').tap();
-    await page.waitForFunction(() => document.querySelector('#daily-status-note').textContent === '还没有当天计划');
+    await page.waitForFunction(() => document.querySelector('#daily-completed').textContent === '0 / 0' && document.querySelector('#review-workspace-content').getAttribute('aria-busy') === 'false');
     assert.equal((await api(`daily-execution/${date}`)).plan, null);
     assert.deepEqual(errors, []);
     console.log('PASS: 四种视口日期右上对齐、月历、清单日期保留、卡片设置默认折叠与展开保留、按钮一致、复盘页签切换/输入保留/保存/键盘');

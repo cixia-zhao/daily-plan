@@ -94,10 +94,9 @@ body:not(.today-list-stage) #today-page-header { max-width: 740px; margin-left: 
 #checkin-form .segmented label input:checked + span { background: var(--surface); color: var(--accent); box-shadow: none; }
 #checkin-form .segmented small { display: none; }
 #checkin-form input[type=number], #checkin-form select { min-height: 44px; padding: 8px 10px; background: #f5f4ed; }
-#checkin-form .knee-alert-label { align-items: center; padding: 0; }
 @media (min-width: 760px) {
   .today-plan-shell { display: grid; grid-template-columns: minmax(0,1fr) 240px; column-gap: 32px; align-items: start; }
-  #plan-section .section-heading, #safety-notice, #degraded-notice { grid-column: 1 / -1; }
+  #plan-section .section-heading, #degraded-notice { grid-column: 1 / -1; }
   .plan-overview { grid-column: 2; grid-row: 2 / span 4; display: block; padding: 24px; margin: 0; border-radius: 10px; }
   .plan-overview > div:first-child { display: grid; gap: 16px; }
   #plan-total-display { font-size: 42px; }

@@ -1,10 +1,10 @@
 // 本脚本会清空隔离数据库的 2026-10-11；禁止使用真实数据。
 const {chromium} = require('playwright');
 const assert = require('node:assert/strict');
-const baseUrl = process.env.DAILY_PLAN_TEST_URL || 'http://127.0.0.1:8765';
-if (!['127.0.0.1','localhost','[::1]'].includes(new URL(baseUrl).hostname)) throw new Error('测试只允许本机隔离服务，不能清空生产日期');
+const baseUrl = process.env.DAILY_PLAN_TEST_URL;
+if (!baseUrl || !['127.0.0.1','localhost','[::1]'].includes(new URL(baseUrl).hostname)) throw new Error('测试只允许本机隔离服务，不能清空生产日期');
 (async () => {
-  const browser = await chromium.launch({headless:true});
+  const browser = await chromium.launch({headless:true, ...(process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH ? {executablePath:process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH} : {})});
   const page = await browser.newPage({viewport:{width:390,height:844},isMobile:true,hasTouch:true});
   await page.clock.setFixedTime(new Date('2026-10-11T12:00:00+08:00'));
   const errors=[];page.on('pageerror',error=>{errors.push(error.message); console.log('JS error:',error.message)});
@@ -126,7 +126,7 @@ if (!['127.0.0.1','localhost','[::1]'].includes(new URL(baseUrl).hostname)) thro
   assert.match(await page.locator('#daily-execution-board').innerText(),/休息/);
   await noOverflow();
   await page.goto(`${baseUrl}/weekly?date=2026-10-11`);
-  await page.waitForFunction(()=>document.querySelector('#metric-time')?.textContent.includes('分'));
+  await page.waitForFunction(()=>document.querySelector('#weekly-total-time')?.textContent.includes('分'));
   const weekResult=await (await page.request.get(`${baseUrl}/api/weekly-review?anchor_date=2026-10-11`)).json();
   assert.equal(weekResult.english_minutes,10);assert.equal(weekResult.vocabulary_minutes,10);
   await noOverflow();

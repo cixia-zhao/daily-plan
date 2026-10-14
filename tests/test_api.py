@@ -336,7 +336,7 @@ def test_clear_daily_data_succeeds_when_date_is_already_empty(tmp_path):
     assert cleared.json()["deleted_review"] is False
 
 
-def test_health_report_blocks_rehab_generation(tmp_path):
+def test_legacy_alert_does_not_disable_exercise(tmp_path):
     client = make_client(tmp_path)
     response = client.post("/api/daily-plans/draft", json={
         "date": date.today().isoformat(), "energy": "normal", "available_minutes": 180,
@@ -344,8 +344,8 @@ def test_health_report_blocks_rehab_generation(tmp_path):
     })
     assert response.status_code == 201
     body = response.json()
-    assert not any(task["category"] == "rehab" for task in body["tasks"])
-    assert body["safety_notice"]
+    assert any(task["category"] == "rehab" for task in body["tasks"])
+    assert body["safety_notice"] is None
 
 
 def test_explicitly_rescheduled_task_is_added_on_target_day(tmp_path):
@@ -400,8 +400,8 @@ def test_submit_flow_and_sub_route_rules(tmp_path):
     client.patch(f"/api/tasks/{sub_task['id']}", json={"completed": True})
 
     review = client.get("/api/weekly-review").json()
-    assert review["task_count"] == 0
-    assert review["completed_count"] == 0
+    assert review["task_count"] == len([t for t in draft["tasks"] if not t["is_sub"]])
+    assert review["completed_count"] == 1
 
     submitted = client.post(f"/api/daily-plans/{today}/submit")
     assert submitted.json()["status"] == "submitted"

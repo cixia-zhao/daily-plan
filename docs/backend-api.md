@@ -1,5 +1,15 @@
 # 后端接口与数据层速查文档
 
+> 2026-10-14 本机预览更新，尚未部署：周统计自动纳入 `approved`／`submitted` 日期的已保存记录，排除未来日期和草稿；提交仅表示收尾，补记修改不再令分钟消失。日／周、导出和 GPT 共用原执行聚合，背单词不重复累加。
+>
+> 日复盘新增 `main_total_minutes`、`sub_total_minutes`、`sub_completed_count`、`has_review`；周复盘新增 `total_minutes`、`total_sub_minutes`、`effective_ratio` 与按类别聚合的 `task_distribution`。主航线有效率为整周有效分钟总和／总计分钟总和，不平均每日比率，也不包含副航线和中断。原字段继续兼容，历史最终复盘正文保留。
+>
+> 周内进度区分已保存复盘与已有执行记录，过去无复盘日期也可打开补写；保存空复盘与月历的已复盘状态一致。设置新增 `weekly_review_mode`（`separate`／`replace_day`）与 `weekly_review_day`（0–6，默认 6）；旧设置读取有默认值，其他设置保存时缺失这些字段不会覆盖用户选择。
+>
+> 不改数据库结构，不删除旧任务类别 ID 或兼容字段。移除晨间膝盖异常输入、运动限制、AI 状态字段及内置相关提示；运动作为普通习惯继续使用。时间段严格相接允许，真正重叠（包括未结束计时）拒绝，前端编辑保留秒数。
+
+---
+
 > 最后更新：2026-10-11
 > 覆盖文件：`app/main.py`、`app/api.py`、`app/database.py`、`app/models.py`、`app/schemas.py`、`app/launcher.py`、`启动今日航线.cmd`、`termux-install.sh`、`termux-start.sh`、`termux-update.sh`、`termux-register-commands.sh`、`share-to-phone.ps1`
 
@@ -207,8 +217,8 @@ share-to-phone.ps1 → zip 打包 + 临时 HTTP 文件服务
 
 - DraftRequest.target_minutes 按类别接收 0–720 分目标；available_minutes 可省略，保留兼容字段但不约束合计。PlanUpdate、规则和 AI 校验均取消时间硬上限，仍校验任务数量、核心类别及运动安全。
 - TaskDraft/TaskUpdate.task_type 为 habit、daily_goal、todo；TaskUpdate.habit_status 为 done、missed、rest。习惯和具体待办不因分钟达标自动完成。新 0 目标任务不因有效分钟达 30 自动完成。
-- POST /daily-execution/{date}/tasks 接收 title/category/task_type，追加临时活动。当天最多 15 项，草稿不可执行，膝盖安全规则仍适用。
+- POST /daily-execution/{date}/tasks 接收 title/category/task_type，追加临时活动。当天最多 15 项，草稿不可执行，运动作为普通习惯。
 - POST /daily-execution/{date}/vocabulary 接收 minutes（1–1440）；PUT/DELETE /vocabulary/{id} 按日期校验归属。默认当前日英语任务，缺失时追加英语 0 目标任务，默认背单词细分及墨墨来源；不保存虚构时间段。
 - 同日明确背单词计时与录入同时存在时，duplicate_choice 必须显式选 both/manual/timer；新增真实计时、导入或编辑时间段也有反向校验。只影响英语 effective_english_words 时间段和该日墨墨条目，不影响英语阅读。不计入的明细保留 included=0。
-- GET 执行台返回 segments（真实时间段）和 duration_records（只有分钟数）；聚合用内部统一记录列表，但录入不会混入时间轴。日周 english_minutes 包含 vocabulary_minutes，不能再相加；周汇总沿用 submitted 日期。
+- GET 执行台返回 segments（真实时间段）和 duration_records（只有分钟数）；聚合用内部统一记录列表，但录入不会混入时间轴。日周 english_minutes 包含 vocabulary_minutes，不能再相加；正式旧版周汇总只包含 submitted；上方本机新版改为自动纳入已保存记录。
 - initialize 只补字段与表，原始字段不更新，旧 task_type 保持 NULL；旧待审项可处理，新增生成仅查询显式 todo。详见 tests/test_product_flows.py 的副本迁移验收。

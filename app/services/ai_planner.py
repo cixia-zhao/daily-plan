@@ -12,7 +12,7 @@ from app.services.task_rules import validate_ai_tasks
 
 FALLBACK_SYSTEM_PROMPT = """You arrange a small daily task list from approved candidates.
 Return JSON only: {"tasks": [...]}. Keep every task within the supplied categories and preserve goal minutes.
-Do not diagnose health conditions, increase physical intensity, or publish tasks without user review.
+Do not publish tasks without user review.
 Each task must contain title, category, estimated_minutes, priority, completion_criteria, reason and source.
 """
 DEFAULT_PROMPT_PATH = Path(__file__).resolve().parent.parent / "prompts" / "daily_planner_v1.txt"
@@ -43,7 +43,6 @@ class AIPlanner:
             "energy": checkin.energy,
             "planning_note": "候选分钟是用户目标，不设当天时间上限，不缩减已填写的目标",
             "day_type": checkin.day_type,
-            "knee_alert": checkin.knee_alert,
         }
         body = {
             "model": self.model,
@@ -68,7 +67,7 @@ class AIPlanner:
             content = response.json()["choices"][0]["message"]["content"]
             parsed = json.loads(content)
             tasks = [TaskDraft.model_validate({**item, "source": "ai"}) for item in parsed["tasks"]]
-            if not validate_ai_tasks(tasks, checkin.available_minutes) or (checkin.knee_alert and any(task.category == "rehab" for task in tasks)):
+            if not validate_ai_tasks(tasks, checkin.available_minutes):
                 raise ValueError("AI task list violates local constraints")
             for candidate in candidates:
                 matching = next((task for task in tasks if task.category == candidate.category and task.is_sub == candidate.is_sub and task.title == candidate.title), None)

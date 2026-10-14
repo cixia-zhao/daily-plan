@@ -39,7 +39,6 @@ class MorningCheckIn(BaseModel):
     energy: Energy
     available_minutes: int = Field(default=240, ge=30, le=720) # 仅兼容历史字段，不限制目标
     day_type: DayType
-    knee_alert: bool = False
     plan_date: date | None = None
 
 
@@ -170,6 +169,8 @@ class SettingsInput(BaseModel):
     current_stage: str = Field(min_length=1, max_length=100)
     ai_project_weekly_frequency: int = Field(ge=0, le=7)
     rehab_enabled: bool = True
+    weekly_review_mode: Literal["separate", "replace_day"] = "separate"
+    weekly_review_day: int = Field(default=6, ge=0, le=6)
     project_start_date: date = Field(default_factory=date.today)
     task_titles: dict[Category, str]
     draft_main_minutes_by_category: dict[Category, int] = Field(default_factory=dict)

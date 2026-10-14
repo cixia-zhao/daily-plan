@@ -4,7 +4,7 @@ const assert = require('node:assert/strict');
 const baseUrl = process.env.DAILY_PLAN_TEST_URL;
 if (!baseUrl || !['127.0.0.1','localhost','[::1]'].includes(new URL(baseUrl).hostname)) throw new Error('请指定本机隔离测试服务');
 (async () => {
-  const browser = await chromium.launch({headless:true});
+  const browser = await chromium.launch({headless:true, ...(process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH ? {executablePath:process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH} : {})});
   try {
     const page = await browser.newPage({viewport:{width:390,height:844},isMobile:true,hasTouch:true});
     const errors=[];
@@ -165,7 +165,7 @@ if (!baseUrl || !['127.0.0.1','localhost','[::1]'].includes(new URL(baseUrl).hos
     result=await state();assert.equal(result.active_segment.segment_kind,'interrupt_label');
     for(const path of ['review','weekly']) {
       await page.goto(`${baseUrl}/${path}`);
-      await page.waitForFunction(()=>document.querySelector('#daily-status,#metric-rate')?.textContent!=='—');
+      await page.waitForFunction(()=>document.querySelector('#review-workspace-content')?.getAttribute('aria-busy')==='false' && document.querySelector('.review-week-step.is-active'));
       assert.equal(await page.locator('#daily-vocabulary-summary,#weekly-vocabulary-summary').count(),0);
       await noOverflow();
     }
