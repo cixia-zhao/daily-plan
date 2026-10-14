@@ -1,6 +1,6 @@
 # 前端页面与交互速查文档
 
-> 2026-10-14 本机预览更新，尚未部署：`/review` 为统一日／周复盘入口，`/weekly` 保留日期并重定向到周复盘。`review.html`、`weekly_dashboard.html`、`weekly_reflection.html` 配合 `review.js` 与 `review.css`；其他页面继续用 `app.js` 和共享样式。
+> 2026-10-15 正式发布（应用 125a0ac）：`/review` 为统一日／周复盘入口，`/weekly` 保留日期并重定向到周复盘。`review.html`、`weekly_dashboard.html`、`weekly_reflection.html` 配合 `review.js` 与 `review.css`；其他页面继续用 `app.js` 和共享样式。
 >
 > 顶部八项鱼骨导航默认当天；设置替代任意一天后为七项，替代日仍可通过次要入口打开日复盘。日／周和不同日期的未保存内容在当前页面中分别保留，刷新前需主动保存。请求序号阻止较早响应覆盖后选日期，失败时不展示旧日期看板。页签下划线有切换动效，支持键盘及减少动态效果。
 >
