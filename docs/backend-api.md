@@ -1,5 +1,7 @@
 # 后端接口与数据层速查文档
 
+> 本日改动已于2026-10-15 23:52:54随应用384d3ce正式发布，验收见[发布记录](releases/2026-10-15-saving-execution.md)。下方本机未发布字样为开发阶段记录。
+
 ## 有效细分管理（2026-10-15，本机未发布）
 
 - POST /api/settings/effective-labels/{category}、PATCH /api/settings/effective-labels/{category}/{label_id}，正文为name；DELETE同一标签路径。创建201，其他成功200，返回最新设置。名称去首尾空白、1至50字，同科目重名409，未知科目422、未知标签404。
