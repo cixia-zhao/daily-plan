@@ -1,5 +1,22 @@
 # 后端接口与数据层速查文档
 
+## 有效细分管理（2026-10-15，本机未发布）
+
+- POST /api/settings/effective-labels/{category}、PATCH /api/settings/effective-labels/{category}/{label_id}，正文为name；DELETE同一标签路径。创建201，其他成功200，返回最新设置。名称去首尾空白、1至50字，同科目重名409，未知科目422、未知标签404。
+- 每次在写事务中读取最新设置，仅更新指定标签，保留其他科目与设置。deleted_effective_label_ids为设置JSON内按科目的显式删除列表；默认合并过滤已删标签，旧设置保存合并已有删除信息，不清空。不存在数据库补表迁移。
+- 改名和删除不改历史执行段快照，正在运行的段同样保留；新开始不能选择已删除标签。原记录编辑使用旧快照，跨类别仍按原规则校验。
+
+> 2026-10-15 追加本机未发布修复：学习科目 daily_goal 按有效分钟达标，其他事项类型和人工覆盖保持。新增 daily_reset_snapshots 表，只补表不批量改记录；DELETE /api/daily-data/{date} 在同一事务先保存当日快照，再清空，响应 reset_snapshot 元数据；GET /api/daily-data/{date}/reset-snapshots 返回待恢复元数据，POST /api/daily-data/{date}/reset-snapshots/{id}/restore 按日恢复。已有新数据、重复恢复、ID 或跨日时间冲突返回 409，不覆盖现有记录；错误归属返回 404。原激活段恢复为重置时停止。GPT 与周最终稿不在删除范围。
+>
+> 月历允许起始日前已有计划、复盘、执行或待恢复快照的日期；空白历史与未来日期保持原限制。补表已先在合成旧库及预览备份副本初始化两次验证；生产迁移尚未执行。
+
+
+> 2026-10-15 本机未发布修复：内部按秒汇总后再输出整数分钟，时间段及细分新增 seconds，看板新增 total_seconds／effective_seconds／counted_label_seconds／interrupt_seconds／bar_total_seconds，日周新增相应精度字段；任务的 actual_minutes 仍为兼容整数缓存。日汇总与周汇总各自从秒数合计取整，展示的分项整数之和可能小于汇总，原秒数完整保留。GPT 导出附秒级合计。
+>
+> 重叠保护覆盖全部计划日期和激活段；无时区值按中国时间解释，带时区新输入转换为中国时间保存。精确相接允许，跨午夜仍归原计划日期；不自动修改历史异常。导入 app.main／app.preview 不初始化默认库，实际获取 app 或调用 create_app 才初始化。
+>
+> 新增 GET /api/review-navigation?anchor_date=日期，只返回周日期与记录／复盘状态。读取周接口和保存最终稿／GPT 不调用分析器、不因查看创建周快照；显式 POST /api/weekly-reports/{end_date}/refresh 才生成分析，未启用返回 409，分析失败返回 502 并保留旧结果。外部调用不持有数据库连接／事务；analysis_stale 表示已有分析基于旧快照。
+
 > 2026-10-15 正式发布（应用 125a0ac）：周统计自动纳入 `approved`／`submitted` 日期的已保存记录，排除未来日期和草稿；提交仅表示收尾，补记修改不再令分钟消失。日／周、导出和 GPT 共用原执行聚合，背单词不重复累加。
 >
 > 日复盘新增 `main_total_minutes`、`sub_total_minutes`、`sub_completed_count`、`has_review`；周复盘新增 `total_minutes`、`total_sub_minutes`、`effective_ratio` 与按类别聚合的 `task_distribution`。主航线有效率为整周有效分钟总和／总计分钟总和，不平均每日比率，也不包含副航线和中断。原字段继续兼容，历史最终复盘正文保留。
@@ -211,7 +228,7 @@ share-to-phone.ps1 → zip 打包 + 临时 HTTP 文件服务
 - 若提交前仍有激活段，`submit_plan()` 会直接拒绝提交，必须先停止。
 - `PUT /api/daily-plans/{date}` 现在既可能返回字符串错误，也可能返回 FastAPI 的数组型 `detail`；前端已经兼容这两类返回。
 - ChatGPT Plus 仍只通过手工复制提示词使用，不走项目内 API 调用。
-- `main.py` 的全局 `app` 会在导入时创建默认数据库。
+- `main.py` 的兼容 `app` 属性只在实际获取时创建；导入工厂与预览模块不会初始化默认数据库。
 
 ## 2026-10-11 接口与数据约定
 

@@ -161,3 +161,57 @@ main{width:min(var(--content),calc(100% - 40px));margin:0 auto;padding:44px 0 64
 .calendar-day.is-selected .calendar-day-dot{background:var(--surface)}
 .calendar-day.out-of-range{color:var(--muted);background:var(--soft);opacity:.45}
 [hidden]{display:none!important}
+/* 重置恢复沿用次要按钮，保持常用触控尺寸。 */
+#restore-reset { min-height: 44px; max-width: 100%; font-size: 13px; }
+@media (max-width: 760px) {
+  body[data-page=review] .hero > .date-actions:has(#restore-reset:not([hidden])) { max-width: 230px; }
+  body[data-page=review] #restore-reset { order: 1; }
+}
+
+/* 当前计时以数字和留白突出，不增加大卡片或装饰。 */
+.execution-current { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 16px 24px; padding-bottom: 16px; border-bottom: 1px solid var(--line); }
+.execution-current-task { flex: 1 1 150px; min-width: 0; display: grid; gap: 6px; }
+.execution-current-task .step { margin: 0; }
+#execute-active-badge { font-size: 16px; font-weight: 600; overflow-wrap: anywhere; }
+.execution-clock-control { display: flex; flex: 0 1 auto; align-items: center; gap: 20px; max-width: 100%; }
+.execution-clock-readout { display: grid; gap: 2px; }
+#execute-clock-caption { font-size: 12px; }
+#execute-clock { font-family: var(--font-sans, sans-serif); font-size: 40px; font-weight: 500; line-height: 1.15; letter-spacing: -.03em; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.execution-clock-control .stop-current { min-height: 44px; white-space: nowrap; }
+.execution-save-note { display: flex; flex-wrap: wrap; gap: 4px 16px; padding: 12px 0 16px; color: var(--muted); font-size: 12px; }
+.execution-save-note > :first-child { flex: 1 1 240px; }
+.review-save-summary { display: flex; flex-wrap: wrap; gap: 6px 24px; color: var(--muted); font-size: 13px; padding: 0 0 16px; }
+@media (max-width: 760px) {
+  .execution-current { gap: 12px; }
+  .execution-current-task { flex-basis: 100%; }
+  .execution-clock-control { width: 100%; justify-content: space-between; }
+  #execute-clock { font-size: 38px; }
+}
+
+/* 卡片点击展开；开始计时的细分选择与底部标签管理分开。 */
+.execution-task-card { cursor: pointer; }
+.execution-task-card:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+.execution-task-head { position: relative; }
+.execution-task-card .execution-task-details[hidden] { display: none; }
+.execution-task-card .execution-task-details { padding-top: 12px; }
+.effective-start-panel { z-index: 12; cursor: default; }
+.effective-start-caption { margin: 0 0 10px; color: var(--muted); font-size: 13px; }
+.effective-start-option { min-height: 44px; max-width: 100%; white-space: normal; overflow-wrap: anywhere; }
+.effective-start-option.active { color: var(--accent); border-color: var(--accent); }
+.effective-start-unlabelled { display: block; margin-top: 10px; padding: 8px 0; border-color: transparent; color: var(--muted); font-size: 13px; }
+.effective-management-heading { display: flex; gap: 12px; align-items: center; justify-content: space-between; }
+.effective-label-add { width: 44px; min-height: 44px; padding: 0; font-size: 24px; }
+.effective-label-dialog { width: min(420px, calc(100vw - 32px)); padding: 24px; color: var(--ink); border: 1px solid var(--line); border-radius: 14px; background: var(--surface); }
+.effective-label-dialog::backdrop { background: rgba(20,20,19,.3); }
+.effective-label-dialog form { display: grid; gap: 16px; }
+.effective-label-dialog h3, .effective-label-dialog p { margin: 0; }
+.effective-label-dialog input { width: 100%; min-height: 44px; }
+.effective-label-dialog .actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.effective-label-dialog .actions button { min-height: 44px; }
+.effective-label-dialog .label-editor-error { color: var(--danger); }
+
+.execution-task-head, .execution-task-meta { user-select: none; }
+.effective-start-panel { max-height: min(360px, 60vh); overflow-y: auto; overscroll-behavior: contain; }
+.effective-start-panel.opens-above { top: auto; bottom: calc(100% + 6px); }
+/* 保留键盘焦点轮廓，避免触屏点击让整张卡片闪成浏览器默认蓝色。 */
+.execution-task-card { -webkit-tap-highlight-color: transparent; }

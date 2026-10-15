@@ -95,6 +95,7 @@ if (!baseUrl || !['127.0.0.1','localhost','[::1]'].includes(new URL(baseUrl).hos
     await waitForActive('当前空闲');
     await page.locator('[data-section-key=zero-main]').click();
     await page.locator(`[data-execution-task-id="${computer.id}"] .task-start-button`).click();
+    await page.locator(`[data-execution-task-id="${computer.id}"] [data-start-label-id=""]`).click();
     await waitForActive('408');
     await page.reload();
     await page.waitForSelector('#execute-panel:visible');

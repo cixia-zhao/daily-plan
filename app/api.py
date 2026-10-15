@@ -2,15 +2,19 @@ from __future__ import annotations
 
 import hashlib
 import json
-from datetime import date, datetime, timedelta
+from uuid import uuid4
+from datetime import date, datetime, timedelta, timezone
 
 from fastapi import APIRouter, HTTPException, Request, status
 from fastapi.responses import FileResponse
 
 from .backup_utils import create_sqlite_backup, prune_old_backups
 from .database import connect
+from .services.daily_reset import restore_snapshot, save_reset_snapshot, snapshot_metadata
 from .schemas import (
     CarryoverResolution,
+    Category,
+    EffectiveLabelNameInput,
     DurationRecordInput,
     TemporaryTaskInput,
     EffectiveLabelItem,
@@ -127,6 +131,7 @@ DEFAULT_SETTINGS = {
     "budget_ample": 210,
     "execution_labels": DEFAULT_EXECUTION_LABELS,
     "effective_labels_by_category": DEFAULT_EFFECTIVE_LABELS_BY_CATEGORY,
+    "deleted_effective_label_ids": {},
     "weekly_analysis_prompts": [
         {
             "id": "weekly_analysis_system_default",
@@ -218,6 +223,9 @@ def _get_settings(connection) -> dict:
     row = connection.execute("SELECT value_json FROM app_settings WHERE key='main'").fetchone()
     stored_settings = json.loads(row["value_json"]) if row else {}
     settings = dict(DEFAULT_SETTINGS) | stored_settings
+    settings["deleted_effective_label_ids"] = {
+        category: list(ids) for category, ids in settings.get("deleted_effective_label_ids", {}).items()
+    }
     settings["project_start_date"] = (
         stored_settings.get("project_start_date")
         or _earliest_business_date(connection)
@@ -246,13 +254,28 @@ def _now_iso() -> str:
 def _parse_iso_datetime(value: str | None) -> datetime | None:
     if not value:
         return None
-    return datetime.fromisoformat(value)
+    parsed = datetime.fromisoformat(value)
+    # 无时区旧记录按本项目中国时间解释，带时区输入先统一为同一时间轴。
+    return parsed.replace(tzinfo=timezone(timedelta(hours=8))) if parsed.tzinfo is None else parsed
+
+
+def _seconds_between(started_at: str, ended_at: str | None) -> int:
+    start = _parse_iso_datetime(started_at)
+    end = _parse_iso_datetime(ended_at or _now_iso())
+    return max(0, int((end - start).total_seconds()))
+
+
+def _local_iso(value: datetime) -> str:
+    parsed = _parse_iso_datetime(value.replace(microsecond=0).isoformat())
+    return parsed.astimezone(timezone(timedelta(hours=8))).replace(tzinfo=None).isoformat()
 
 
 def _minutes_between(started_at: str, ended_at: str | None) -> int:
-    start = _parse_iso_datetime(started_at)
-    end = _parse_iso_datetime(ended_at) or datetime.now().replace(microsecond=0)
-    return max(0, int((end - start).total_seconds() // 60))
+    return _seconds_between(started_at, ended_at) // 60
+
+
+def _record_seconds(record: dict) -> int:
+    return max(0, int(record.get("seconds", (record.get("minutes") or 0) * 60)))
 
 
 def _build_execution_label_map(settings: dict) -> dict[str, dict]:
@@ -267,13 +290,11 @@ def _effective_labels_by_category(settings: dict) -> dict[str, list[dict]]:
     for category in category_keys:
         default_items = [dict(item) for item in DEFAULT_EFFECTIVE_LABELS_BY_CATEGORY.get(category, [])]
         raw_items = [dict(item) for item in (raw.get(category) or raw.get(str(category)) or [])]
-        if not default_items:
-            merged[category] = raw_items
-            continue
         raw_by_id = {item["id"]: item for item in raw_items}
         combined = [raw_by_id.pop(item["id"], item) for item in default_items]
         combined.extend(raw_by_id.values())
-        merged[category] = combined
+        deleted = set(settings.get("deleted_effective_label_ids", {}).get(category, []))
+        merged[category] = [item for item in combined if item["id"] not in deleted]
     return merged
 
 
@@ -441,6 +462,7 @@ def _get_active_execution_segment(connection, plan_date: str | None = None):
 
 
 def _serialize_execution_segment_row(row) -> dict:
+    seconds = _seconds_between(row["started_at"], row["ended_at"])
     return {
         "id": row["id"],
         "plan_date": row["plan_date"],
@@ -451,7 +473,8 @@ def _serialize_execution_segment_row(row) -> dict:
         "label_name": row["label_name"],
         "started_at": row["started_at"],
         "ended_at": row["ended_at"],
-        "minutes": _minutes_between(row["started_at"], row["ended_at"]),
+        "minutes": seconds // 60,
+        "seconds": seconds,
         "included": bool(row["included"]),
     }
 
@@ -499,8 +522,8 @@ def _effective_minutes_by_task(segments: list[dict]) -> dict[int, int]:
         if segment["segment_kind"] != "effective":
             continue
         task_id = segment["task_id"]
-        totals[task_id] = totals.get(task_id, 0) + max(0, int(segment["minutes"] or 0))
-    return totals
+        totals[task_id] = totals.get(task_id, 0) + _record_seconds(segment)
+    return {task: seconds // 60 for task, seconds in totals.items()}
 
 
 def _total_minutes_by_task(segments: list[dict]) -> dict[int, int]:
@@ -511,8 +534,8 @@ def _total_minutes_by_task(segments: list[dict]) -> dict[int, int]:
         if segment["segment_kind"] not in ("effective", "counted_label"):
             continue
         task_id = segment["task_id"]
-        totals[task_id] = totals.get(task_id, 0) + max(0, int(segment["minutes"] or 0))
-    return totals
+        totals[task_id] = totals.get(task_id, 0) + _record_seconds(segment)
+    return {task: seconds // 60 for task, seconds in totals.items()}
 
 
 def _aggregate_execution_board(tasks: list[dict], segments: list[dict]) -> list[dict]:
@@ -526,10 +549,10 @@ def _aggregate_execution_board(tasks: list[dict], segments: list[dict]) -> list[
             "estimated_minutes": task["estimated_minutes"],
             "task_type": task.get("task_type") or ("habit" if task["category"] == "rehab" else "daily_goal"),
             "habit_status": task.get("habit_status"),
-            "total_minutes": 0,
-            "effective_minutes": 0,
-            "counted_label_minutes": 0,
-            "interrupt_minutes": 0,
+            "total_seconds": 0,
+            "effective_seconds": 0,
+            "counted_label_seconds": 0,
+            "interrupt_seconds": 0,
             "effective_labels": [],
             "counted_labels": [],
             "interrupt_labels": [],
@@ -544,36 +567,36 @@ def _aggregate_execution_board(tasks: list[dict], segments: list[dict]) -> list[
         board = board_map.get(segment["task_id"])
         if not board:
             continue
-        minutes = segment["minutes"]
+        seconds = _record_seconds(segment)
         if segment["segment_kind"] == "effective":
-            board["effective_minutes"] += minutes
-            board["total_minutes"] += minutes
+            board["effective_seconds"] += seconds
+            board["total_seconds"] += seconds
             key = segment["label_id"] or "__unlabeled_effective__"
             label_bucket = board["_effective"]
             if key not in label_bucket:
                 label_bucket[key] = {
                     "label_id": segment["label_id"],
                     "label_name": segment["label_name"] or "未细分",
-                    "minutes": 0,
+                    "seconds": 0,
                     "count": 0,
                 }
                 board["effective_labels"].append(label_bucket[key])
-            label_bucket[key]["minutes"] += minutes
+            label_bucket[key]["seconds"] += seconds
             label_bucket[key]["count"] += 1
             continue
         bucket_name = "_counted" if segment["segment_kind"] == "counted_label" else "_interrupt"
         public_name = "counted_labels" if segment["segment_kind"] == "counted_label" else "interrupt_labels"
         if segment["segment_kind"] == "counted_label":
-            board["counted_label_minutes"] += minutes
-            board["total_minutes"] += minutes
+            board["counted_label_seconds"] += seconds
+            board["total_seconds"] += seconds
         else:
-            board["interrupt_minutes"] += minutes
+            board["interrupt_seconds"] += seconds
         key = segment["label_id"] or segment["label_name"] or "unknown"
         label_bucket = board[bucket_name]
         if key not in label_bucket:
-            label_bucket[key] = {"label_id": segment["label_id"], "label_name": segment["label_name"] or "未命名标签", "minutes": 0, "count": 0}
+            label_bucket[key] = {"label_id": segment["label_id"], "label_name": segment["label_name"] or "未命名标签", "seconds": 0, "count": 0}
             board[public_name].append(label_bucket[key])
-        label_bucket[key]["minutes"] += minutes
+        label_bucket[key]["seconds"] += seconds
         label_bucket[key]["count"] += 1
 
     board_items = []
@@ -586,26 +609,31 @@ def _aggregate_execution_board(tasks: list[dict], segments: list[dict]) -> list[
         if legacy is None and not any(record["task_id"] == task["id"] for record in segments):
             legacy = task.get("actual_minutes") or 0
         if legacy:
-            board["effective_minutes"] += legacy
-            board["total_minutes"] += legacy
-            board["effective_labels"].append({"label_id": None, "label_name": "旧版时长记录", "minutes": legacy, "count": 1})
-        effective_minutes = max(0, int(board["effective_minutes"] or 0))
-        total_minutes = max(0, int(board["total_minutes"] or 0))
-        board["effective_ratio"] = round(effective_minutes / total_minutes, 4) if total_minutes else 0
+            board["effective_seconds"] += legacy * 60
+            board["total_seconds"] += legacy * 60
+            board["effective_labels"].append({"label_id": None, "label_name": "旧版时长记录", "seconds": legacy * 60, "count": 1})
+        effective_seconds = max(0, int(board["effective_seconds"] or 0))
+        total_seconds = max(0, int(board["total_seconds"] or 0))
+        board["effective_ratio"] = round(effective_seconds / total_seconds, 4) if total_seconds else 0
         for label in board["effective_labels"]:
-            label_minutes = max(0, int(label["minutes"] or 0))
-            label["effective_share"] = round(label_minutes / effective_minutes, 4) if effective_minutes else 0
+            label_seconds = max(0, int(label["seconds"] or 0))
+            label["effective_share"] = round(label_seconds / effective_seconds, 4) if effective_seconds else 0
         board["has_segments"] = bool(
             board["habit_status"]
-            or board["effective_minutes"]
-            or board["counted_label_minutes"]
-            or board["interrupt_minutes"]
+            or board["effective_seconds"]
+            or board["counted_label_seconds"]
+            or board["interrupt_seconds"]
         )
-        board["bar_total_minutes"] = max(
-            board["total_minutes"],
-            board["interrupt_minutes"],
-            board["effective_minutes"] + board["counted_label_minutes"] + board["interrupt_minutes"],
+        board["bar_total_seconds"] = max(
+            board["total_seconds"],
+            board["interrupt_seconds"],
+            board["effective_seconds"] + board["counted_label_seconds"] + board["interrupt_seconds"],
         )
+        for labels in (board["effective_labels"], board["counted_labels"], board["interrupt_labels"]):
+            for label in labels:
+                label["minutes"] = label["seconds"] // 60
+        for name in ("total", "effective", "counted_label", "interrupt", "bar_total"):
+            board[f"{name}_minutes"] = board[f"{name}_seconds"] // 60
         board_items.append(board)
     return [item for item in board_items if item["has_segments"]]
 
@@ -639,7 +667,10 @@ def _sync_plan_actual_minutes_from_execution(connection, plan_id: int, segments:
         if task["completion_override"] is not None:
             completed = int(bool(task["completion_override"]))
         else:
-            reaches_planned_total = task["estimated_minutes"] > 0 and total_minutes >= task["estimated_minutes"]
+            # 学习目标以有效投入达标；计总标签继续保留在投入统计中。
+            learning = task["category"] in {"math", "english", "computer", "ai_project", "vibe_coding", "algorithm", "reading", "writing"}
+            completion_minutes = effective_minutes if learning else total_minutes
+            reaches_planned_total = task["estimated_minutes"] > 0 and completion_minutes >= task["estimated_minutes"]
             if task["task_type"] is None:
                 # 旧记录维持旧完成含义，迁移不重新解释历史结果。
                 completed = task["completed"]
@@ -657,15 +688,21 @@ def _sync_plan_actual_minutes_from_execution(connection, plan_id: int, segments:
         )
 
 
+def _has_saved_execution(tasks, records) -> bool:
+    return bool(records) or any((task["actual_minutes"] or 0) > 0 or task["habit_status"] is not None or task["completed"] for task in tasks)
+
+
 def _build_execution_payload(connection, plan_date: str) -> dict:
     settings = _get_settings(connection)
     plan = _get_plan_row(connection, plan_date)
     segments = _list_execution_segments(connection, plan_date)
+    duration_records = _list_duration_records(connection, plan_date)
+    records = segments + [dict(row, segment_kind="effective") for row in duration_records]
     active = _get_active_execution_segment(connection, plan_date)
     plan_payload = None
     tasks = []
     if plan:
-        _sync_plan_actual_minutes_from_execution(connection, plan["id"])
+        _sync_plan_actual_minutes_from_execution(connection, plan["id"], records)
         tasks = _get_plan_task_rows(connection, plan["id"])
         plan_payload = _serialize_plan(connection, plan_date)
     return {
@@ -675,29 +712,32 @@ def _build_execution_payload(connection, plan_date: str) -> dict:
         "labels": _serialize_execution_labels(settings),
         "active_segment": _serialize_execution_segment_row(active) if active else None,
         "segments": segments,
-        "duration_records": _list_duration_records(connection, plan_date),
-        "task_execution_board": _aggregate_execution_board(tasks, _execution_records(connection, plan_date)),
+        "duration_records": duration_records,
+        "task_execution_board": _aggregate_execution_board(tasks, records),
+        "has_execution": _has_saved_execution(tasks, records),
+        "has_review": connection.execute("SELECT 1 FROM reviews WHERE review_date=?", (plan_date,)).fetchone() is not None,
     }
 
 
 def _assert_segment_time_window(started_at: datetime, ended_at: datetime) -> None:
-    if ended_at <= started_at:
+    if _parse_iso_datetime(ended_at.replace(microsecond=0).isoformat()) <= _parse_iso_datetime(started_at.replace(microsecond=0).isoformat()):
         raise HTTPException(422, "结束时间必须晚于开始时间")
 
 
 def _assert_no_segment_overlap(connection, plan_date: str, task_id: int, started_at: str, ended_at: str | None, skip_segment_id: int | None = None) -> None:
-    query = (
-        """SELECT id FROM task_execution_segments
-           WHERE plan_date=?
-             AND (ended_at IS NULL OR ended_at>?) AND started_at<?"""
-    )
-    params: list = [plan_date, started_at, ended_at or _now_iso()]
-    if skip_segment_id is not None:
-        query += " AND id<>?"
-        params.append(skip_segment_id)
-    rows = connection.execute(query, tuple(params)).fetchall()
-    if rows:
-        raise HTTPException(409, "时间段发生重叠，请先调整现有记录")
+    start = _parse_iso_datetime(started_at)
+    end = _parse_iso_datetime(ended_at) if ended_at else None
+    # 不按计划日期过滤，也不依赖 ISO 字符串的字典序；激活段延伸至未来。
+    rows = connection.execute("SELECT id,started_at,ended_at FROM task_execution_segments").fetchall()
+    for row in rows:
+        if row["id"] == skip_segment_id:
+            continue
+        other_start = _parse_iso_datetime(row["started_at"])
+        other_end = _parse_iso_datetime(row["ended_at"])
+        if other_end is not None and other_end <= other_start:
+            continue
+        if (end is None or other_start < end) and (other_end is None or other_end > start):
+            raise HTTPException(409, "时间段发生重叠，请先调整现有记录（含其他日期）")
 
 
 def _close_active_execution_segment(connection, plan_date: str | None = None, ended_at: str | None = None):
@@ -705,7 +745,7 @@ def _close_active_execution_segment(connection, plan_date: str | None = None, en
     if not active:
         return None
     effective_end = ended_at or _now_iso()
-    if effective_end <= active["started_at"]:
+    if _parse_iso_datetime(effective_end) <= _parse_iso_datetime(active["started_at"]):
         effective_end = active["started_at"]
     connection.execute("UPDATE task_execution_segments SET ended_at=? WHERE id=?", (effective_end, active["id"]))
     return active["task_id"]
@@ -735,16 +775,18 @@ def _serialize_daily_review(connection, plan_date: str) -> dict:
     ).fetchone()
     task_rows = []
     task_board = []
+    records = []
     if plan:
-        if _plan_has_execution_segments(connection, plan_date):
-            _sync_plan_actual_minutes_from_execution(connection, plan["id"])
+        records = _execution_records(connection, plan_date)
+        if records:
+            _sync_plan_actual_minutes_from_execution(connection, plan["id"], records)
         task_rows = connection.execute(
             "SELECT * FROM tasks WHERE plan_id=?",
             (plan["id"],),
         ).fetchall()
         task_board = _aggregate_execution_board(
             [dict(row) | {"completed": bool(row["completed"]), "is_sub": bool(row["is_sub"])} for row in task_rows],
-            _execution_records(connection, plan_date),
+            records,
         )
 
     main_tasks = [row for row in task_rows if _is_planned_main_task(row)]
@@ -757,25 +799,34 @@ def _serialize_daily_review(connection, plan_date: str) -> dict:
         "submitted": "已提交",
     }[status]
 
+    seconds = {
+        "main_actual": sum(t["effective_seconds"] for t in task_board if not t["is_sub"]),
+        "sub_actual": sum(t["effective_seconds"] for t in task_board if t["is_sub"]),
+        "main_total": sum(t["total_seconds"] for t in task_board if not t["is_sub"]),
+        "sub_total": sum(t["total_seconds"] for t in task_board if t["is_sub"]),
+        "english": sum(t["effective_seconds"] for t in task_board if t["category"] == "english"),
+        "vocabulary": sum(label["seconds"] for t in task_board for label in t["effective_labels"] if label["label_id"] == "effective_english_words"),
+    }
     return {
+        **{f"{key}_seconds": value for key, value in seconds.items()},
         "date": plan_date,
         "status": status,
         "status_label": status_label,
         "main_task_count": len(main_tasks),
         "main_completed_count": sum(row["completed"] for row in main_tasks),
         "main_planned_minutes": sum(row["estimated_minutes"] for row in main_tasks),
-        "english_minutes": sum(row["actual_minutes"] or 0 for row in task_rows if row["category"] == "english"),
-        "vocabulary_minutes": sum(label["minutes"] for board in task_board for label in board["effective_labels"] if label["label_id"] == "effective_english_words"),
-        "main_actual_minutes": sum(row["actual_minutes"] or 0 for row in task_rows if not row["is_sub"]),
-        "sub_actual_minutes": sum(row["actual_minutes"] or 0 for row in sub_tasks),
-        "main_total_minutes": sum(task["total_minutes"] for task in task_board if not task["is_sub"]),
-        "sub_total_minutes": sum(task["total_minutes"] for task in task_board if task["is_sub"]),
+        "english_minutes": seconds["english"] // 60,
+        "vocabulary_minutes": seconds["vocabulary"] // 60,
+        "main_actual_minutes": seconds["main_actual"] // 60,
+        "sub_actual_minutes": seconds["sub_actual"] // 60,
+        "main_total_minutes": seconds["main_total"] // 60,
+        "sub_total_minutes": seconds["sub_total"] // 60,
         "sub_completed_count": sum(row["completed"] for row in sub_tasks),
         "has_review": bool(review),
+        "has_execution": _has_saved_execution(task_rows, records),
         "task_execution_board": task_board,
         "review": _serialize_review_row(review),
     }
-
 
 def _daily_prompt_settings(settings: dict) -> dict:
     return {
@@ -929,8 +980,8 @@ def _compute_weekly_metrics(connection, start: date, end: date, days: list[dict]
                 and day["status"] in ("approved", "submitted")]
     task_count = sum(day["main_task_count"] for day in eligible)
     completed = sum(day["main_completed_count"] for day in eligible)
-    effective = sum(day["main_actual_minutes"] for day in eligible)
-    total = sum(day["main_total_minutes"] for day in eligible)
+    effective = sum(day["main_actual_seconds"] for day in eligible)
+    total = sum(day["main_total_seconds"] for day in eligible)
     distribution: dict[str, dict] = {}
     for day in eligible:
         for task in day["task_execution_board"]:
@@ -938,10 +989,13 @@ def _compute_weekly_metrics(connection, start: date, end: date, days: list[dict]
                 continue
             item = distribution.setdefault(task["category"], {
                 "category": task["category"], "title": task["task_title"],
-                "total_minutes": 0, "effective_minutes": 0,
+                "total_seconds": 0, "effective_seconds": 0,
             })
-            item["total_minutes"] += task["total_minutes"]
-            item["effective_minutes"] += task["effective_minutes"]
+            item["total_seconds"] += task["total_seconds"]
+            item["effective_seconds"] += task["effective_seconds"]
+    for item in distribution.values():
+        item["total_minutes"] = item["total_seconds"] // 60
+        item["effective_minutes"] = item["effective_seconds"] // 60
     return {
         "start_date": start.isoformat(), "end_date": end.isoformat(),
         "review_days": sum(day["has_review"] for day in days if day["date"] <= date.today().isoformat()),
@@ -949,12 +1003,14 @@ def _compute_weekly_metrics(connection, start: date, end: date, days: list[dict]
         "completed_sub_count": sum(day["sub_completed_count"] for day in eligible),
         "completion_rate": round(completed / task_count, 3) if task_count else 0,
         "planned_minutes": sum(day["main_planned_minutes"] for day in eligible),
-        "actual_minutes": effective, "total_minutes": total,
+        "actual_minutes": effective // 60, "total_minutes": total // 60,
+        "actual_seconds": effective, "total_seconds": total,
         "effective_ratio": round(effective / total, 4) if total else 0,
-        "actual_sub_minutes": sum(day["sub_actual_minutes"] for day in eligible),
-        "total_sub_minutes": sum(day["sub_total_minutes"] for day in eligible),
-        "english_minutes": sum(day["english_minutes"] for day in eligible),
-        "vocabulary_minutes": sum(day["vocabulary_minutes"] for day in eligible),
+        "actual_sub_minutes": sum(day["sub_actual_seconds"] for day in eligible) // 60,
+        "total_sub_minutes": sum(day["sub_total_seconds"] for day in eligible) // 60,
+        "total_sub_seconds": sum(day["sub_total_seconds"] for day in eligible),
+        "english_minutes": sum(day["english_seconds"] for day in eligible) // 60,
+        "vocabulary_minutes": sum(day["vocabulary_seconds"] for day in eligible) // 60,
         "task_distribution": sorted(distribution.values(), key=lambda item: item["total_minutes"], reverse=True),
     }
 
@@ -965,8 +1021,8 @@ def _build_weekly_snapshot(connection, start: date, end: date) -> dict:
     return _compute_weekly_metrics(connection, start, end, days) | {"days": days}
 
 
-def _calendar_day_state(day: date, project_start: date, today: date, plan_status: str | None, has_review: bool) -> dict:
-    if day < project_start or day > today:
+def _calendar_day_state(day: date, project_start: date, today: date, plan_status: str | None, has_review: bool, has_history: bool = False) -> dict:
+    if day > today or (day < project_start and not has_history):
         return {
             "visibility": "out_of_range",
             "status": None,
@@ -1008,6 +1064,13 @@ def _build_calendar_status(connection, month_start: date, project_start: date) -
 
     plan_statuses = {row["plan_date"]: row["status"] for row in plan_rows}
     review_dates = {row["review_date"] for row in review_rows}
+    execution_dates = {row[0] for row in connection.execute(
+        "SELECT DISTINCT plan_date FROM task_execution_segments WHERE plan_date BETWEEN ? AND ?",
+        (month_start.isoformat(), month_end.isoformat()))}
+    reset_dates = {row[0] for row in connection.execute(
+        "SELECT DISTINCT plan_date FROM daily_reset_snapshots WHERE restored_at IS NULL AND plan_date BETWEEN ? AND ?",
+        (month_start.isoformat(), month_end.isoformat()))}
+    history_dates = set(plan_statuses) | review_dates | execution_dates | reset_dates
 
     days = []
     cursor = month_start
@@ -1018,6 +1081,7 @@ def _build_calendar_status(connection, month_start: date, project_start: date) -
             today,
             plan_statuses.get(cursor.isoformat()),
             cursor.isoformat() in review_dates,
+            cursor.isoformat() in history_dates,
         )
         days.append({
             "date": cursor.isoformat(),
@@ -1045,6 +1109,7 @@ def _build_chatgpt_prompt(snapshot: dict, deepseek_analysis: dict | None, export
         f"主任务计划分钟：{snapshot['planned_minutes']} 分",
         f"主任务实际分钟：{snapshot['actual_minutes']} 分",
         f"主航线总计投入：{snapshot['total_minutes']} 分",
+        f"秒级合计：主航线有效 {snapshot['actual_seconds']} 秒，总计 {snapshot['total_seconds']} 秒（分钟显示向下取整，零头未丢失）",
         f"主航线有效率：{round(snapshot['effective_ratio'] * 100)}%（有效时间总和 / 总计时间总和）",
         "统计包含已保存执行记录，提交仅表示收尾完成。",
         f"副航线实际分钟：{snapshot['actual_sub_minutes']} 分",
@@ -1112,6 +1177,7 @@ def _build_daily_gpt_prompt(connection, plan_date: str, export_template: str) ->
         f"计划状态：{daily['status_label']}",
         f"主任务完成：{daily['main_completed_count']} / {daily['main_task_count']}",
         f"主任务分钟：计划 {daily['main_planned_minutes']} / 实际 {daily['main_actual_minutes']}",
+        f"秒级合计：主航线有效 {daily['main_actual_seconds']} 秒，总计 {daily['main_total_seconds']} 秒（分钟显示向下取整，零头未丢失）",
         f"副航线实际：{daily['sub_actual_minutes']} 分",
         f"英语 {daily['english_minutes']} 分，其中背单词 {daily['vocabulary_minutes']} 分（已包含在实际分钟中）",
         "",
@@ -1243,60 +1309,24 @@ def _build_weekday_progress(snapshot: dict) -> dict:
     }
 
 
-def _refresh_weekly_report(connection, analyzer, snapshot: dict, settings: dict, force: bool = False) -> dict:
-    snapshot_json, digest = _snapshot_hash(snapshot)
+def _read_weekly_report(connection, snapshot: dict, settings: dict) -> dict:
+    """读取当前事实及已有分析；导航不保存快照、不发起分析。"""
     existing = _get_weekly_report(connection, snapshot["end_date"])
-    existing_final = existing["final_report_text"] if existing else ""
-    weekly_prompt = _resolve_prompt_content(
-        settings,
-        "weekly_analysis_prompts",
-        "weekly_analysis_active_prompt_id",
-        "weekly_analysis_system_default",
-        WEEKLY_ANALYSIS_SYSTEM_PROMPT,
-    )
-    export_prompt = _resolve_prompt_content(
-        settings,
-        "chatgpt_export_prompts",
-        "chatgpt_export_active_prompt_id",
-        "chatgpt_export_system_default",
-        CHATGPT_EXPORT_SYSTEM_PROMPT,
-    )
-
-    if not analyzer:
-        chatgpt_prompt = _build_chatgpt_prompt(snapshot, existing["deepseek_analysis"] if existing else None, export_prompt)
-        _save_weekly_report(
-            connection,
-            snapshot,
-            snapshot_json,
-            digest,
-            existing["deepseek_analysis"] if existing else None,
-            chatgpt_prompt,
-            existing["ai_status"] if existing and existing["has_ai_draft"] else "unavailable",
-            existing["ai_error"] if existing else None,
-            existing_final,
-        )
-        return _get_weekly_report(connection, snapshot["end_date"])
-
-    if existing and not force and existing["snapshot"].get("end_date") == snapshot["end_date"]:
-        existing_digest = hashlib.sha256(json.dumps(existing["snapshot"], ensure_ascii=False, sort_keys=True).encode("utf-8")).hexdigest()
-        if existing_digest == digest and existing["has_ai_draft"]:
-            return existing
-
-    analysis_model, error = analyzer.analyze(snapshot, weekly_prompt)
-    analysis = analysis_model.model_dump() if analysis_model else None
-    chatgpt_prompt = _build_chatgpt_prompt(snapshot, analysis, export_prompt)
-    _save_weekly_report(
-        connection,
-        snapshot,
-        snapshot_json,
-        digest,
-        analysis,
-        chatgpt_prompt,
-        "ready" if analysis else "error",
-        error,
-        existing_final,
-    )
-    return _get_weekly_report(connection, snapshot["end_date"])
+    analysis = existing["deepseek_analysis"] if existing else None
+    prompt = _resolve_prompt_content(settings, "chatgpt_export_prompts", "chatgpt_export_active_prompt_id",
+                                     "chatgpt_export_system_default", CHATGPT_EXPORT_SYSTEM_PROMPT)
+    return {
+        "start_date": snapshot["start_date"], "end_date": snapshot["end_date"],
+        "snapshot": snapshot, "deepseek_analysis": analysis,
+        "chatgpt_prompt_text": _build_chatgpt_prompt(snapshot, analysis, prompt),
+        "final_report_text": existing["final_report_text"] if existing else "",
+        "ai_status": existing["ai_status"] if existing else "unavailable",
+        "ai_error": existing["ai_error"] if existing else None,
+        "updated_at": existing["updated_at"] if existing else None,
+        "has_final_report": bool(existing and existing["has_final_report"]),
+        "has_ai_draft": analysis is not None,
+        "analysis_stale": bool(analysis and _snapshot_hash(existing["snapshot"])[1] != _snapshot_hash(snapshot)[1]),
+    }
 
 
 def _list_weekly_reports(connection) -> list[dict]:
@@ -1506,6 +1536,7 @@ def start_execution_task(plan_date: date, payload: ExecutionTaskStartInput, requ
             _apply_vocabulary_choice(connection, plan_date.isoformat(), payload.duplicate_choice)
         _close_active_execution_segment(connection)
         started_at = _now_iso()
+        _assert_no_segment_overlap(connection, plan_date.isoformat(), task["id"], started_at, None)
         connection.execute(
             """INSERT INTO task_execution_segments(plan_date,task_id,segment_kind,label_id,label_name,started_at)
                VALUES(?,?,?,?,?,?)""",
@@ -1535,11 +1566,13 @@ def start_execution_label(plan_date: date, payload: ExecutionLabelStartInput, re
         task = _get_task_row_for_execution(connection, plan_date.isoformat(), task_id)
         _prepare_execution_task(connection, task)
         _close_active_execution_segment(connection)
+        started_at = _now_iso()
+        _assert_no_segment_overlap(connection, plan_date.isoformat(), task["id"], started_at, None)
         segment_kind = "counted_label" if label["bucket"] == "counted" else "interrupt_label"
         connection.execute(
             """INSERT INTO task_execution_segments(plan_date,task_id,segment_kind,label_id,label_name,started_at)
                VALUES(?,?,?,?,?,?)""",
-            (plan_date.isoformat(), task["id"], segment_kind, label["id"], label["name"], _now_iso()),
+            (plan_date.isoformat(), task["id"], segment_kind, label["id"], label["name"], started_at),
         )
         connection.execute("UPDATE plans SET status='approved' WHERE id=? AND status='submitted'", (task["plan_id"],))
         _sync_plan_actual_minutes_from_execution(connection, task["plan_id"])
@@ -1549,6 +1582,7 @@ def start_execution_label(plan_date: date, payload: ExecutionLabelStartInput, re
 @router.post("/daily-execution/{plan_date}/stop")
 def stop_execution(plan_date: date, request: Request):
     with _db(request) as connection:
+        connection.execute("BEGIN IMMEDIATE")
         plan = _get_plan_row(connection, plan_date.isoformat())
         closed_task_id = _close_active_execution_segment(connection, plan_date.isoformat())
         if closed_task_id is None:
@@ -1562,6 +1596,7 @@ def stop_execution(plan_date: date, request: Request):
 def create_execution_segment(plan_date: date, payload: ExecutionSegmentCreateInput, request: Request):
     _assert_segment_time_window(payload.started_at, payload.ended_at)
     with _db(request) as connection:
+        connection.execute("BEGIN IMMEDIATE")
         task = _get_task_row_for_execution(connection, plan_date.isoformat(), payload.task_id)
         _prepare_execution_task(connection, task)
         settings = _get_settings(connection)
@@ -1574,8 +1609,8 @@ def create_execution_segment(plan_date: date, payload: ExecutionSegmentCreateInp
             connection,
             plan_date.isoformat(),
             task["id"],
-            payload.started_at.replace(microsecond=0).isoformat(),
-            payload.ended_at.replace(microsecond=0).isoformat(),
+            _local_iso(payload.started_at),
+            _local_iso(payload.ended_at),
         )
         connection.execute(
             """INSERT INTO task_execution_segments(
@@ -1587,8 +1622,8 @@ def create_execution_segment(plan_date: date, payload: ExecutionSegmentCreateInp
                 payload.segment_kind,
                 label_id,
                 label_name,
-                payload.started_at.replace(microsecond=0).isoformat(),
-                payload.ended_at.replace(microsecond=0).isoformat(),
+                _local_iso(payload.started_at),
+                _local_iso(payload.ended_at),
             ),
         )
         if payload.duplicate_choice == "manual" and label_id == "effective_english_words" and task["category"] == "english":
@@ -1602,6 +1637,7 @@ def create_execution_segment(plan_date: date, payload: ExecutionSegmentCreateInp
 def update_execution_segment(plan_date: date, segment_id: int, payload: ExecutionSegmentUpdateInput, request: Request):
     _assert_segment_time_window(payload.started_at, payload.ended_at)
     with _db(request) as connection:
+        connection.execute("BEGIN IMMEDIATE")
         existing = connection.execute(
             """SELECT s.*, t.plan_id, t.category AS task_category
                FROM task_execution_segments s
@@ -1634,8 +1670,8 @@ def update_execution_segment(plan_date: date, segment_id: int, payload: Executio
             connection,
             plan_date.isoformat(),
             task["id"],
-            payload.started_at.replace(microsecond=0).isoformat(),
-            payload.ended_at.replace(microsecond=0).isoformat(),
+            _local_iso(payload.started_at),
+            _local_iso(payload.ended_at),
             skip_segment_id=segment_id,
         )
         connection.execute(
@@ -1647,8 +1683,8 @@ def update_execution_segment(plan_date: date, segment_id: int, payload: Executio
                 payload.segment_kind,
                 label_id,
                 label_name,
-                payload.started_at.replace(microsecond=0).isoformat(),
-                payload.ended_at.replace(microsecond=0).isoformat(),
+                _local_iso(payload.started_at),
+                _local_iso(payload.ended_at),
                 segment_id,
             ),
         )
@@ -1898,7 +1934,48 @@ def save_daily_gpt_record(plan_date: date, payload: GPTRecordSaveInput, request:
 @router.delete("/daily-data/{plan_date}")
 def clear_daily_data(plan_date: date, request: Request):
     with _db(request) as connection:
-        return _clear_daily_data(connection, plan_date.isoformat())
+        connection.execute("BEGIN IMMEDIATE")
+        snapshot = save_reset_snapshot(connection, str(plan_date), _now_iso())
+        return _clear_daily_data(connection, str(plan_date)) | {"reset_snapshot": snapshot}
+
+
+@router.get("/daily-data/{plan_date}/reset-snapshots")
+def list_reset_snapshots(plan_date: date, request: Request):
+    with _db(request) as connection:
+        return [snapshot_metadata(row) for row in connection.execute(
+            "SELECT * FROM daily_reset_snapshots WHERE plan_date=? AND restored_at IS NULL ORDER BY id DESC",
+            (str(plan_date),))]
+
+
+@router.post("/daily-data/{plan_date}/reset-snapshots/{snapshot_id}/restore")
+def restore_daily_data(plan_date: date, snapshot_id: int, request: Request):
+    with _db(request) as connection:
+        connection.execute("BEGIN IMMEDIATE")
+        return restore_snapshot(connection, str(plan_date), snapshot_id, _now_iso(), _assert_no_segment_overlap)
+
+
+@router.get("/review-navigation")
+def review_navigation(request: Request, anchor_date: date):
+    start, end = _week_bounds(anchor_date)
+    with _db(request) as connection:
+        plans = {row["plan_date"]: row["status"] for row in connection.execute(
+            "SELECT plan_date,status FROM plans WHERE plan_date BETWEEN ? AND ?", (str(start), str(end)))}
+        reviews = {row[0] for row in connection.execute(
+            "SELECT review_date FROM reviews WHERE review_date BETWEEN ? AND ?", (str(start), str(end)))}
+        recorded = {row[0] for row in connection.execute(
+            """SELECT plan_date FROM task_execution_segments WHERE plan_date BETWEEN ? AND ?
+               UNION SELECT p.plan_date FROM task_duration_records r JOIN tasks t ON t.id=r.task_id
+               JOIN plans p ON p.id=t.plan_id WHERE p.plan_date BETWEEN ? AND ?
+               UNION SELECT p.plan_date FROM tasks t JOIN plans p ON p.id=t.plan_id
+               WHERE p.plan_date BETWEEN ? AND ? AND (t.actual_minutes>0 OR t.habit_status IS NOT NULL)""",
+            (str(start), str(end), str(start), str(end), str(start), str(end)))}
+        days = [{"date": str(start + timedelta(days=i)), "label": label,
+                 "has_review": str(start + timedelta(days=i)) in reviews,
+                 "has_execution": str(start + timedelta(days=i)) in recorded,
+                 "status": plans.get(str(start + timedelta(days=i)))}
+                for i, label in enumerate(["周一", "周二", "周三", "周四", "周五", "周六", "周日"])]
+        return {"start_date": str(start), "end_date": str(end), "days": days,
+                "weekday_progress": {"days": days}}
 
 
 @router.get("/weekly-review")
@@ -1908,7 +1985,7 @@ def weekly_review(request: Request, end_date: date | None = None, anchor_date: d
     with _db(request) as connection:
         settings = _get_settings(connection)
         snapshot = _build_weekly_snapshot(connection, start, end)
-        report = _refresh_weekly_report(connection, getattr(request.app.state, "weekly_review_analyzer", None), snapshot, settings)
+        report = _read_weekly_report(connection, snapshot, settings)
         progress = _build_weekday_progress(snapshot)
         gpt_prompt_text = _build_chatgpt_prompt(
             snapshot,
@@ -1925,6 +2002,7 @@ def weekly_review(request: Request, end_date: date | None = None, anchor_date: d
         week_label = f"{start.isoformat()} → {end.isoformat()}"
         return snapshot | {
             "analysis": report["deepseek_analysis"],
+            "analysis_stale": report["analysis_stale"],
             "ai_status": report["ai_status"],
             "ai_error": report["ai_error"],
             "chatgpt_prompt_text": report["chatgpt_prompt_text"],
@@ -1958,7 +2036,7 @@ def get_weekly_report(end_date: date, request: Request):
     with _db(request) as connection:
         settings = _get_settings(connection)
         snapshot = _build_weekly_snapshot(connection, start, end_date)
-        report = _refresh_weekly_report(connection, getattr(request.app.state, "weekly_review_analyzer", None), snapshot, settings)
+        report = _read_weekly_report(connection, snapshot, settings)
         gpt_prompt_text = _build_chatgpt_prompt(
             snapshot,
             report["deepseek_analysis"],
@@ -1984,24 +2062,28 @@ def refresh_weekly_report(end_date: date, request: Request):
     with _db(request) as connection:
         settings = _get_settings(connection)
         snapshot = _build_weekly_snapshot(connection, start, end_date)
-        report = _refresh_weekly_report(connection, getattr(request.app.state, "weekly_review_analyzer", None), snapshot, settings, force=True)
-        gpt_prompt_text = _build_chatgpt_prompt(
-            snapshot,
-            report["deepseek_analysis"],
-            _resolve_prompt_content(
-                settings,
-                "weekly_gpt_prompts",
-                "weekly_gpt_active_prompt_id",
-                "weekly_gpt_system_default",
-                WEEKLY_GPT_SYSTEM_PROMPT,
-            ),
-        )
-        week_label = f"{start.isoformat()} → {end_date.isoformat()}"
-        return report | {
-            "gpt_prompt_text": gpt_prompt_text,
-            "gpt_record": _get_gpt_record(connection, "weekly", end_date.isoformat(), week_label, gpt_prompt_text),
-            "weekday_progress": _build_weekday_progress(snapshot),
-        }
+    analyzer = getattr(request.app.state, "weekly_review_analyzer", None)
+    if not analyzer:
+        raise HTTPException(409, "AI 分析未启用；可复制本周事实给 ChatGPT 整理")
+    prompt = _resolve_prompt_content(settings, "weekly_analysis_prompts", "weekly_analysis_active_prompt_id",
+                                     "weekly_analysis_system_default", WEEKLY_ANALYSIS_SYSTEM_PROMPT)
+    # 外部调用在数据库连接与写事务之外，分析期间允许正常记录和保存。
+    model, error = analyzer.analyze(snapshot, prompt)
+    analysis = model.model_dump() if model else None
+    export_prompt = _resolve_prompt_content(settings, "chatgpt_export_prompts", "chatgpt_export_active_prompt_id",
+                                            "chatgpt_export_system_default", CHATGPT_EXPORT_SYSTEM_PROMPT)
+    snapshot_json, digest = _snapshot_hash(snapshot)
+    with _db(request) as connection:
+        if not analysis:
+            # 失败不把旧分析的依据替换成新快照，也不覆盖用户正在保存的最终稿。
+            connection.execute("UPDATE weekly_reports SET ai_status='error', ai_error=? WHERE end_date=?",
+                               (error or "AI 分析失败", str(end_date)))
+        else:
+            _save_weekly_report(connection, snapshot, snapshot_json, digest, analysis,
+                                _build_chatgpt_prompt(snapshot, analysis, export_prompt), "ready", None)
+    if not analysis:
+        raise HTTPException(502, error or "AI 分析失败，已保留原来的内容")
+    return {"saved": True}
 
 
 @router.put("/weekly-reports/{end_date}")
@@ -2012,7 +2094,10 @@ def save_weekly_report(end_date: date, payload: WeeklyReportSaveInput, request: 
             start = end_date - timedelta(days=6)
             snapshot = _build_weekly_snapshot(connection, start, end_date)
             settings = _get_settings(connection)
-            report = _refresh_weekly_report(connection, getattr(request.app.state, "weekly_review_analyzer", None), snapshot, settings)
+            report = _read_weekly_report(connection, snapshot, settings)
+            snapshot_json, digest = _snapshot_hash(snapshot)
+            _save_weekly_report(connection, snapshot, snapshot_json, digest, None,
+                                report["chatgpt_prompt_text"], "unavailable", None)
         connection.execute(
             "UPDATE weekly_reports SET final_report_text=?, updated_at=CURRENT_TIMESTAMP WHERE end_date=?",
             (payload.final_report_text, end_date.isoformat()),
@@ -2026,7 +2111,7 @@ def save_weekly_gpt_record(end_date: date, payload: GPTRecordSaveInput, request:
     with _db(request) as connection:
         settings = _get_settings(connection)
         snapshot = _build_weekly_snapshot(connection, start, end_date)
-        report = _refresh_weekly_report(connection, getattr(request.app.state, "weekly_review_analyzer", None), snapshot, settings)
+        report = _read_weekly_report(connection, snapshot, settings)
         prompt_text = _build_chatgpt_prompt(
             snapshot,
             report["deepseek_analysis"],
@@ -2073,6 +2158,7 @@ def get_settings(request: Request):
 @router.put("/settings")
 def save_settings(payload: SettingsInput, request: Request):
     with _db(request) as connection:
+        connection.execute("BEGIN IMMEDIATE")
         existing = _get_settings(connection)
         data = payload.model_dump(mode="json")
         for key in [
@@ -2080,6 +2166,7 @@ def save_settings(payload: SettingsInput, request: Request):
             "weekly_review_day",
             "execution_labels",
             "effective_labels_by_category",
+            "deleted_effective_label_ids",
             "draft_main_minutes_by_category",
             "weekly_analysis_prompts",
             "weekly_analysis_active_prompt_id",
@@ -2092,12 +2179,73 @@ def save_settings(payload: SettingsInput, request: Request):
         ]:
             if key not in payload.model_fields_set:
                 data[key] = existing.get(key, DEFAULT_SETTINGS[key])
+        old_deleted = existing.get("deleted_effective_label_ids", {})
+        new_deleted = data.get("deleted_effective_label_ids", {})
+        data["deleted_effective_label_ids"] = {
+            category: sorted(set(old_deleted.get(category, [])) | set(new_deleted.get(category, [])))
+            for category in old_deleted.keys() | new_deleted.keys()
+        }
         connection.execute(
             """INSERT INTO app_settings(key,value_json) VALUES('main',?)
                ON CONFLICT(key) DO UPDATE SET value_json=excluded.value_json,updated_at=CURRENT_TIMESTAMP""",
             (json.dumps(data, ensure_ascii=False),),
         )
         return _get_settings(connection)
+
+
+def _store_effective_label_settings(connection, settings: dict) -> dict:
+    connection.execute(
+        """INSERT INTO app_settings(key,value_json) VALUES('main',?)
+           ON CONFLICT(key) DO UPDATE SET value_json=excluded.value_json,updated_at=CURRENT_TIMESTAMP""",
+        (json.dumps(settings, ensure_ascii=False),),
+    )
+    return _get_settings(connection)
+
+
+def _assert_unique_effective_name(labels: list[dict], name: str, skip_id: str | None = None) -> None:
+    if any(item["id"] != skip_id and item["name"].strip().casefold() == name.casefold() for item in labels):
+        raise HTTPException(409, "这个科目已有同名细分，请换一个名称")
+
+
+@router.post("/settings/effective-labels/{category}", status_code=201)
+def create_effective_label(category: Category, payload: EffectiveLabelNameInput, request: Request):
+    with _db(request) as connection:
+        connection.execute("BEGIN IMMEDIATE")
+        settings = _get_settings(connection)
+        labels = settings["effective_labels_by_category"].setdefault(category, [])
+        _assert_unique_effective_name(labels, payload.name)
+        labels.append({"id": f"effective_{category}_{uuid4().hex}", "name": payload.name, "is_system": False})
+        return _store_effective_label_settings(connection, settings)
+
+
+@router.patch("/settings/effective-labels/{category}/{label_id}")
+def rename_effective_label(category: Category, label_id: str, payload: EffectiveLabelNameInput, request: Request):
+    with _db(request) as connection:
+        connection.execute("BEGIN IMMEDIATE")
+        settings = _get_settings(connection)
+        labels = settings["effective_labels_by_category"].get(category, [])
+        label = next((item for item in labels if item["id"] == label_id), None)
+        if label is None:
+            raise HTTPException(404, "有效细分标签不存在，请刷新后重试")
+        _assert_unique_effective_name(labels, payload.name, label_id)
+        label["name"] = payload.name
+        return _store_effective_label_settings(connection, settings)
+
+
+@router.delete("/settings/effective-labels/{category}/{label_id}")
+def delete_effective_label(category: Category, label_id: str, request: Request):
+    with _db(request) as connection:
+        connection.execute("BEGIN IMMEDIATE")
+        settings = _get_settings(connection)
+        labels = settings["effective_labels_by_category"].get(category, [])
+        if not any(item["id"] == label_id for item in labels):
+            raise HTTPException(404, "有效细分标签不存在，请刷新后重试")
+        settings["effective_labels_by_category"][category] = [item for item in labels if item["id"] != label_id]
+        # 记住显式删除，防止默认标签合并或旧设置页保存时让它重新出现。
+        deleted = settings.setdefault("deleted_effective_label_ids", {}).setdefault(category, [])
+        if label_id not in deleted:
+            deleted.append(label_id)
+        return _store_effective_label_settings(connection, settings)
 
 
 @router.get("/system/health")

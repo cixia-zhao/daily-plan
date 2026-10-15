@@ -6,6 +6,7 @@
   <div><h1>复盘</h1><p id="review-week-range">先看数据，再留下结论与下一步。</p></div>
   <div class="date-actions">
     <button id="reset-day" class="danger-soft reset-day-button" type="button">重置今天</button>
+    <button id="restore-reset" class="ghost-button" type="button" hidden>恢复重置前记录</button>
     <div class="date-chip date-chip-button">
       <button id="review-date-button" class="date-trigger" type="button"></button>
       <input id="review-date" type="hidden">
@@ -20,6 +21,7 @@
 </section>
 <p id="review-loading" class="muted" role="status" hidden>正在读取记录…</p>
 <div id="review-workspace-content" role="tabpanel" aria-labelledby="review-selected-label">
+<div id="daily-save-summary" class="review-save-summary" role="status"><span id="daily-record-status">正在读取记录…</span><span id="daily-review-state">正在读取复盘…</span></div>
 <div class="review-section-tabs" role="tablist" aria-label="复盘内容">
   <span class="review-tab-indicator" aria-hidden="true"></span>
   <button id="review-data-tab" class="review-section-tab" type="button" role="tab" aria-selected="true" aria-controls="review-data-panel">数据看板</button>
@@ -74,6 +76,7 @@
         <label>补充复盘正文<textarea name="reflection_text" rows="7" maxlength="4000" placeholder="把今天真实的感受、波动、发现写下来。这里的内容会进入周复盘分析。"></textarea></label>
       </div>
     </details>
+    <p id="daily-review-save-status" class="muted" role="status"></p>
     <div class="actions"><button class="primary" type="submit">保存今天的复盘</button></div>
   </form>
 </section>
@@ -92,6 +95,7 @@
       <p class="muted">项目会先把这一天的事实整理好；复制给 ChatGPT 后，把回复贴回这里留档。</p>
       <label class="review-form">GPT 回复全文<textarea id="daily-gpt-response" rows="8" placeholder="把 ChatGPT 的回复整段贴回这里。"></textarea></label>
       <label class="review-form">我准备采用的内容 / 备注<textarea id="daily-gpt-adopted" rows="5" placeholder="把真正准备采纳的动作、提醒或结论留在这里。"></textarea></label>
+      <p id="daily-gpt-save-status" class="muted" role="status"></p>
       <div class="actions"><button id="save-daily-gpt-record" class="secondary" type="button">保存这次 GPT 协作</button></div>
     </div>
   </details>

@@ -59,17 +59,19 @@ if (!baseUrl || !['127.0.0.1','localhost','[::1]'].includes(new URL(baseUrl).hos
       await page.goto(`${baseUrl}/execute?date=${date}`);
       const card = page.locator(`[data-execution-task-id="${math.id}"]`);
       await card.waitFor({state:'visible'});
-      assert.equal(await card.locator('.execution-task-details').getAttribute('open'), null);
+      assert(await card.locator('.execution-task-details').isHidden());
       assert(!(await card.locator('.execute-task-type').isVisible()));
       assert(!(await card.locator('.effective-label-button').first().isVisible()));
       assert(await card.locator('.task-start-button').isVisible());
-      await card.locator('.execution-task-details > summary').tap();
-      await card.locator('.execute-task-type').selectOption('todo');
-      await page.waitForFunction(() => document.querySelector('.execution-task-details[open] .execute-task-type')?.value === 'todo');
-      assert(await card.locator('.effective-label-button').first().isVisible(), '设置保存后展开状态丢失');
-      await card.locator('.execution-task-details > summary').tap();
       await card.locator('h3').tap();
-      assert(!(await card.locator('.effective-label-button').first().isVisible()), '选择卡片不能自动展开任务设置');
+      await card.locator('.execute-task-type').selectOption('todo');
+      await page.waitForFunction(() => document.querySelector('.execution-task-details:not([hidden]) .execute-task-type')?.value === 'todo');
+      assert(await card.locator('.effective-label-button').first().isVisible(), '设置保存后展开状态丢失');
+      await page.locator('h1').tap();
+      await card.locator('h3').tap();
+      assert(await card.locator('.effective-label-button').first().isVisible(), '点击卡片应展开管理区');
+      await page.locator('h1').tap();
+      assert(await card.locator('.execution-task-details').isHidden(), '点击卡片外收起');
       const styles = await page.evaluate(() => ['temporary-open','vocabulary-shortcut'].map(id => {
         const style = getComputedStyle(document.getElementById(id));
         return [style.backgroundColor, style.borderColor];

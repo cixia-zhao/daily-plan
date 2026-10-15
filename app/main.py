@@ -160,4 +160,10 @@ def create_app(
     return app
 
 
-app = create_app()
+def __getattr__(name: str):
+    # 兼容 uvicorn app.main:app；导入应用工厂或预览模块时不创建默认应用。
+    if name == "app":
+        application = create_app()
+        globals()["app"] = application
+        return application
+    raise AttributeError(name)

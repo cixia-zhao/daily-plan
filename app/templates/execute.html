@@ -5,7 +5,6 @@
 <section class="hero compact">
   <div><h1>执行台</h1><p>现在只做一件事：开始、切换或结束当前任务。</p></div>
   <div class="date-actions">
-    <button id="execute-stop" class="ghost-button stop-current" type="button">停止当前计时</button>
     <div class="date-chip date-chip-button">
       <button id="execute-date-button" class="date-trigger" type="button"></button>
       <input id="execute-date" type="hidden">
@@ -20,11 +19,14 @@
 
 <div class="execute-workspace">
 <section id="execute-panel" class="panel execute-focus hidden">
-  <div class="section-heading">
-    <div><p class="step">01 · 白天执行</p><h2>一次只追踪一个激活项</h2></div>
-    <span id="execute-active-badge" class="status">当前空闲</span>
+  <div class="execution-current">
+    <div class="execution-current-task"><span class="step">当前执行</span><span id="execute-active-badge">当前空闲</span></div>
+    <div class="execution-clock-control">
+      <div class="execution-clock-readout"><span id="execute-clock-caption" class="muted">选择任务开始</span><span id="execute-clock" role="timer" aria-label="本段已进行时间" aria-live="off">00:00:00</span></div>
+      <button id="execute-stop" class="ghost-button stop-current" type="button" disabled>停止计时</button>
+    </div>
   </div>
-  <p class="muted">习惯记录做了、没做或休息；每日目标不会欠到明天。具体待办完成后请主动勾选。</p>
+  <div class="execution-save-note"><span id="execute-record-status" role="status">正在读取记录…</span><span id="execute-review-status">复盘待填写</span></div>
   <div class="execute-layout">
     <div class="execute-main">
       <div id="execute-mobile-toolbar" class="execution-mobile-toolbar hidden">
@@ -74,15 +76,14 @@
 </div>
 
 <section id="execute-submit-panel" class="panel hidden">
-  <div class="section-heading"><div><p class="step">收尾</p><h2>确认完成情况，交给复盘</h2></div></div>
+  <div class="section-heading"><div><p class="step">今日记录</p><h2>完成情况与复盘</h2><p class="muted">勾选后自动保存；复盘可以晚点写。</p></div></div>
   <div id="execute-submit-list" class="execution-task-list"></div>
   <section id="execute-submit-zero-group" class="submit-zero-group hidden">
     <button id="execute-submit-zero-toggle" class="ghost-button section-toggle-button" type="button" aria-expanded="false">展开今日原计划为 0 分的项目</button>
     <div id="execute-submit-zero-list" class="execution-task-list hidden"></div>
   </section>
   <div class="actions">
-    <button id="execute-submit" class="primary" type="button">提交今日情况</button>
-    <button id="enter-review" class="secondary" type="button" disabled>进入复盘</button>
+    <button id="enter-review" class="primary" type="button" disabled>进入复盘</button>
   </div>
 </section>
 {% endblock %}

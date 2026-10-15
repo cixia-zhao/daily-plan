@@ -75,13 +75,13 @@ if (!baseUrl || !['127.0.0.1','localhost','[::1]'].includes(new URL(baseUrl).hos
   // 408 is unplanned in final targets; sum becomes 270, goal still stays 0 while running.
   await page.locator('.task-card[data-category=computer] .minutes-input').fill('0');
   await page.locator('#approve-plan').click();
-  await page.waitForSelector('#open-execution-desk:visible');
-  await page.locator('#open-execution-desk').click();
+  await page.waitForURL('**/execute?date=*');
   await page.waitForSelector('#execute-panel:visible');
   await page.locator('[data-section-key=zero-main]').click();
   const computer = page.locator('.execution-task-card').filter({has:page.locator('h3', {hasText:'408'})});
   assert(await computer.locator('.task-start-button').isEnabled());
   await computer.locator('.task-start-button').click();
+  await computer.locator('[data-start-label-id=""]').click();
   await stable();
   assert.match(await page.locator('#execute-active-badge').innerText(),/408/);
   await page.reload();await page.waitForSelector('#execute-panel:visible');
@@ -93,7 +93,8 @@ if (!baseUrl || !['127.0.0.1','localhost','[::1]'].includes(new URL(baseUrl).hos
   await page.locator('#temporary-form button[type=submit]').click();
   await page.locator('#temporary-form').waitFor({state:'hidden'});
   const temporary=page.locator('.execution-task-card').filter({has:page.locator('h3',{hasText:'提交报名表'})});
-  await temporary.locator('.task-start-button').click();await stable();
+  await temporary.locator('.task-start-button').click();
+  await temporary.locator('[data-start-label-id=""]').click();await stable();
   assert.match(await page.locator('#execute-active-badge').innerText(),/提交报名表/);
   await page.locator('#execute-stop').click();await stable();
   await page.locator('#vocabulary-shortcut').click();
@@ -116,9 +117,9 @@ if (!baseUrl || !['127.0.0.1','localhost','[::1]'].includes(new URL(baseUrl).hos
   await page.waitForFunction(()=>document.querySelectorAll('.duration-row').length===1);
   assert.match(await page.locator('#vocabulary-summary').innerText(),/合计 10 分/);
   const exercise=page.locator('.execution-task-card').filter({has:page.locator('h3',{hasText:'运动'})});
-  await exercise.locator('.execution-task-details > summary').click();
+  await exercise.locator('h3').click();
   await exercise.locator('.habit-status').selectOption('rest');await stable();
-  await page.locator('#execute-submit').click();await stable();
+  assert.match(await page.locator('#execute-record-status').innerText(), /学习记录已保存/);
   await page.locator('#enter-review').click();await page.waitForSelector('#daily-review-metrics');await stable();
   const dayResult=await (await page.request.get(`${baseUrl}/api/daily-review/2026-10-11`)).json();
   assert.equal(dayResult.english_minutes,10);assert.equal(dayResult.vocabulary_minutes,10);

@@ -109,4 +109,11 @@ CREATE TABLE IF NOT EXISTS app_settings (
     value_json TEXT NOT NULL,
     updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
+CREATE TABLE IF NOT EXISTS daily_reset_snapshots (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    plan_date TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    snapshot_json TEXT NOT NULL,
+    restored_at TEXT
+);
 """

@@ -8,6 +8,7 @@
   <div class="date-actions">
     <div class="today-secondary-actions">
     <button id="reset-day" class="danger-soft reset-day-button" type="button">重置今天</button>
+    <button id="restore-reset" class="ghost-button" type="button" hidden>恢复重置前记录</button>
     <div class="carryover-entry">
       <button id="carryover-button" class="ghost-button carryover-button" type="button" aria-haspopup="dialog" aria-expanded="false">
         <span class="carryover-button-icon" aria-hidden="true">待</span>
@@ -83,8 +84,8 @@
     <p id="time-summary" class="time-summary hidden">计划合计 0 分</p>
     <div id="draft-actions" class="actions draft-actions">
       <div class="action-buttons">
-        <button id="save-draft" class="secondary">保存修改</button>
-        <button id="approve-plan" class="primary">确认计划</button>
+        <button id="save-draft" class="secondary">暂存草稿</button>
+        <button id="approve-plan" class="primary">确认并进入执行台</button>
         <button id="open-execution-desk" class="primary btn-submit hidden">进入执行台</button>
       </div>
     </div>

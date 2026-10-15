@@ -832,7 +832,7 @@ def test_weekly_review_returns_report_archive_and_prompt(tmp_path):
     assert body["prompt_settings"]["chatgpt_export_active_prompt_id"] == "chatgpt_export_system_default"
     assert today in body["gpt_prompt_text"]
     assert body["gpt_record"]["record_type"] == "weekly"
-    assert body["history"]
+    assert body["history"] == []  # 读取不再创建周分析快照。
 
 
 def test_weekly_review_anchor_date_switches_to_anchor_week(tmp_path):

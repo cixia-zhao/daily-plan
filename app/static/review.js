@@ -10,6 +10,59 @@ if (page === 'review') {
   let loadSequence = 0;
   const dailyDrafts = new Map();
   const weeklyDrafts = new Map();
+  let serverValues = {};
+  const saving = new Set();
+  const saveMessages = new Map();
+  let storageError = false;
+  const storageKey = (scope, key) => `daily-plan:review-draft:v1:${scope}:${key}`;
+  const groups = {review:'daily-review-save-status', dailyGPT:'daily-gpt-save-status',
+                  final:'weekly-final-save-status', weeklyGPT:'weekly-gpt-save-status'};
+  function draftFor(scope, key) {
+    const drafts = scope === 'daily' ? dailyDrafts : weeklyDrafts;
+    if (!drafts.has(key)) {
+      try {
+        const value = JSON.parse(localStorage.getItem(storageKey(scope,key)) || '{}');
+        drafts.set(key, value && typeof value === 'object' && !Array.isArray(value) ? value : {});
+      } catch { storageError = true; drafts.set(key, {}); }
+    }
+    return drafts.get(key);
+  }
+  function persistDraft(scope, key) {
+    const draft = draftFor(scope,key);
+    try {
+      const hasFields = Object.keys(draft).some(name => name !== 'updatedAt');
+      if (hasFields) localStorage.setItem(storageKey(scope,key),JSON.stringify(draft));
+      else localStorage.removeItem(storageKey(scope,key));
+      storageError = false;
+    } catch { storageError = true; }
+    renderSaveStatus();
+  }
+  function renderSaveStatus() {
+    if (!loaded) return;
+    const scope = loaded.scope, key = scope === 'daily' ? loaded.date : loaded.end;
+    const draft = draftFor(scope,key);
+    $('#daily-save-summary').hidden = scope !== 'daily';
+    if (scope === 'daily') {
+      $('#daily-record-status').textContent = reviewState?.has_execution ? '学习记录已保存' : '还没有学习记录';
+      const id = `daily:${key}:review`;
+      $('#daily-review-state').textContent = saving.has(id) ? '复盘保存中…'
+        : saveMessages.get(id)?.startsWith('保存失败') ? '复盘保存失败，草稿已保留'
+        : Object.hasOwn(draft,'review') ? '复盘有未保存修改'
+        : reviewState?.has_review ? '复盘已保存' : '复盘待填写';
+    }
+    for (const group of scope === 'daily' ? ['review','dailyGPT'] : ['final','weeklyGPT']) {
+      const node = document.getElementById(groups[group]);
+      const fields = group === 'review' ? ['review'] : group === 'final' ? ['final'] : ['response','adopted'];
+      const dirty = fields.some(field => Object.hasOwn(draft,field));
+      const id = `${scope}:${key}:${group}`;
+      node.textContent = saving.has(id) ? '保存中…' : saveMessages.get(id)?.startsWith('保存失败') ? saveMessages.get(id) : dirty
+        ? storageError ? '暂存不可用，请勿关闭页面；请保存到服务器。' : '已在此设备暂存，尚未保存到服务器。'
+        : saveMessages.get(id) || (group === 'review'
+          ? reviewState?.has_review ? '复盘已保存到服务器。' : '复盘待填写；学习记录会单独保存。'
+          : '已从服务器读取');
+    }
+  }
+
   const dateInput = $('#review-date');
   const dateButton = $('#review-date-button');
   const form = $('#daily-review-form');
@@ -22,26 +75,57 @@ if (page === 'review') {
     return `${day.getFullYear()}-${String(day.getMonth()+1).padStart(2,'0')}-${String(day.getDate()).padStart(2,'0')}`;
   }
   function weekday(value) { return (new Date(`${value}T12:00:00`).getDay() + 6) % 7; }
-  function compactTime(minutes) {
+  function compactTime(minutes,seconds) {
+    if (seconds > 0 && seconds < 60) return '小于 1 分';
     const value = Math.max(0, Math.round(Number(minutes || 0)));
     return value < 60 ? `${value} 分` : `${Math.floor(value / 60)} 小时 ${value % 60} 分`;
   }
+  function sameValue(a,b) {
+    const ordered = value => value && typeof value === 'object'
+      ? Object.fromEntries(Object.entries(value).sort(([a],[b])=>a.localeCompare(b))) : value;
+    return JSON.stringify(ordered(a)) === JSON.stringify(ordered(b));
+  }
+  function currentValues() {
+    return loaded.scope === 'daily' ? {
+      review:Object.fromEntries(new FormData(form)), response:$('#daily-gpt-response').value, adopted:$('#daily-gpt-adopted').value,
+    } : {final:$('#weekly-final-report').value, response:$('#weekly-gpt-response').value, adopted:$('#weekly-gpt-adopted').value};
+  }
   function captureDraft() {
     if (!loaded) return;
-    if (loaded.scope === 'daily') {
-      dailyDrafts.set(loaded.date, {
-        review: Object.fromEntries(new FormData(form)),
-        response: $('#daily-gpt-response').value, adopted: $('#daily-gpt-adopted').value,
-      });
-    } else {
-      weeklyDrafts.set(loaded.end, {
-        final: $('#weekly-final-report').value,
-        response: $('#weekly-gpt-response').value, adopted: $('#weekly-gpt-adopted').value,
-      });
+    const scope = loaded.scope, key = scope === 'daily' ? loaded.date : loaded.end;
+    const draft = draftFor(scope,key);
+    for (const [name,value] of Object.entries(currentValues())) {
+      if (sameValue(value,serverValues[name])) delete draft[name];
+      else draft[name] = value;
     }
+    draft.updatedAt = new Date().toISOString();
+    persistDraft(scope,key);
   }
   $('#review-workspace-content').addEventListener('input', captureDraft);
   $('#review-workspace-content').addEventListener('change', captureDraft);
+  window.addEventListener('pagehide',captureDraft);
+  document.addEventListener('visibilitychange',()=>{ if (document.hidden) captureDraft(); });
+
+  async function saveGroup(scope,key,group,values,operation) {
+    const id = `${scope}:${key}:${group}`;
+    saving.add(id); saveMessages.delete(id); renderSaveStatus();
+    try {
+      await operation();
+      const draft = draftFor(scope,key);
+      for (const [name,value] of Object.entries(values)) {
+        if (sameValue(draft[name],value)) delete draft[name];
+      }
+      if (loaded?.scope === scope && (scope === 'daily' ? loaded.date : loaded.end) === key) {
+        if (scope === 'daily' && group === 'review') reviewState.has_review = true;
+        Object.assign(serverValues,values);
+        captureDraft();
+      } else persistDraft(scope,key);
+      saveMessages.set(id,`已保存到服务器 · ${new Date().toLocaleTimeString('zh-CN',{hour:'2-digit',minute:'2-digit'})}`);
+    } catch(error) {
+      saveMessages.set(id,'保存失败；已保留草稿，请重试。');
+      throw error;
+    } finally { saving.delete(id); renderSaveStatus(); }
+  }
 
   function moveTabIndicator() {
     const active = reviewTabs.find(tab => tab.getAttribute('aria-selected') === 'true');
@@ -87,9 +171,10 @@ if (page === 'review') {
     $('#daily-completed').textContent = `${result.main_completed_count} / ${result.main_task_count}`;
     $('#daily-total').textContent = `共 ${result.main_task_count} 项主任务`;
     $('#daily-main-minutes').textContent = `${result.main_planned_minutes} 分`;
-    $('#daily-main-actual').textContent = `实际 ${result.main_actual_minutes} 分`;
-    $('#daily-sub-minutes').textContent = `${result.sub_actual_minutes} 分`;
-    const draft = dailyDrafts.get(result.date);
+    $('#daily-main-actual').textContent = `实际 ${formatMinutes(result.main_actual_minutes,result.main_actual_seconds)}`;
+    $('#daily-sub-minutes').textContent = formatMinutes(result.sub_actual_minutes,result.sub_actual_seconds);
+    const draft = draftFor('daily',result.date);
+    serverValues = {review:result.review, response:result.gpt_record?.response_text ?? '', adopted:result.gpt_record?.adopted_text ?? ''};
     const values = draft?.review || result.review;
     Object.entries(values).forEach(([name,value]) => { if (form.elements.namedItem(name)) form.elements.namedItem(name).value = value; });
     $('#daily-gpt-response').value = draft?.response ?? result.gpt_record?.response_text ?? '';
@@ -103,37 +188,38 @@ if (page === 'review') {
   }
 
   function renderWeeklyMetrics(result) {
-    $('#weekly-total-time').textContent = compactTime(result.total_minutes);
-    $('#weekly-effective-ratio').textContent = result.total_minutes ? `${Math.round(result.effective_ratio * 1000) / 10}%` : '—';
-    $('#weekly-effective-time').textContent = compactTime(result.actual_minutes);
+    $('#weekly-total-time').textContent = compactTime(result.total_minutes,result.total_seconds);
+    $('#weekly-effective-ratio').textContent = result.total_seconds ? `${Math.round(result.effective_ratio * 1000) / 10}%` : '—';
+    $('#weekly-effective-time').textContent = compactTime(result.actual_minutes,result.actual_seconds);
     $('#weekly-efficiency-fill').style.width = `${Math.min(100, result.effective_ratio * 100)}%`;
     $('#weekly-completion-rate').textContent = result.task_count ? formatPercent(result.completion_rate) : '—';
     $('#weekly-task-count').textContent = `${result.completed_count} / ${result.task_count}`;
-    $('#weekly-sub-time').textContent = compactTime(result.total_sub_minutes);
-    const maximum = Math.max(1, ...result.days.filter(day => day.date <= todayIso()).map(day => day.main_total_minutes));
+    $('#weekly-sub-time').textContent = compactTime(result.total_sub_minutes,result.total_sub_seconds);
+    const maximum = Math.max(1, ...result.days.filter(day => day.date <= todayIso()).map(day => day.main_total_seconds));
     $('#weekly-day-bars').innerHTML = result.days.map((day,index) => {
       const future = day.date > todayIso();
       const eligible = ['approved','submitted'].includes(day.status) && !future;
-      const total = eligible ? day.main_total_minutes : 0;
-      const ratio = total ? day.main_actual_minutes / total : 0;
-      const note = future ? '未到' : !eligible || !day.task_execution_board.length ? '无记录' : `${total} 分`;
+      const total = eligible ? day.main_total_seconds : 0;
+      const ratio = total ? day.main_actual_seconds / total : 0;
+      const note = future ? '未到' : !eligible || !day.task_execution_board.length ? '无记录' : formatMinutes(Math.floor(total/60),total);
       return `<button type="button" class="weekly-day-bar" data-date="${day.date}" ${future ? 'disabled' : ''} aria-label="${labels[index]} ${day.date}，${esc(note)}，有效 ${eligible ? day.main_actual_minutes : 0} 分">
         <span class="weekly-bar-value">${note}</span><span class="weekly-bar-track"><span class="weekly-bar-total" style="height:${total / maximum * 100}%"><span class="weekly-bar-effective" style="height:${Math.min(100,ratio * 100)}%"></span></span></span><strong>${labels[index]}</strong><small>${day.date.slice(5).replace('-','/')}</small>
       </button>`;
     }).join('');
     $$('.weekly-day-bar').forEach(button => button.onclick = () => navigate(button.dataset.date,'daily'));
-    const items = result.task_distribution.filter(item => item.total_minutes > 0);
-    $('#weekly-task-distribution').innerHTML = items.length ? items.map(item => `<article class="weekly-distribution-item"><div><strong>${esc(item.title)}</strong><span>${compactTime(item.total_minutes)}</span></div><div class="weekly-distribution-track" aria-hidden="true"><span style="width:${result.total_minutes ? item.total_minutes / result.total_minutes * 100 : 0}%"></span></div><small>有效 ${compactTime(item.effective_minutes)}</small></article>`).join('') : '<p class="muted">本周还没有主航线投入记录。</p>';
+    const items = result.task_distribution.filter(item => item.total_seconds > 0);
+    $('#weekly-task-distribution').innerHTML = items.length ? items.map(item => `<article class="weekly-distribution-item"><div><strong>${esc(item.title)}</strong><span>${compactTime(item.total_minutes,item.total_seconds)}</span></div><div class="weekly-distribution-track" aria-hidden="true"><span style="width:${result.total_seconds ? item.total_seconds / result.total_seconds * 100 : 0}%"></span></div><small>有效 ${compactTime(item.effective_minutes,item.effective_seconds)}</small></article>`).join('') : '<p class="muted">本周还没有主航线投入记录。</p>';
   }
 
   function renderWeeklyAnalysis(result) {
     const analysis = result.analysis || {};
     $('#weekly-title-text').textContent = analysis.summary_title || '本周摘要';
     $('#weekly-title-range').textContent = `${result.start_date} — ${result.end_date}`;
-    $('#weekly-status-note').textContent = '先整理本周事实，再留下你的判断与下一步。';
+    $('#weekly-status-note').textContent = result.analysis_stale ? '已有分析基于较早记录；需要更新时主动生成。' : '查看数据不会调用 AI；生成分析会发送本周记录及复盘正文。';
     const fields = {'weekly-load-advice':'load_advice','weekly-drag-factors':'drag_factors','weekly-effective-patterns':'effective_patterns','weekly-real-progress':'real_progress_assessment','weekly-next-focus':'next_week_focus'};
     Object.entries(fields).forEach(([id,key]) => { $(`#${id}`).textContent = analysis[key] || '尚未填写，可在下方与 GPT 一起整理。'; });
-    const draft = weeklyDrafts.get(result.end_date);
+    const draft = draftFor('weekly',result.end_date);
+    serverValues = {final:result.final_report_text ?? '', response:result.gpt_record?.response_text ?? '', adopted:result.gpt_record?.adopted_text ?? ''};
     $('#weekly-final-report').value = draft?.final ?? result.final_report_text ?? '';
     $('#weekly-gpt-response').value = draft?.response ?? result.gpt_record?.response_text ?? '';
     $('#weekly-gpt-adopted').value = draft?.adopted ?? result.gpt_record?.adopted_text ?? '';
@@ -195,7 +281,7 @@ if (page === 'review') {
     $('#review-workspace-content').setAttribute('aria-busy','true');
     try {
       const [week, daily] = await Promise.all([
-        api(`/api/weekly-review?anchor_date=${dateValue}`),
+        api(`/api/${scope === 'daily' ? 'review-navigation' : 'weekly-review'}?anchor_date=${dateValue}`),
         scope === 'daily' ? loadDailyReview(dateValue) : Promise.resolve(null),
       ]);
       if (sequence !== loadSequence) return;
@@ -207,8 +293,13 @@ if (page === 'review') {
         $(`#weekly-${panel}-content`).hidden = scope !== 'weekly';
       });
       $('#reset-day').hidden = scope !== 'daily';
+      refreshResetRecovery(scope === 'daily' ? dateValue : null,async()=>{
+        dailyDrafts.set(dateValue,{});persistDraft('daily',dateValue);
+        if (selectedScope === 'daily' && selectedDate === dateValue) await loadWorkspace(dateValue,'daily',false);
+      });
       renderWeeklyProgress(week);
       loaded = {date:dateValue, scope, end:week.end_date};
+      renderSaveStatus();
       applied = true;
       history.replaceState(null,'',`/review?date=${dateValue}&scope=${scope}`);
     } catch (error) {
@@ -243,12 +334,11 @@ if (page === 'review') {
     const values = Object.fromEntries(new FormData(form));
     captureDraft();
     return withButton($('button[type=submit]',form), async () => {
-      await api('/api/daily-reviews',{method:'POST',body:JSON.stringify({date:target,...values})});
-      // 保存当次提交的内容；保存过程中继续输入的草稿仍保留。
-      const draft = dailyDrafts.get(target);
-      if (draft && JSON.stringify(draft.review) === JSON.stringify(values)) delete draft.review;
+      await saveGroup('daily',target,'review',{review:values},()=>api('/api/daily-reviews',{method:'POST',body:JSON.stringify({date:target,...values})}));
       invalidateCalendarMonth(target);
-      if (selectedDate === target && selectedScope === 'daily') await loadWorkspace(target,'daily',false);
+      const sequence = loadSequence;
+      const navigation = await api(`/api/review-navigation?anchor_date=${target}`);
+      if (sequence === loadSequence && selectedDate === target && selectedScope === 'daily') renderWeeklyProgress(navigation);
       toast(`${target} 的复盘已保存`);
     });
   };
@@ -256,7 +346,9 @@ if (page === 'review') {
     const target = loaded?.date;
     if (!target || loaded.scope !== 'daily') return;
     if (!(await resetDailyDataFor(target))) return;
-    dailyDrafts.delete(target);invalidateCalendarMonth(target);
+    dailyDrafts.set(target,{});persistDraft('daily',target);
+    for (const group of ['review','dailyGPT']) saveMessages.delete(`daily:${target}:${group}`);
+    invalidateCalendarMonth(target);
     if (selectedDate === target && selectedScope === 'daily') await loadWorkspace(target,'daily',false);
     toast('这一天的数据已清空');
   });
@@ -272,7 +364,7 @@ if (page === 'review') {
     const response = $('#daily-gpt-response').value, adopted = $('#daily-gpt-adopted').value;
     captureDraft();
     return withButton($('#save-daily-gpt-record'), async () => {
-      await api(`/api/daily-review/${target}/gpt-record`,{method:'PUT',body:JSON.stringify({response_text:response,adopted_text:adopted})});
+      await saveGroup('daily',target,'dailyGPT',{response,adopted},()=>api(`/api/daily-review/${target}/gpt-record`,{method:'PUT',body:JSON.stringify({response_text:response,adopted_text:adopted})}));
       toast('这次 GPT 协作已保存');
     });
   };
@@ -282,19 +374,17 @@ if (page === 'review') {
     const response = $('#weekly-gpt-response').value, adopted = $('#weekly-gpt-adopted').value;
     captureDraft();
     return withButton($('#save-weekly-gpt-record'), async () => {
-      await api(`/api/weekly-review/${end}/gpt-record`,{method:'PUT',body:JSON.stringify({response_text:response,adopted_text:adopted})});
+      await saveGroup('weekly',end,'weeklyGPT',{response,adopted},()=>api(`/api/weekly-review/${end}/gpt-record`,{method:'PUT',body:JSON.stringify({response_text:response,adopted_text:adopted})}));
       toast('这次 GPT 协作已保存');
     });
   };
   $('#save-weekly-report').onclick = () => {
-    const end = loaded?.end, anchor = selectedDate;
+    const end = loaded?.end;
     if (!end || loaded.scope !== 'weekly') return;
     const final = $('#weekly-final-report').value;
     captureDraft();
     return withButton($('#save-weekly-report'), async () => {
-      await api(`/api/weekly-reports/${end}`,{method:'PUT',body:JSON.stringify({final_report_text:final})});
-      const draft = weeklyDrafts.get(end); if (draft?.final === final) delete draft.final;
-      if (selectedScope === 'weekly' && selectedDate === anchor) await loadWorkspace(anchor,'weekly',false);
+      await saveGroup('weekly',end,'final',{final},()=>api(`/api/weekly-reports/${end}`,{method:'PUT',body:JSON.stringify({final_report_text:final})}));
       toast('这周的复盘已保存');
     });
   };
@@ -304,8 +394,8 @@ if (page === 'review') {
     captureDraft();
     return withButton($('#refresh-weekly-report'), async () => {
       await api(`/api/weekly-reports/${end}/refresh`,{method:'POST'});
-      if (selectedScope === 'weekly' && selectedDate === anchor) await loadWorkspace(anchor,'weekly',false);
-      toast('本周整理已刷新');
+      if (selectedScope === 'weekly' && selectedDate === anchor) { captureDraft(); await loadWorkspace(anchor,'weekly',false); }
+      toast('本周 AI 分析已生成');
     });
   };
 

@@ -132,7 +132,8 @@ def test_execute_page_assets_exist():
     assert 'id="timeline-toggle"' in execute
     assert 'id="timeline-content"' in execute
     assert 'id="execute-submit-zero-toggle"' in execute
-    assert 'id="execute-submit"' in execute
+    assert 'id="enter-review"' in execute
+    assert 'id="execute-submit"' not in execute
     assert "effectiveLabelSelections" in script
     assert "latestEffectiveLabelIdForTask" in script
     assert "effective_labels_by_category" in script

@@ -29,6 +29,11 @@ class ExecutionLabelItem(BaseModel):
     is_system: bool = False
 
 
+class EffectiveLabelNameInput(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
+    name: str = Field(min_length=1, max_length=50)
+
+
 class EffectiveLabelItem(BaseModel):
     id: str = Field(min_length=1, max_length=100)
     name: str = Field(min_length=1, max_length=50)
@@ -179,6 +184,7 @@ class SettingsInput(BaseModel):
     budget_ample: int = Field(default=210, ge=30, le=720)
     execution_labels: list[ExecutionLabelItem] = Field(default_factory=list)
     effective_labels_by_category: dict[Category, list[EffectiveLabelItem]] = Field(default_factory=dict)
+    deleted_effective_label_ids: dict[Category, list[str]] = Field(default_factory=dict)
     weekly_analysis_prompts: list[PromptConfigItem] = Field(default_factory=list)
     weekly_analysis_active_prompt_id: str = "weekly_analysis_system_default"
     chatgpt_export_prompts: list[PromptConfigItem] = Field(default_factory=list)
