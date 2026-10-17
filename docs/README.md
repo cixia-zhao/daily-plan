@@ -1,7 +1,7 @@
 # 项目模块文档索引
 
-> 最后更新：2026-10-15
-> 统一复盘与记录修复已发布，应用版本 384d3ce；当前验收见 releases/2026-10-15-saving-execution.md，规则见 frontend.md、backend-api.md 和根目录 HANDOFF.md。
+> 最后更新：2026-10-17
+> 时间分类与复盘交互已发布，应用版本dc7d39c；当前验收与HTTPS续期修复见releases/2026-10-17-time-review.md。正式通知尚未配置，规则见frontend.md、backend-api.md和根目录HANDOFF.md。
 
 “今日航线”是单用户、本地优先的每日任务工具。当前最真实的核心数据流已经是：晨间输入 → 调整草稿并人工确认 → 直接进入执行台记录时间段 → 单独保存日复盘 → 需要时复制给 GPT 协作并贴回留档。
 

@@ -1,5 +1,16 @@
 # 今日航线服务器 HTTPS 入口
 
+## 当前续期修复（2026-10-17）
+
+发布验收发现旧IP证书过期、续期持续DNS失败；现有云DNS不可达，公共DNS查询正常。仅为daily-plan-cert-renew.service增加只读挂载的专用resolv.conf，系统DNS／Tailscale及原登录配置不变。先以临时systemd单元验证ACME可信HTTPS，再重跑原续期任务，签发及Nginx验证重载成功。
+
+- deploy/certbot-resolv.conf安装到/etc/daily-plan/certbot-resolv.conf。
+- deploy/systemd/daily-plan-cert-renew.service.d/dns.conf安装到/etc/systemd/system/daily-plan-cert-renew.service.d/dns.conf，之后daemon-reload。
+- 服务成功后Result=success、ExecMainStatus=0，oneshot退出为inactive正常；定时器仍active，保持原随机延迟和失败重试。
+- 本次新证书至2026-10-24 14:37:53中国时间有效，公网正常验证。回退专用DNS不会回退证书，应先确认替代解析可用；不要恢复过期证书。
+
+完整证据、配置备份和应用发布见[2026-10-17发布记录](releases/2026-10-17-time-review.md)。以下为2026-10-10入口建设历史，证书日期以运行现场为准。
+
 > 最后验证：2026-10-10。本文和 `deploy/` 中的配置随 GitHub 同步，供各开发设备接手；密码、私钥、生产环境变量和数据库不进入仓库。
 
 ## 日常访问
