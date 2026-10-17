@@ -53,7 +53,7 @@ Nginx复用原可信HTTPS443，手机根地址https://120.55.53.215、主题dail
 
 最终只读验收：应用、ntfy、Nginx、备份与证书定时器均active，ntfy开机启用，Nginx语法通过；受保护五页面、五静态文件、configured=true通过。公网HTTPS／登录隔离／资源版本通过，四份仓库通知与反代配置和已安装文件SHA256一致。本机独立预览及旧临时ntfy已关闭，测试数据与备份保留。
 
-配置备份及安装记录：`/var/backups/daily-plan/ntfy-setup-20261017-235753/`。通知回退先恢复备份中的应用环境及Nginx站点，验证后重启应用／重载Nginx，再停止ntfy；不覆盖学习数据库。仓库保存无凭据ntfy、systemd和Nginx配置，私有账号文件和发布令牌不提交。应用代码仍为dc7d39c。
+配置备份及安装记录：`/var/backups/daily-plan/ntfy-setup-20261017-235753/`。通知回退先恢复备份中的应用环境及Nginx站点，验证后重启应用／重载Nginx，再停止ntfy；不覆盖学习数据库。仓库保存无凭据ntfy、systemd和Nginx配置，私有账号文件和发布令牌不提交。应用代码仍为dc7d39c。追加部署配置与锁屏验收提交807ed819c9312c6499e55b991855de4f49bf2d52已推送GitHub main，服务器源码已通过Git bundle快进同步；最终同步结果由后续文档收尾提交记录。
 
 ## 仍待完成
 
