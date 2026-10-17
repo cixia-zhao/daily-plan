@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import asyncio
+from contextlib import asynccontextmanager, suppress
 import os
 from pathlib import Path
 from urllib.parse import parse_qs, quote
@@ -11,6 +13,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from starlette.middleware.sessions import SessionMiddleware
 
+from .services.reminders import NtfySender, run_reminders
 from .api import router
 from .auth import build_auth_settings, verify_password
 from .database import initialize
@@ -35,9 +38,21 @@ def create_app(
     runtime_mode: str | None = None,
     auth_password_hash: str | None = None,
     session_secret: str | None = None,
+    disable_notifications: bool = False,
 ) -> FastAPI:
     load_dotenv()
-    app = FastAPI(title="每日任务", version="0.1.0")
+    @asynccontextmanager
+    async def lifespan(application):
+        worker = asyncio.create_task(run_reminders(application))
+        try:
+            yield
+        finally:
+            worker.cancel()
+            with suppress(asyncio.CancelledError):
+                await worker
+
+    app = FastAPI(title="每日任务", version="0.1.0", lifespan=lifespan)
+    app.state.reminder_sender = None if disable_notifications or database_path is not None else NtfySender.from_environment()
     app.state.database_path = Path(database_path or os.getenv("DATABASE_PATH", "data/daily_plan.db"))
     app.state.backup_dir = Path(backup_dir or os.getenv("DAILY_PLAN_BACKUP_DIR", app.state.database_path.parent / "backups"))
     app.state.backup_retention_days = _int_from_env("DAILY_PLAN_BACKUP_RETENTION_DAYS", 14)

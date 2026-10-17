@@ -1,5 +1,11 @@
 # 后端接口与数据层速查文档
 
+## 当前独立预览补充（2026-10-17，未发布）
+
+POST /api/daily-reviews接受可选learning_outcome字符串，最长300字，默认空。旧客户端不传时在写事务中保留已有成果，显式空字符串清空。日复盘review和周复盘days内review返回该字段，日周GPT导出包含已保存成果，不覆盖reflection_text等原内容，不隐式调用AI。
+
+SQLite仅给reviews新增learning_outcome TEXT NOT NULL DEFAULT ''；新重置快照完整恢复，旧快照缺字段时使用空值默认。预览先停、备份并仅对临时副本初始化两次核对原记录后再重启；生产迁移未执行。专项回归见tests/test_review_outcome.py，实际状态和备份位置见根目录HANDOFF.md。
+
 > 本日改动已于2026-10-15 23:52:54随应用384d3ce正式发布，验收见[发布记录](releases/2026-10-15-saving-execution.md)。下方本机未发布字样为开发阶段记录。
 
 ## 有效细分管理（2026-10-15，本机未发布）

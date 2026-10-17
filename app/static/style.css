@@ -168,6 +168,27 @@ main{width:min(var(--content),calc(100% - 40px));margin:0 auto;padding:44px 0 64
   body[data-page=review] #restore-reset { order: 1; }
 }
 
+/* 当前执行独立于任务与时间轴，滚动时仍保留计时和停止。 */
+.execution-current-panel { position: sticky; top: var(--execution-header-height, 64px); z-index: 18; padding-top: 12px; padding-bottom: 12px; border-radius: 0; border-width: 0 0 1px; background: var(--paper); }
+.execution-current-panel .execution-current { padding-bottom: 8px; }
+.execution-current-heading { display:flex; align-items:center; justify-content:space-between; gap:12px; }
+.execution-current-panel .execution-current-task { grid-template-columns:minmax(0,1fr); }
+.execution-current-heading button { min-height:44px; font-weight:500; }
+.execution-current-panel .execution-save-note { padding: 8px 0 0; }
+.execution-current-panel #execute-reminder-status { margin: 8px 0 0; font-size: 13px; }
+.execution-current-panel[aria-busy=true] .stop-current { visibility: visible; }
+.execution-current-panel #execute-active-badge { display:flex; flex-wrap:wrap; min-width:0; gap:0 4px; }
+.execution-current-title,.execution-current-label { max-width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.execution-current-title { flex:0 1 auto; min-width:0; }
+.execution-current-label { flex:0 0 auto; }
+@media (max-height: 480px) {
+  body[data-page=execute]:has(input:focus,textarea:focus,select:focus) .execution-current-panel { position: static; }
+}
+.operation-feedback { display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: center; margin-top: 8px; color: var(--danger); }
+.operation-feedback p { margin: 0; flex: 1 1 220px; font-size: 13px; }
+.operation-feedback button, .load-retry { min-height: 44px; }
+body[data-page=execute] { scroll-padding-top: var(--execution-scroll-offset, 250px); }
+body[data-page=execute] input, body[data-page=execute] select, body[data-page=execute] textarea, body[data-page=execute] .timeline-card, #execute-task-list { scroll-margin-top: var(--execution-scroll-offset, 250px); }
 /* 当前计时以数字和留白突出，不增加大卡片或装饰。 */
 .execution-current { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 16px 24px; padding-bottom: 16px; border-bottom: 1px solid var(--line); }
 .execution-current-task { flex: 1 1 150px; min-width: 0; display: grid; gap: 6px; }
@@ -215,3 +236,40 @@ main{width:min(var(--content),calc(100% - 40px));margin:0 auto;padding:44px 0 64
 .effective-start-panel.opens-above { top: auto; bottom: calc(100% + 6px); }
 /* 保留键盘焦点轮廓，避免触屏点击让整张卡片闪成浏览器默认蓝色。 */
 .execution-task-card { -webkit-tap-highlight-color: transparent; }
+
+/* 主导航保持原字号，为触屏留足点击区域。 */
+.primary-nav>a,.nav-more summary,.nav-more-panel a,.nav-logout{min-width:44px;min-height:44px}
+.nav-more-panel a,.nav-logout{display:flex;align-items:center}
+/* 时间轴先阅读，再按需编辑。 */
+.execute-workspace .timeline-list{gap:0}
+.execute-workspace .timeline-card{padding:0;border:0;border-bottom:1px solid var(--line);border-radius:0;min-width:0}
+.segment-summary{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 12px;align-items:center;min-height:64px;padding:12px 0;cursor:pointer;list-style:none}
+.segment-summary::-webkit-details-marker{display:none}
+.segment-summary-time{font-variant-numeric:tabular-nums;font-size:13px;color:var(--muted);overflow-wrap:anywhere}
+.segment-summary-task{grid-column:1;grid-row:2;font-size:14px;overflow-wrap:anywhere}
+.segment-summary-duration{grid-column:2;grid-row:1;font-size:13px;color:var(--ink);white-space:nowrap}
+.segment-summary-action{grid-column:2;grid-row:2;justify-self:end;font-size:12px;color:var(--muted)}
+.segment-details[open] .segment-summary-action{font-size:0}
+.segment-details[open] .segment-summary-action::after{content:'收起';font-size:12px}
+.segment-summary:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.segment-editor{padding:8px 0 16px}
+.segment-editor .timeline-actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px;margin-bottom:0}
+.segment-editor .timeline-actions button,#add-segment{min-height:44px}
+.execute-workspace .timeline-card.active{padding:12px 0}
+#timeline-panel .section-heading-actions{display:flex;flex-wrap:wrap;gap:8px}
+
+/* 分类只用文字和轻分隔；不新增彩色统计大卡。 */
+.time-summary-section{padding:22px 0;border-top:1px solid var(--line);margin:14px 0 24px}
+.time-summary-heading{display:flex;align-items:baseline;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.time-summary-heading h2{font-size:20px}.time-summary-heading>span{font-size:13px;color:var(--muted)}
+.time-summary-section>.muted{font-size:13px;margin:12px 0}
+.time-category-list{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px 24px;margin:18px 0}
+.time-category-list>div{display:flex;justify-content:space-between;gap:12px;font-size:14px;min-width:0}
+.time-category-list dd{margin:0;white-space:nowrap;font-variant-numeric:tabular-nums}.time-category-list dt{overflow-wrap:anywhere}
+.time-summary-efficiency{margin:0;font-size:14px}.time-summary-efficiency strong{font-weight:500;margin-left:10px}
+.activity-reminder-dialog{width:min(440px,calc(100% - 28px));max-height:85dvh;overflow-y:auto;border:1px solid var(--line);background:var(--paper);color:var(--ink);border-radius:14px;padding:22px}
+.activity-reminder-dialog form{display:grid;gap:16px}.activity-reminder-dialog label{display:grid;gap:8px;font-size:14px}
+.activity-reminder-dialog .actions button{min-height:44px}.activity-reminder-dialog::backdrop{background:rgba(20,20,19,.3)}
+.execution-label-button small{display:block;font-size:11px;font-weight:400;color:var(--muted);margin-top:3px}
+@media(max-width:760px){.time-category-list{grid-template-columns:repeat(2,minmax(0,1fr));gap:12px 18px}}
+.activity-reminder-dialog{margin:auto}

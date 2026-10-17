@@ -188,6 +188,7 @@ def test_daily_review_returns_empty_review_fields_without_saved_review(tmp_path)
     body = result.json()
     assert body["status"] == "draft"
     assert body["review"] == {
+        "learning_outcome": "",
         "mood": "",
         "hardest_point": "",
         "effective_method": "",
@@ -443,7 +444,7 @@ def test_execution_segments_aggregate_into_daily_execution_and_review_board(tmp_
         {
             "task_id": main_task["id"],
             "segment_kind": "counted_label",
-            "label_id": "counted_toilet",
+            "label_id": "counted_game",
             "started_at": f"{today}T10:35:00",
             "ended_at": f"{today}T10:45:00",
         },
@@ -475,7 +476,7 @@ def test_execution_segments_aggregate_into_daily_execution_and_review_board(tmp_
     assert board["effective_labels"][0]["effective_share"] == 0.6667
     assert board["effective_labels"][1]["label_name"] == "未细分"
     assert board["effective_labels"][1]["minutes"] == 20
-    assert board["counted_labels"][0]["label_name"] == "上厕所"
+    assert board["counted_labels"][0]["label_name"] == "打游戏"
     assert board["counted_labels"][0]["count"] == 1
     assert board["interrupt_labels"][0]["label_name"] == "吃饭"
 

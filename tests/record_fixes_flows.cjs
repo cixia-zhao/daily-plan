@@ -28,6 +28,7 @@ if (!base || !['127.0.0.1','localhost'].includes(new URL(base).hostname)) throw 
     await page.locator('#timeline-toggle').click();
     const row=page.locator(`[data-segment-id="${middle.id}"]`);
     await row.waitFor({state:'visible'});
+    await row.locator('summary').click();
     assert.equal(await row.locator('.segment-start').inputValue(),`${day}T10:35:40`);
     assert.equal(await row.locator('.segment-end').inputValue(),`${day}T10:45:22`);
     await row.locator('.segment-label-id').selectOption('effective_math_course');

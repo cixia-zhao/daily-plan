@@ -3,7 +3,7 @@
 {% block page %}review{% endblock %}
 {% block content %}
 <section class="hero compact">
-  <div><h1>复盘</h1><p id="review-week-range">先看数据，再留下结论与下一步。</p></div>
+  <div><h1>复盘</h1><p id="review-week-range">先看数据，再留下结论与下一步。</p><p id="review-period-status" class="review-period-status" hidden></p></div>
   <div class="date-actions">
     <button id="reset-day" class="danger-soft reset-day-button" type="button">重置今天</button>
     <button id="restore-reset" class="ghost-button" type="button" hidden>恢复重置前记录</button>
@@ -14,12 +14,16 @@
   </div>
 </section>
 
+<section class="review-date-sheet" aria-label="日期与复盘内容">
 <section class="review-week-navigation" aria-label="本周复盘导航">
   <div class="review-week-heading"><span id="review-selected-label">正在读取…</span><div class="review-week-actions"><button id="review-prev-week" class="ghost-button" type="button" aria-label="上一周">←</button><button id="review-this-week" class="ghost-button" type="button">本周</button><button id="review-next-week" class="ghost-button" type="button" aria-label="下一周">→</button></div></div>
+  <p id="review-week-scroll-hint" class="review-week-scroll-hint" hidden></p>
   <div id="review-week-steps" class="review-week-steps" role="tablist" aria-label="选择日复盘或周复盘"></div>
-  <button id="replacement-day-link" class="ghost-button replacement-day-link" type="button" hidden>查看该天日复盘</button>
 </section>
+<div class="review-date-page">
+<button id="replacement-day-link" class="ghost-button replacement-day-link" type="button" hidden>查看该天日复盘</button>
 <p id="review-loading" class="muted" role="status" hidden>正在读取记录…</p>
+<button id="review-retry" class="ghost-button load-retry" type="button" hidden>重新读取</button>
 <div id="review-workspace-content" role="tabpanel" aria-labelledby="review-selected-label">
 <div id="daily-save-summary" class="review-save-summary" role="status"><span id="daily-record-status">正在读取记录…</span><span id="daily-review-state">正在读取复盘…</span></div>
 <div class="review-section-tabs" role="tablist" aria-label="复盘内容">
@@ -37,6 +41,8 @@
   <article><span>副航线实际</span><strong id="daily-sub-minutes">—</strong><small>只统计已记录分钟</small></article>
 </section>
 
+<section id="daily-time-summary" class="time-summary-section" aria-label="当天已记录时间去向"></section>
+<p id="daily-outcome-summary" class="learning-outcome-summary" hidden></p>
 <section class="panel review-support">
   <div class="section-heading"><div><h2>执行结构</h2><p class="muted">各项任务的实际投入与时间分配。</p></div></div>
   <div id="daily-execution-board-empty" class="muted">这一天还没有执行记录。</div>
@@ -50,8 +56,9 @@
 <div id="review-reflection-panel" class="review-tab-panel" role="tabpanel" aria-labelledby="review-reflection-tab" hidden>
 <div id="daily-reflection-content">
 <section class="panel review-closeout">
-  <div class="section-heading"><div><p class="step">收尾</p><h2>今天先留下这三件事</h2></div></div>
+  <div class="section-heading"><div><p class="step">收尾</p><h2>留下今天的推进与下一步</h2></div></div>
   <form id="daily-review-form" class="review-form">
+    <label>今天完成的一件事（可选）<input name="learning_outcome" maxlength="300" placeholder="例如：线代第二讲完成，错题归纳 3 条"></label>
     <div id="review-quick-fields" class="form-grid">
       <label>今天整体情绪
         <select name="mood">
@@ -105,6 +112,8 @@
 </div>
 </div>
 </div>
+</div>
+</section>
 {% endblock %}
 {% block page_styles %}<link rel="stylesheet" href="/static/review.css?v={{ static_version('review.css') }}">{% endblock %}
 {% block page_scripts %}<script src="/static/review.js?v={{ static_version('review.js') }}" defer></script>{% endblock %}

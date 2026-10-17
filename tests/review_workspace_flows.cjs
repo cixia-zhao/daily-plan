@@ -11,7 +11,7 @@ if(!base || !['127.0.0.1','localhost'].includes(new URL(base).hostname)) throw E
   const errors=[];page.on('pageerror',e=>errors.push(e.message));
   async function api(path,method='GET',data){const r=await page.request.fetch(`${base}/api/${path}`,{method,data});assert(r.ok(),await r.text());return r.json();}
   const initial=await api('settings');
-  const countedLabel=initial.execution_labels.find(label=>label.bucket==='counted');
+  const countedLabel=initial.execution_labels.find(label=>label.id==='counted_game');
   assert(countedLabel,'测试设置需要至少一个计总标签');
   await api('settings','PUT',{...initial,project_start_date:'2026-10-01',weekly_review_mode:'separate',weekly_review_day:6});
   for(const [date,minutes] of [['2026-10-11',20],['2026-10-12',60],['2026-10-13',30],['2026-10-14',20]]){

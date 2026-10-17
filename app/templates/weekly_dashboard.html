@@ -1,11 +1,13 @@
 <section class="weekly-dashboard" aria-label="周复盘数据看板">
   <div class="weekly-time-overview">
-    <article class="weekly-total"><span class="metric-caption">主航线 · 投入总计</span><strong id="weekly-total-time">—</strong><small>有效学习与计总时间，包含已保存记录</small></article>
+    <article class="weekly-total"><span class="metric-caption">主航线 · 投入总计</span><strong id="weekly-total-time">—</strong><small>有效学习与分心时间，包含已保存记录</small></article>
     <article class="weekly-efficiency"><span class="metric-caption">有效率</span><strong id="weekly-effective-ratio">—</strong><div class="weekly-efficiency-track" aria-hidden="true"><span id="weekly-efficiency-fill"></span></div><p>有效时间 <b id="weekly-effective-time">—</b></p></article>
   </div>
+  <div class="weekly-comparison" aria-label="与上周同期比较"><p id="weekly-comparison-summary"></p><small id="weekly-comparison-range"></small></div>
   <div class="weekly-secondary-metrics"><div><span>主任务完成率</span><strong id="weekly-completion-rate">—</strong></div><div><span>完成 / 任务数</span><strong id="weekly-task-count">—</strong></div><p class="weekly-sub-time">副航线总计 <span id="weekly-sub-time">—</span></p></div>
+  <section id="weekly-time-summary" class="time-summary-section" aria-label="本周已记录时间去向"></section>
   <div class="weekly-detail-grid">
-    <section class="weekly-daily-chart"><div class="section-heading"><div><h2>这一周的投入</h2><p class="muted">深色为有效时间，浅色为其余计总时间。</p></div></div><div id="weekly-day-bars" class="weekly-day-bars"></div></section>
+    <section class="weekly-daily-chart"><div class="section-heading"><div><h2>这一周的投入</h2><p class="muted">深色为有效时间，浅色为分心时间。</p></div></div><div id="weekly-day-bars" class="weekly-day-bars"></div></section>
     <section class="weekly-distribution"><div class="section-heading"><h2>主航线投入结构</h2></div><div id="weekly-task-distribution"></div></section>
   </div>
 </section>

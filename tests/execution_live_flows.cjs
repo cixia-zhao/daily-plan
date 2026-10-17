@@ -59,7 +59,7 @@ if(!base || !['127.0.0.1','localhost'].includes(new URL(base).hostname)) throw E
   await page.waitForFunction(()=>document.querySelector('#execute-active-badge').textContent.includes('网课'));
   assert(seconds(await clock())<2,'切换细分显示新一段');
   await page.locator('#execute-stop').click();
-  await page.waitForFunction(()=>document.querySelector('#execute-stop').disabled);
+  await page.waitForFunction(()=>document.querySelector('#execute-stop').disabled && document.querySelector('#execute-current-panel').getAttribute('aria-busy')==='false');
   assert.equal(await clock(),'00:00:00');
   assert.match(await page.locator('#execute-record-status').innerText(),/学习记录已保存/);
   await page.route('**/api/daily-execution/*/tasks/start',route=>route.fulfill({status:503,contentType:'application/json',body:'{"detail":"开始失败"}'}));
@@ -110,7 +110,7 @@ if(!base || !['127.0.0.1','localhost'].includes(new URL(base).hostname)) throw E
   let release,entered,delivered;const gate=new Promise(r=>release=r),arrived=new Promise(r=>entered=r),finished=new Promise(r=>delivered=r);
   await page.route(readPath,async route=>{const response=await route.fetch();entered();await gate;await route.fulfill({response});delivered();});
   await page.evaluate(()=>window.dispatchEvent(new Event('focus')));await arrived;
-  await page.locator('#execute-stop').click();await page.waitForFunction(()=>document.querySelector('#execute-stop').disabled);
+  await page.locator('#execute-stop').click();await page.waitForFunction(()=>document.querySelector('#execute-stop').disabled && document.querySelector('#execute-current-panel').getAttribute('aria-busy')==='false');
   release();await finished;await page.unroute(readPath);
   await page.waitForTimeout(100);
   assert.equal(await clock(),'00:00:00');assert(await page.locator('#execute-stop').isDisabled());

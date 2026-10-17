@@ -15,28 +15,34 @@
 <section id="execute-empty-state" class="panel">
   <div class="section-heading"><div><p class="step">01 · 执行前检查</p><h2>先确认今日清单</h2></div></div>
   <p id="execute-empty-message" class="muted">当前日期还没有可执行的已确认清单。</p>
+  <button id="execute-load-retry" class="ghost-button load-retry" type="button" hidden>重新读取</button>
 </section>
 
-<div class="execute-workspace">
-<section id="execute-panel" class="panel execute-focus hidden">
+<section id="execute-current-panel" class="panel execution-current-panel hidden" aria-label="当前执行与计时">
   <div class="execution-current">
-    <div class="execution-current-task"><span class="step">当前执行</span><span id="execute-active-badge">当前空闲</span></div>
+    <div class="execution-current-task"><div class="execution-current-heading"><span class="step">当前执行</span><button id="execute-choose-task" class="ghost-button" type="button">切换任务</button></div><span id="execute-active-badge">当前空闲</span></div>
     <div class="execution-clock-control">
       <div class="execution-clock-readout"><span id="execute-clock-caption" class="muted">选择任务开始</span><span id="execute-clock" role="timer" aria-label="本段已进行时间" aria-live="off">00:00:00</span></div>
       <button id="execute-stop" class="ghost-button stop-current" type="button" disabled>停止计时</button>
     </div>
   </div>
   <div class="execution-save-note"><span id="execute-record-status" role="status">正在读取记录…</span><span id="execute-review-status">复盘待填写</span></div>
+  <p id="execute-reminder-status" class="muted" role="status" hidden></p>
+  <div id="execute-operation-feedback" class="operation-feedback" hidden><p id="execute-operation-message" role="status"></p><button id="execute-sync-retry" class="ghost-button" type="button">核对当前记录</button></div>
+</section>
+
+<div class="execute-workspace">
+<section id="execute-panel" class="panel hidden">
   <div class="execute-layout">
     <div class="execute-main">
       <div id="execute-mobile-toolbar" class="execution-mobile-toolbar hidden">
-        <button id="mobile-counted-toggle" class="ghost-button" type="button" aria-expanded="false" aria-controls="mobile-counted-panel">计总</button>
-        <button id="mobile-interrupt-toggle" class="ghost-button" type="button" aria-expanded="false" aria-controls="mobile-interrupt-panel">中断</button>
+        <button id="mobile-counted-toggle" class="ghost-button" type="button" aria-expanded="false" aria-controls="mobile-counted-panel">分心</button>
+        <button id="mobile-interrupt-toggle" class="ghost-button" type="button" aria-expanded="false" aria-controls="mobile-interrupt-panel">休息／事务</button>
         <button id="mobile-return-effective" class="ghost-button" type="button" disabled>切回有效</button>
-        <div id="mobile-counted-panel" class="execution-mobile-label-panel hidden" role="group" aria-label="选择计总标签">
+        <div id="mobile-counted-panel" class="execution-mobile-label-panel hidden" role="group" aria-label="选择分心活动">
           <div id="mobile-counted-label-list" class="pill-list"></div>
         </div>
-        <div id="mobile-interrupt-panel" class="execution-mobile-label-panel hidden" role="group" aria-label="选择中断标签">
+        <div id="mobile-interrupt-panel" class="execution-mobile-label-panel hidden" role="group" aria-label="选择休息、生活活动或外部打断">
           <div id="mobile-interrupt-label-list" class="pill-list"></div>
         </div>
       </div>
@@ -64,11 +70,10 @@
 
 <section id="timeline-panel" class="panel hidden">
   <div class="section-heading">
-    <div><p class="step">02 · 时间轴</p><h2>允许补记，也允许回头修正</h2></div>
-    <div class="section-heading-actions"><button id="timeline-toggle" class="ghost-button section-toggle-button" type="button" aria-expanded="false">展开时间轴</button></div>
+    <div><p class="step">02 · 时间轴</p><h2>当天的时间记录</h2></div>
+    <div class="section-heading-actions"><button id="add-segment" class="ghost-button" type="button">补一段时间</button><button id="timeline-toggle" class="ghost-button section-toggle-button" type="button" aria-expanded="false">展开时间轴</button></div>
   </div>
   <div id="timeline-content" class="timeline-content hidden">
-    <div class="timeline-actions"><button id="add-segment" class="ghost-button" type="button">补一段时间</button></div>
     <div id="timeline-list" class="timeline-list"></div>
   </div>
 </section>

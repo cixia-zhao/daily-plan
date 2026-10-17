@@ -25,7 +25,10 @@ def initialize(path: str | Path) -> None:
             if name not in columns:
                 cursor.execute(f"ALTER TABLE tasks ADD COLUMN {name} {sql_type}")
         cursor.execute("PRAGMA table_info(task_execution_segments)")
-        if "included" not in [row[1] for row in cursor.fetchall()]:
+        segment_columns = [row[1] for row in cursor.fetchall()]
+        if "time_category" not in segment_columns:
+            cursor.execute("ALTER TABLE task_execution_segments ADD COLUMN time_category TEXT")
+        if "included" not in segment_columns:
             cursor.execute("ALTER TABLE task_execution_segments ADD COLUMN included INTEGER NOT NULL DEFAULT 1")
         cursor.execute("PRAGMA table_info(reviews)")
         review_columns = [row[1] for row in cursor.fetchall()]
@@ -35,6 +38,7 @@ def initialize(path: str | Path) -> None:
             ("optimization_note", "ALTER TABLE reviews ADD COLUMN optimization_note TEXT NOT NULL DEFAULT ''"),
             ("real_progress", "ALTER TABLE reviews ADD COLUMN real_progress TEXT NOT NULL DEFAULT ''"),
             ("reflection_text", "ALTER TABLE reviews ADD COLUMN reflection_text TEXT NOT NULL DEFAULT ''"),
+            ("learning_outcome", "ALTER TABLE reviews ADD COLUMN learning_outcome TEXT NOT NULL DEFAULT ''"),
         ]:
             if name not in review_columns:
                 cursor.execute(ddl)

@@ -58,7 +58,7 @@ if(!baseUrl||!['127.0.0.1','localhost','[::1]'].includes(new URL(baseUrl).hostna
    await choose(english.id,'effective_english_reading');
    await page.waitForFunction(()=>document.querySelector('#execute-active-badge').textContent.includes('阅读'));
    assert.equal((await state()).active_segment.task_id,english.id);
-   await page.locator('#execute-stop').tap();await page.waitForFunction(()=>document.querySelector('#execute-stop').disabled);
+   await page.locator('#execute-stop').tap();await page.waitForFunction(()=>document.querySelector('#execute-stop').disabled && document.querySelector('#execute-current-panel').getAttribute('aria-busy')==='false');
    await mathCard.focus();await page.keyboard.press('Enter');assert(await mathCard.locator('.execution-task-details').isVisible());
    await page.keyboard.press('Escape');assert(await mathCard.locator('.execution-task-details').isHidden());
    assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));

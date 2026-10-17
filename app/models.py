@@ -54,6 +54,7 @@ CREATE TABLE IF NOT EXISTS reviews (
     real_progress TEXT NOT NULL DEFAULT '',
     tomorrow_focus TEXT NOT NULL,
     reflection_text TEXT NOT NULL DEFAULT '',
+    learning_outcome TEXT NOT NULL DEFAULT '',
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 CREATE TABLE IF NOT EXISTS weekly_reports (
@@ -85,6 +86,7 @@ CREATE TABLE IF NOT EXISTS task_execution_segments (
     plan_date TEXT NOT NULL,
     task_id INTEGER NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
     segment_kind TEXT NOT NULL,
+    time_category TEXT,
     label_id TEXT,
     label_name TEXT,
     started_at TEXT NOT NULL,
@@ -109,6 +111,16 @@ CREATE TABLE IF NOT EXISTS app_settings (
     value_json TEXT NOT NULL,
     updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
+CREATE TABLE IF NOT EXISTS execution_reminders (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    segment_id INTEGER NOT NULL UNIQUE REFERENCES task_execution_segments(id) ON DELETE CASCADE,
+    due_at TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'pending',
+    sent_at TEXT,
+    error TEXT,
+    claimed_at TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_reminders_due ON execution_reminders(status,due_at);
 CREATE TABLE IF NOT EXISTS daily_reset_snapshots (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     plan_date TEXT NOT NULL,

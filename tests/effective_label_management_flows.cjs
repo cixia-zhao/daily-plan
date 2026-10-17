@@ -56,7 +56,7 @@ if(!base||!['127.0.0.1','localhost'].includes(new URL(base).hostname))throw Erro
   await input().fill('错题归纳');await save();await dialog().waitFor({state:'detached'});
   assert.equal((await api(`daily-execution/${day}`)).active_segment.label_name,'错题整理','当前历史段保持原名');
   await new Promise(resolve=>setTimeout(resolve,1100));
-  await page.locator('#execute-stop').click();await page.waitForFunction(()=>document.querySelector('#execute-stop').disabled);
+  await page.locator('#execute-stop').click();await page.waitForFunction(()=>document.querySelector('#execute-stop').disabled && document.querySelector('#execute-current-panel').getAttribute('aria-busy')==='false');
   const old=(await api(`daily-execution/${day}`)).segments.find(s=>s.id===active.id);
   await openEdit(label.id);await input().fill('网课');await save();
   await page.waitForFunction(()=>document.querySelector('.label-editor-error').textContent.includes('同名'));
@@ -78,12 +78,14 @@ if(!base||!['127.0.0.1','localhost'].includes(new URL(base).hostname))throw Erro
   // 已删标签的旧时间段仍可展开并原样保存。
   await page.locator('#timeline-toggle').click();
   const row=page.locator(`.timeline-card[data-segment-id="${old.id}"]`);
+  await row.locator('summary').click();
   assert.equal(await row.locator('.segment-label-id').inputValue(),label.id);
   const update=page.waitForResponse(r=>r.request().method()==='PUT'&&r.url().includes(`/segments/${old.id}`));
   await row.locator('.segment-save').click();const updated=await update;assert(updated.ok(),JSON.stringify({error:await updated.text(),old,posted:updated.request().postDataJSON()}));
   await page.waitForFunction(()=>document.querySelector('#toast').textContent.includes('更新'));
   assert.equal((await api(`daily-execution/${day}`)).segments.find(s=>s.id===old.id).label_name,'错题整理');
   const sameDayEnglish=(await api(`daily-plans/${day}`)).tasks.find(t=>t.category==='english'&&!t.is_sub);
+  await row.locator('summary').click();
   await row.locator('.segment-task-id').selectOption(String(sameDayEnglish.id));
   assert.equal(await row.locator(`.segment-label-id option[value="${label.id}"]`).count(),0,'旧数学标签不能跨科目带入英语');
   // 退出编辑不改变标签，点击管理内部输入不收起卡片。

@@ -2,6 +2,13 @@ const $ = (selector, root=document) => root.querySelector(selector);
 const $$ = (selector, root=document) => [...root.querySelectorAll(selector)];
 const esc = (value='') => String(value).replace(/[&<>'"]/g, char => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[char]));
 const page = document.body.dataset.page;
+const timeCategoryNames = {learning:'有效学习',distraction:'分心',rest:'主动休息',external:'外部打断',life:'生活活动',legacy_interrupt:'其他非学习（旧记录）',legacy_counted:'旧计总（保留原口径）'};
+const labelTimeCategory = label => label.time_category || ({counted_toilet:'life',counted_walk:'rest',counted_game:'distraction',interrupt_meal:'life',interrupt_incident:'external',interrupt_pause:'rest'}[label.id]) || (label.bucket === 'counted' ? 'distraction' : 'external');
+const segmentTimeCategory = segment => segment.time_category || (segment.segment_kind === 'effective' ? 'learning' : segment.segment_kind === 'counted_label' ? 'legacy_counted' : 'legacy_interrupt');
+function renderTimeSummary(node, summary) {
+  if (!node || !summary) return;
+  node.innerHTML = `<div class="time-summary-heading"><h2>时间去向</h2><span>已记录 ${formatMinutes(Math.floor(summary.recorded_seconds/60),summary.recorded_seconds)}</span></div><p class="muted">学习有效率只看学习与分心；休息、生活和外部打断单列。未记录的空档不包含在内。</p><dl class="time-category-list">${Object.entries(summary.categories).filter(([key,value])=>value>0 || key==='learning').map(([key,value])=>`<div><dt>${timeCategoryNames[key]}</dt><dd>${formatMinutes(Math.floor(value/60),value)}</dd></div>`).join('')}</dl><p class="time-summary-efficiency">学习有效率 <strong>${summary.effective_ratio === null ? '—' : formatPercent(summary.effective_ratio)}</strong></p>`;
+}
 const todayIso = () => new Date().toLocaleDateString('en-CA');
 const toast = (message) => {
   const element = $('#toast');
@@ -241,9 +248,9 @@ function renderTaskExecutionBoard(container, boards, emptyHtml='') {
           <span>原目标 ${board.estimated_minutes || 0} 分</span>
           ${board.habit_status ? `<span>${habitStatusLabel(board.habit_status)}</span>` : ''}
           <span>有效 ${formatMinutes(board.effective_minutes, board.effective_seconds)}</span>
-          <span>计总标签 ${formatMinutes(board.counted_label_minutes, board.counted_label_seconds)}</span>
-          <span>中断 ${formatMinutes(board.interrupt_minutes, board.interrupt_seconds)}</span>
-          <span>有效占总计 ${formatPercent(board.effective_ratio)}</span>
+          <span>分心 ${formatMinutes(board.counted_label_minutes, board.counted_label_seconds)}</span>
+          <span>休息与事务 ${formatMinutes(board.interrupt_minutes, board.interrupt_seconds)}</span>
+          <span>学习有效率 ${board.time_summary?.effective_ratio === null ? '—' : formatPercent(board.effective_ratio)}</span>
         </div>
         <div class="execution-bar" aria-hidden="true">
           <span class="execution-bar-effective" style="width:${taskBoardRatio(board.effective_seconds ?? board.effective_minutes * 60, barBase)}%"></span>
@@ -258,16 +265,16 @@ function renderTaskExecutionBoard(container, boards, emptyHtml='') {
               : '<p class="muted">还没有有效细分记录</p>'}
           </div>
           <div>
-            <h4>计总标签</h4>
+            <h4>分心</h4>
             ${board.counted_labels?.length
               ? `<ul>${board.counted_labels.map(label => `<li>${esc(label.label_name)} · ${formatMinutes(label.minutes, label.seconds)} · ${label.count} 次</li>`).join('')}</ul>`
-              : '<p class="muted">还没有计总标签记录</p>'}
+              : '<p class="muted">还没有分心记录</p>'}
           </div>
           <div>
-            <h4>中断标签</h4>
+            <h4>休息、生活与外部打断</h4>
             ${board.interrupt_labels?.length
               ? `<ul>${board.interrupt_labels.map(label => `<li>${esc(label.label_name)} · ${formatMinutes(label.minutes, label.seconds)} · ${label.count} 次</li>`).join('')}</ul>`
-              : '<p class="muted">还没有中断标签记录</p>'}
+              : '<p class="muted">还没有非学习记录</p>'}
           </div>
         </div>
       </article>
@@ -927,8 +934,11 @@ if (page === 'execute') {
   const dateButton = $('#execute-date-button');
   const selectedFromQuery = new URLSearchParams(window.location.search).get('date');
   let executionState = null;
+  let notificationState = null;
   let selectedTaskId = null;
   let showDraftSegment = false;
+  let resetTimelineEditorId = null;
+  let timelineEditorDate = null;
   let switchingEffectiveLabel = false;
   let executionRevision = 0;
   let executionWrites = 0;
@@ -939,13 +949,50 @@ if (page === 'execute') {
   let clockReceivedAt = 0;
   let clockActive = false;
   let syncFailed = false;
+  let timingPending = false;
+  let timingAction = '';
   const receivedTimes = new WeakMap();
+
+  const header = $('.site-header');
+  const currentPanel = $('#execute-current-panel');
+  function updateExecutionOffsets() {
+    const headerHeight = header.getBoundingClientRect().height;
+    document.documentElement.style.setProperty('--execution-header-height',`${headerHeight}px`);
+    document.body.style.setProperty('--execution-scroll-offset',`${headerHeight + currentPanel.getBoundingClientRect().height + 12}px`);
+  }
+  const executionResize = new ResizeObserver(updateExecutionOffsets);
+  executionResize.observe(header); executionResize.observe(currentPanel);
+
+  function updateTimingControls() {
+    const active = executionState?.active_segment;
+    currentPanel.setAttribute('aria-busy',String(timingPending));
+    $('#execute-stop').disabled = timingPending || !active;
+    $('#execute-stop').textContent = timingPending && timingAction === '停止' ? '正在停止…' : '停止计时';
+    $$('.task-start-button, .effective-start-option, .execution-label-button, #mobile-counted-toggle, #mobile-interrupt-toggle').forEach(button=>{button.disabled=timingPending;});
+    $('#mobile-return-effective').disabled = timingPending || !(active && active.segment_kind !== 'effective' && active.task_id);
+    dateButton.disabled = timingPending;
+    $('#execute-choose-task').disabled = timingPending;
+    $('#execute-choose-task').textContent = active ? '切换任务' : '选择任务';
+  }
+
+  function showExecutionError(message) {
+    $('#execute-operation-message').textContent = message;
+    $('#execute-operation-feedback').hidden = false;
+  }
 
   async function executionApi(path, options={}) {
     const writing = options.method && options.method !== 'GET';
+    const timing = writing && /\/(tasks\/start|labels\/start|stop)$/.test(path);
+    if (timing && timingPending) throw new Error('正在处理当前计时操作，请稍候。');
+    if (timing) {
+      timingPending = true;
+      timingAction = path.endsWith('/stop') ? '停止' : executionState?.active_segment ? '切换' : '开始';
+      $('#execute-operation-feedback').hidden = true;
+      updateTimingControls();
+    }
     if (writing) {
       executionWrites++; executionRevision++;
-      $('#execute-record-status').textContent = '正在保存…';
+      $('#execute-record-status').textContent = timing ? `正在${timingAction}，等待服务器确认…` : '正在保存…';
     }
     try {
       const result = await api(path, options);
@@ -953,9 +1000,11 @@ if (page === 'execute') {
       return result;
     } catch (error) {
       if (writing) $('#execute-record-status').textContent = '这次操作未确认保存，请重试；原有记录保留。';
+      if (timing) showExecutionError(`${error.message}；这次操作未确认，当前仍显示上次确认的计时。可先核对记录再重试。`);
       throw error;
     } finally {
       if (writing) { executionWrites--; executionRevision++; }
+      if (timing) { timingPending = false; updateTimingControls(); }
     }
   }
 
@@ -974,15 +1023,26 @@ if (page === 'execute') {
       clockSeconds = Number(active?.seconds || 0);
       clockReceivedAt = receivedTimes.get(result) ?? performance.now();
     }
-    $('#execute-active-badge').textContent = !active ? '当前空闲'
-      : active.segment_kind === 'effective' ? `正在做：${active.task_title}${active.label_name ? ` / ${active.label_name}` : ''}`
-      : `正在切到：${active.task_title} / ${active.label_name}`;
+    $('#execute-active-badge').innerHTML = active
+      ? `<span class="execution-current-title">${active.segment_kind === 'effective' ? '正在做：' : '正在切到：'}${esc(active.task_title)}</span>${active.label_name ? `<span class="execution-current-label"> / ${esc(active.label_name)}</span>` : ''}`
+      : '当前空闲';
+    $('#execute-active-badge').title = $('#execute-active-badge').textContent;
     $('#execute-clock-caption').textContent = active ? '本段已进行' : '选择任务开始';
-    $('#execute-stop').disabled = !active;
+    updateTimingControls();
     $('#execute-record-status').textContent = syncFailed ? '暂时无法同步；显示的是上次确认的状态，请检查网络。'
       : active ? '开始时间已保存，停止后更新本段时长。'
       : result?.has_execution ? '学习记录已保存，无需另外提交。' : '还没有学习记录，开始后自动记录。';
     $('#execute-review-status').textContent = result?.has_review ? '复盘已保存' : '复盘待填写';
+    const reminder = active?.reminder;
+    const notice = $('#execute-reminder-status');
+    notice.hidden = !reminder;
+    if (reminder) {
+      const due = new Date(reminder.due_at).toLocaleTimeString('zh-CN',{hour:'2-digit',minute:'2-digit'});
+      notice.textContent = reminder.status === 'pending' ? `${notificationState?.preview ? '预览演示' : '到点提醒'} · ${due}；计时不会自动停止。`
+        : reminder.status === 'sent' ? '提醒已交给通知服务；计时继续，手机送达请实际核对。'
+        : reminder.status === 'simulated' ? '预览已到提醒时间；没有发送手机通知，计时继续。'
+        : reminder.error || '提醒已取消，计时状态以当前记录为准。';
+    }
     updateClockDigits();
   }
 
@@ -996,6 +1056,7 @@ if (page === 'execute') {
       const result = await executionApi(`/api/daily-execution/${target}`);
       if (document.hidden || target !== dateInput.value || revision !== executionRevision || sequence !== executionLoadSequence || executionWrites) return;
       syncFailed = false;
+      $('#execute-operation-feedback').hidden = true;
       executionState = result;
       renderLiveExecution(result);
       const runnable = result.plan && ['approved', 'submitted'].includes(result.plan.status);
@@ -1003,6 +1064,7 @@ if (page === 'execute') {
     } catch {
       if (target === dateInput.value && revision === executionRevision && sequence === executionLoadSequence) {
         syncFailed = true; renderLiveExecution(executionState);
+        showExecutionError('暂时无法同步，当前显示上次确认的记录。请检查网络后重新核对。');
       }
     } finally { liveSyncPending = false; }
   }
@@ -1074,7 +1136,7 @@ if (page === 'execute') {
   }
 
   function labelOptionsForKind(kind, taskId, selectedId='', snapshot=null) {
-    if (kind === 'effective') {
+    if (kind === 'learning' || kind === 'effective') {
       const options = ['<option value="">未细分</option>'];
       const category = executionState.tasks.find(task => String(task.id) === String(taskId))?.category;
       const originalCategory = snapshot && executionState.tasks.find(task => task.id === snapshot.task_id)?.category;
@@ -1086,11 +1148,10 @@ if (page === 'execute') {
       });
       return options.join('');
     }
-    const bucket = kind === 'counted_label' ? 'counted' : 'interrupt';
-    const labels = (executionState?.labels || []).filter(label => label.bucket === bucket);
+    const labels = (executionState?.labels || []).filter(label => labelTimeCategory(label) === kind);
     const options = labels.map(label => `<option value="${esc(label.id)}" ${label.id === selectedId ? 'selected' : ''}>${esc(label.name)}</option>`);
-    if (snapshot?.segment_kind === kind && snapshot.label_id && !labels.some(label => label.id === snapshot.label_id)) {
-      options.unshift(`<option value="${esc(snapshot.label_id)}" ${snapshot.label_id === selectedId ? 'selected' : ''}>${esc(snapshot.label_name)}（原归类）</option>`);
+    if (snapshot && segmentTimeCategory(snapshot) === kind && snapshot.label_id && !labels.some(label => label.id === snapshot.label_id)) {
+      options.unshift(`<option value="${esc(snapshot.label_id)}" ${snapshot.label_id === selectedId ? 'selected' : ''}>${esc(snapshot.label_name)}（原记录）</option>`);
     }
     return options.join('');
   }
@@ -1139,37 +1200,67 @@ if (page === 'execute') {
     toast(successMessage);
   }
 
-  function segmentEditorHtml(segment, isDraft=false) {
+  function segmentEditorHtml(segment, isDraft=false, editorState=null) {
+    const original = segment;
+    segment = {...segment, ...editorState?.values};
     const taskOptions = (executionState?.tasks || [])
       .map(task => `<option value="${task.id}" ${String(task.id) === String(segment.task_id) ? 'selected' : ''}>${esc(task.title)}</option>`)
       .join('');
-    const labelLabel = segment.segment_kind === 'effective' ? '细分' : '标签';
+    const category = segmentTimeCategory(segment);
+    const labelLabel = category === 'learning' ? '细分' : '标签';
     return `
       <article class="timeline-card ${isDraft ? 'draft' : ''}" data-segment-id="${segment.id}">
-        <p class="muted">${!isDraft && segment.included === false ? '此段保留记录，不计入统计' : ''}</p>
+        ${isDraft ? '<h3>补一段时间</h3>' : `<details class="segment-details" ${editorState?.open ? 'open' : ''}>
+        <summary class="segment-summary"><span class="segment-summary-time">${esc(segmentTimeRange(original))}</span><span class="segment-summary-task">${esc(original.task_title)}／${esc(original.label_name || (original.segment_kind === 'effective' ? '未细分' : '未命名标签'))}</span><span class="segment-summary-duration">${segmentDuration(original.seconds)}${original.included === false ? ' · 不计入' : ` · ${timeCategoryNames[segmentTimeCategory(original)]}`}</span><span class="segment-summary-action">编辑</span></summary>`}
+        <div class="segment-editor">
+        ${!isDraft && segment.included === false ? '<p class="muted">此段保留记录，不计入统计</p>' : ''}
         <div class="timeline-form">
           <label>开始<input class="segment-start" type="datetime-local" step="1" value="${toDateTimeInputValue(segment.started_at)}"></label>
           <label>结束<input class="segment-end" type="datetime-local" step="1" value="${toDateTimeInputValue(segment.ended_at)}"></label>
           <label>任务<select class="segment-task-id">${taskOptions}</select></label>
-          <label>类型<select class="segment-kind">
-            <option value="effective" ${segment.segment_kind === 'effective' ? 'selected' : ''}>有效时间</option>
-            <option value="counted_label" ${segment.segment_kind === 'counted_label' ? 'selected' : ''}>计总标签</option>
-            <option value="interrupt_label" ${segment.segment_kind === 'interrupt_label' ? 'selected' : ''}>中断标签</option>
+          <label>归类<select class="segment-kind">
+            ${Object.entries(timeCategoryNames).filter(([key])=>!key.startsWith('legacy') || key===category).map(([key,name])=>`<option value="${key}" ${category===key ? 'selected' : ''}>${name}</option>`).join('')}
           </select></label>
           <label class="segment-label-field"><span class="segment-label-title">${labelLabel}</span>
-            <select class="segment-label-id">${labelOptionsForKind(segment.segment_kind, segment.task_id, segment.label_id || '', isDraft ? null : segment)}</select>
+            <select class="segment-label-id">${labelOptionsForKind(category, segment.task_id, segment.label_id || '', isDraft ? null : original)}</select>
           </label>
         </div>
         <div class="timeline-actions">
           <button class="ghost-button segment-save" type="button">${isDraft ? '补记这一段' : '保存修改'}</button>
+          ${isDraft ? '' : '<button class="ghost-button segment-cancel" type="button">取消编辑</button>'}
           <button class="ghost-button segment-delete" type="button">${isDraft ? '取消' : '删除'}</button>
         </div>
+        </div>${isDraft ? '' : '</details>'}
       </article>
     `;
   }
 
+  function segmentTimeRange(segment) {
+    const start = toDateTimeInputValue(segment.started_at), end = toDateTimeInputValue(segment.ended_at);
+    const crossDate = start.slice(0,10) !== end.slice(0,10);
+    const seconds = start.slice(17,19) !== '00' || end.slice(17,19) !== '00';
+    const text = value => `${crossDate ? `${value.slice(0,10)} ` : ''}${value.slice(11,seconds ? 19 : 16)}`;
+    return `${text(start)}—${text(end)}`;
+  }
+
+  function segmentDuration(seconds) {
+    const value = Math.max(0, Math.floor(Number(seconds || 0)));
+    return `${Math.floor(value / 60)} 分${value % 60 ? ` ${value % 60} 秒` : ''}`;
+  }
+
   function renderTimelineList() {
     const list = $('#timeline-list');
+    const editors = new Map();
+    if (timelineEditorDate === dateInput.value) $$('.timeline-card',list).forEach(row => {
+      if (!$('.segment-start',row) || row.dataset.segmentId === resetTimelineEditorId) return;
+      editors.set(row.dataset.segmentId, {open:$('.segment-details',row)?.open, values:{
+        started_at:$('.segment-start',row).value, ended_at:$('.segment-end',row).value,
+        task_id:Number($('.segment-task-id',row).value), time_category:$('.segment-kind',row).value.startsWith('legacy') ? null : $('.segment-kind',row).value,
+        label_id:$('.segment-label-id',row).value || null,
+      }});
+    });
+    timelineEditorDate = dateInput.value;
+    resetTimelineEditorId = null;
     const rows = [];
     if (showDraftSegment) {
       const end = new Date();
@@ -1181,7 +1272,7 @@ if (page === 'execute') {
         label_id: null,
         started_at: dateToLocalDateTimeValue(start),
         ended_at: dateToLocalDateTimeValue(end),
-      }, true));
+      }, true, editors.get('draft')));
     }
     rows.push(...(executionState?.segments || []).map(segment => {
       if (!segment.ended_at) {
@@ -1196,7 +1287,7 @@ if (page === 'execute') {
           </article>
         `;
       }
-      return segmentEditorHtml(segment);
+      return segmentEditorHtml(segment, false, editors.get(String(segment.id)));
     }));
     list.innerHTML = rows.length ? rows.join('') : '<p class="muted">还没有任何执行记录，先开始一段任务有效时间。</p>';
 
@@ -1205,7 +1296,7 @@ if (page === 'execute') {
       const taskId = Number($('.segment-task-id', row).value);
       const title = $('.segment-label-title', row);
       const labelSelect = $('.segment-label-id', row);
-      title.textContent = kind === 'effective' ? '细分' : '标签';
+      title.textContent = kind === 'learning' ? '细分' : '标签';
       const snapshot = executionState.segments.find(segment => String(segment.id) === row.dataset.segmentId);
       labelSelect.innerHTML = labelOptionsForKind(kind, taskId, labelSelect.value || '', snapshot);
     };
@@ -1218,11 +1309,17 @@ if (page === 'execute') {
     });
 
     $$('.segment-save', list).forEach(button => button.onclick = async () => {
+      if (button.disabled) return;
       const row = button.closest('.timeline-card');
-      const segmentKind = $('.segment-kind', row).value;
+      const category = $('.segment-kind', row).value;
+      const original = executionState.segments.find(item=>String(item.id)===row.dataset.segmentId);
+      const label = executionState.labels.find(item=>item.id===$('.segment-label-id',row).value);
+      const keepSnapshot = original && segmentTimeCategory(original)===category && original.label_id===$('.segment-label-id',row).value;
+      const segmentKind = keepSnapshot ? original.segment_kind : category === 'learning' ? 'effective' : category.startsWith('legacy') ? original.segment_kind : label?.bucket === 'counted' ? 'counted_label' : 'interrupt_label';
       const body = {
         task_id: Number($('.segment-task-id', row).value),
         segment_kind: segmentKind,
+        ...(category.startsWith('legacy') ? {} : {time_category:category}),
         label_id: $('.segment-label-id', row).value || null,
         started_at: fromDateTimeInputValue($('.segment-start', row).value),
         ended_at: fromDateTimeInputValue($('.segment-end', row).value),
@@ -1233,14 +1330,24 @@ if (page === 'execute') {
         if (!body.duplicate_choice) return;
       }
       try {
+        button.disabled = true;
         executionState = row.dataset.segmentId === 'draft'
           ? await executionApi(`/api/daily-execution/${dateInput.value}/segments`, {method:'POST', body:JSON.stringify(body)})
           : await executionApi(`/api/daily-execution/${dateInput.value}/segments/${row.dataset.segmentId}`, {method:'PUT', body:JSON.stringify(body)});
         showDraftSegment = false;
+        resetTimelineEditorId = row.dataset.segmentId;
         executionUiState.collapsedTimeline = false;
         renderExecutionState(executionState);
         toast(row.dataset.segmentId === 'draft' ? '补记已保存' : '时间段已更新');
       } catch (error) { toast(error.message); }
+      finally { button.disabled = false; }
+    });
+
+    $$('.segment-cancel',list).forEach(button => button.onclick = () => {
+      const id = button.closest('.timeline-card').dataset.segmentId;
+      resetTimelineEditorId = id;
+      renderTimelineList();
+      $(`.timeline-card[data-segment-id="${id}"] summary`,list)?.focus({preventScroll:true});
     });
 
     $$('.segment-delete', list).forEach(button => button.onclick = async () => {
@@ -1456,7 +1563,7 @@ if (page === 'execute') {
     });
     $$('.task-start-button', root).forEach(button => button.onclick = event => {
       event.stopPropagation();
-      if (switchingEffectiveLabel) return;
+      if (switchingEffectiveLabel || timingPending) return;
       const card = button.closest('.execution-task-card');
       const taskId = Number(card.dataset.executionTaskId);
       $$('.execution-task-card').forEach(other => {
@@ -1485,7 +1592,7 @@ if (page === 'execute') {
     });
     $$('.effective-start-option', root).forEach(button => button.onclick = async event => {
       event.stopPropagation();
-      if (switchingEffectiveLabel) return;
+      if (switchingEffectiveLabel || timingPending) return;
       const taskId = Number(button.closest('.execution-task-card').dataset.executionTaskId);
       const labelId = button.dataset.startLabelId || null;
       const active = executionState?.active_segment;
@@ -1500,7 +1607,7 @@ if (page === 'execute') {
         toast(error.message);
       } finally {
         switchingEffectiveLabel = false;
-        $$('.effective-start-option, .task-start-button').forEach(item => item.disabled = false);
+        updateTimingControls();
       }
     });
   }
@@ -1610,6 +1717,7 @@ if (page === 'execute') {
       renderExecutionTasks();
     });
     bindExecutionTaskCardEvents(list);
+    updateTimingControls();
     $$('.vocabulary-open', list).forEach(button => button.onclick = () => openVocabulary());
     $$('.execute-task-type, .habit-status', list).forEach(input => input.onchange = async () => {
       if (!input.value) return;
@@ -1621,24 +1729,45 @@ if (page === 'execute') {
     });
   }
 
+  function chooseActivityReminder(label) {
+    return new Promise(resolve => {
+      const dialog=document.createElement('dialog');dialog.className='record-form activity-reminder-dialog';
+      const available=notificationState?.configured || notificationState?.preview;
+      dialog.innerHTML=`<form><h3>开始记录${esc(label.name)}</h3><p class="muted">结束当前一段，开始记录${esc(label.name)}。到点只提醒，计时继续。</p><label>到点提醒<select name="remind" required><option value="">请选择</option><option value="no">只记录，不提醒</option><option value="yes" ${available ? '' : 'disabled'}>提醒我回来学习</option></select></label><label>多久后提醒（分钟）<input name="minutes" type="number" min="1" max="1440" step="1" inputmode="numeric" placeholder="由你设定" disabled></label><p class="muted">${esc(notificationState?.message || '手机通知状态暂不可用，本次可只记录时间。')}</p><div class="actions"><button class="primary" type="submit">开始记录</button><button class="ghost-button reminder-cancel" type="button">取消</button></div></form>`;
+      const form=$('form',dialog),minutes=form.elements.namedItem('minutes');
+      form.elements.namedItem('remind').onchange=event=>{minutes.disabled=event.target.value!=='yes';minutes.required=!minutes.disabled;if(!minutes.disabled)minutes.focus();};
+      let selection=null;
+      form.onsubmit=event=>{event.preventDefault();selection={reminder_minutes:form.elements.namedItem('remind').value==='yes' ? Number(minutes.value) : null};dialog.close();};
+      $('.reminder-cancel',dialog).onclick=()=>dialog.close();
+      dialog.addEventListener('keydown',event=>event.stopPropagation());
+      dialog.addEventListener('close',()=>{dialog.remove();resolve(selection);},{once:true});
+      document.body.appendChild(dialog);dialog.showModal();form.elements.namedItem('remind').focus();
+    });
+  }
+
   function renderExecutionLabelButtons(bucket, rootId) {
     const root = $(rootId);
     if (!root) return;
     const active = executionState?.active_segment;
-    const labels = (executionState?.labels || []).filter(label => label.bucket === bucket);
+    const labels = (executionState?.labels || []).filter(label => (labelTimeCategory(label) === 'distraction') === (bucket === 'counted'));
     root.innerHTML = labels.map(label => `
       <button class="ghost-button execution-label-button ${active?.label_id === label.id ? 'active' : ''}" type="button" data-label-id="${esc(label.id)}">
-        ${esc(label.name)}
+        ${esc(label.name)}${bucket === 'interrupt' ? `<small>${timeCategoryNames[labelTimeCategory(label)]}</small>` : ''}
       </button>
     `).join('') || '<p class="muted">暂无标签，可在设置中添加。</p>';
     $$('.execution-label-button', root).forEach(button => button.onclick = async () => {
+      if (timingPending) return;
       const taskId = executionState?.active_segment?.task_id || selectedExecutionTask()?.id;
-      const labelName = button.textContent.trim();
+      const label = executionState.labels.find(item=>item.id===button.dataset.labelId);
+      const labelName = label.name;
+      if (executionState.active_segment?.label_id === label.id) {closeExecutionLabelPicker();return;}
       try {
         $$('.execution-label-button', toolbarRoot()).forEach(item => item.disabled = true);
+        const choice = ['rest','life'].includes(labelTimeCategory(label)) ? await chooseActivityReminder(label) : {reminder_minutes:null};
+        if (!choice) {renderExecutionToolbar();return;}
         executionState = await executionApi(`/api/daily-execution/${dateInput.value}/labels/start`, {
           method:'POST',
-          body:JSON.stringify({label_id:button.dataset.labelId, task_id:taskId || null}),
+          body:JSON.stringify({label_id:button.dataset.labelId, task_id:taskId || null, ...choice}),
         });
         executionUiState.expandedLabelBucket = null;
         renderExecutionState(executionState);
@@ -1690,7 +1819,7 @@ if (page === 'execute') {
     $('#mobile-interrupt-toggle').classList.toggle('active', executionUiState.expandedLabelBucket === 'interrupt');
     $('#mobile-counted-toggle').setAttribute('aria-expanded', String(executionUiState.expandedLabelBucket === 'counted'));
     $('#mobile-interrupt-toggle').setAttribute('aria-expanded', String(executionUiState.expandedLabelBucket === 'interrupt'));
-    $('#mobile-return-effective').disabled = !canReturnToEffective;
+    $('#mobile-return-effective').disabled = timingPending || !canReturnToEffective;
 
     countedPanel.classList.toggle('hidden', executionUiState.expandedLabelBucket !== 'counted');
     interruptPanel.classList.toggle('hidden', executionUiState.expandedLabelBucket !== 'interrupt');
@@ -1707,12 +1836,13 @@ if (page === 'execute') {
       renderExecutionToolbar();
     };
     $('#mobile-return-effective').onclick = async () => {
-      if (!canReturnToEffective) return;
+      if (!canReturnToEffective || timingPending) return;
       try {
         executionUiState.expandedLabelBucket = null;
         await startEffectiveTask(active.task_id, '已切回有效时间', latestEffectiveLabelIdForTask(active.task_id));
       } catch (error) { toast(error.message); }
     };
+    updateTimingControls();
   }
 
   function renderExecutionState(result) {
@@ -1721,12 +1851,13 @@ if (page === 'execute') {
     syncFailed = false;
     renderLiveExecution(result);
     if (!selectedTaskId && result?.tasks?.length) selectedTaskId = result.active_segment?.task_id || result.tasks[0].id;
-    $('#execute-stop').disabled = !result?.active_segment;
+    updateTimingControls();
     const emptyPanel = $('#execute-empty-state');
     const emptyMessage = $('#execute-empty-message');
     const runnable = result?.plan && ['approved', 'submitted'].includes(result.plan.status);
     const readyToClose = runnable && !result?.active_segment;
     $('#execute-panel').classList.toggle('hidden', !runnable);
+    currentPanel.classList.toggle('hidden', !runnable);
     $('#timeline-panel').classList.toggle('hidden', !runnable);
     $('#execute-submit-panel').classList.toggle('hidden', !readyToClose);
     $('#enter-review').disabled = !runnable;
@@ -1750,13 +1881,32 @@ if (page === 'execute') {
 
   async function loadExecution() {
     const target = dateInput.value, sequence = ++executionLoadSequence;
+    const changingDate = executionState?.date !== target;
+    $('#execute-load-retry').hidden = true;
+    if (changingDate) {
+      executionState = null; renderLiveExecution(null);
+      [currentPanel,$('#execute-panel'),$('#timeline-panel'),$('#execute-submit-panel')].forEach(panel=>panel.classList.add('hidden'));
+      $('#execute-empty-state').classList.remove('hidden');
+    }
+    $('#execute-empty-message').textContent = '正在读取这一天的记录…';
     try {
       const result = await executionApi(`/api/daily-execution/${target}`);
       if (sequence === executionLoadSequence && target === dateInput.value) renderExecutionState(result);
     } catch (error) {
-      if (sequence === executionLoadSequence) toast(error.message);
+      if (sequence === executionLoadSequence) {
+        $('#execute-empty-state').classList.remove('hidden');
+        $('#execute-empty-message').textContent = '读取失败，原有记录保留。请检查网络后重新读取。';
+        $('#execute-load-retry').hidden = false;
+        toast(error.message);
+      }
     }
   }
+  $('#execute-load-retry').onclick = loadExecution;
+  $('#execute-sync-retry').onclick = syncLiveExecution;
+  $('#execute-choose-task').onclick = () => {
+    $('#execute-task-list').scrollIntoView({block:'start',behavior:'auto'});
+    $('.task-start-button')?.focus({preventScroll:true});
+  };
 
   let editingVocabularyId = null;
   function openVocabulary(record=null) {
@@ -1827,9 +1977,11 @@ if (page === 'execute') {
   $$('.record-cancel').forEach(button => button.onclick = () => button.closest('.record-form').classList.add('hidden'));
 
   $('#execute-stop').onclick = async () => {
+    if (timingPending) return;
     try {
       executionState = await executionApi(`/api/daily-execution/${dateInput.value}/stop`, {method:'POST'});
       renderExecutionState(executionState);
+      $('#execute-operation-feedback').hidden = true;
       toast('已停止当前计时');
     } catch (error) { toast(error.message); }
   };
@@ -1855,8 +2007,8 @@ if (page === 'execute') {
     window.location.href = `/review?date=${encodeURIComponent(dateInput.value)}`;
   };
 
-  api('/api/settings').then(result => {
-    settings = result;
+  Promise.all([api('/api/settings'),api('/api/notifications/status').catch(()=>null)]).then(([result,notification]) => {
+    settings = result; notificationState = notification;
     bindSharedCalendarTrigger(dateButton, () => dateInput.value, async nextDate => {
       dateInput.value = nextDate;
       selectedTaskId = null;
@@ -2110,8 +2262,7 @@ if (page === 'settings') {
         <label>名称<input class="execution-label-name" maxlength="50" required value="${esc(label.name)}"></label>
         <label>归类
           <select class="execution-label-bucket">
-            <option value="counted" ${label.bucket === 'counted' ? 'selected' : ''}>计总标签</option>
-            <option value="interrupt" ${label.bucket === 'interrupt' ? 'selected' : ''}>中断标签</option>
+            ${['distraction','rest','external','life'].map(category=>`<option value="${category}" ${labelTimeCategory(label)===category ? 'selected' : ''}>${timeCategoryNames[category]}</option>`).join('')}
           </select>
         </label>
         ${label.is_system ? '<span class="status execution-label-origin">默认</span>' : '<button class="ghost-button execution-label-delete" type="button">删除</button>'}
@@ -2125,7 +2276,7 @@ if (page === 'settings') {
     $$('.execution-label-bucket').forEach(select => select.onchange = event => {
       const row = event.target.closest('.execution-label-row');
       const item = settingsState.execution_labels.find(label => label.id === row.dataset.labelId);
-      if (item) item.bucket = event.target.value;
+      if (item) {item.time_category = event.target.value;item.bucket = item.time_category==='distraction' ? 'counted' : 'interrupt';}
     });
     $$('.execution-label-delete').forEach(button => button.onclick = () => {
       const row = button.closest('.execution-label-row');
@@ -2138,6 +2289,7 @@ if (page === 'settings') {
     settingsState.execution_labels.push({
       id: `custom_${bucket}_${Date.now()}`,
       name: '新标签',
+      time_category:'distraction',
       bucket,
       is_system: false,
     });

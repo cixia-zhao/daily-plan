@@ -10,6 +10,8 @@ from fastapi.responses import FileResponse
 
 from .backup_utils import create_sqlite_backup, prune_old_backups
 from .database import connect
+from .services.reminders import schedule_reminder, cancel_reminders, reminder_for_segment, notification_status
+from .services.time_accounting import label_category, record_category, counts_in_learning_session, time_summary, combine_summaries, summary_text
 from .services.daily_reset import restore_snapshot, save_reset_snapshot, snapshot_metadata
 from .schemas import (
     CarryoverResolution,
@@ -171,6 +173,7 @@ DEFAULT_SETTINGS = {
 }
 
 EMPTY_REVIEW = {
+    "learning_outcome": "",
     "mood": "",
     "hardest_point": "",
     "effective_method": "",
@@ -318,7 +321,7 @@ def _build_effective_label_map(settings: dict, category: str) -> dict[str, dict]
 
 def _serialize_execution_labels(settings: dict) -> list[dict]:
     labels = settings.get("execution_labels") or DEFAULT_EXECUTION_LABELS
-    return [ExecutionLabelItem(**item).model_dump(mode="json") for item in labels]
+    return [ExecutionLabelItem(**(item | {"time_category": label_category(item)})).model_dump(mode="json") for item in labels]
 
 
 def _serialize_effective_labels_by_category(settings: dict) -> dict[str, list[dict]]:
@@ -360,6 +363,17 @@ def _resolve_segment_label(settings: dict, task_category: str, label_id: str | N
     if segment_kind != expected_kind:
         raise HTTPException(422, "标签类型与时间段类型不匹配")
     return label["id"], label["name"]
+
+
+
+def _segment_category(settings, kind, label_id, explicit=None):
+    if kind == "effective":
+        if explicit not in (None,"learning"):
+            raise HTTPException(422,"有效学习时间不能归入非学习活动")
+        return "learning"
+    if explicit == "learning":
+        raise HTTPException(422,"非学习标签不能归为有效学习")
+    return explicit or label_category(_build_execution_label_map(settings)[label_id])
 
 
 def _resolve_prompt_content(settings: dict, prompt_key: str, active_key: str, default_id: str, default_content: str) -> str:
@@ -469,6 +483,7 @@ def _serialize_execution_segment_row(row) -> dict:
         "task_id": row["task_id"],
         "task_title": row["task_title"],
         "segment_kind": row["segment_kind"],
+        "time_category": row["time_category"],
         "label_id": row["label_id"],
         "label_name": row["label_name"],
         "started_at": row["started_at"],
@@ -488,7 +503,7 @@ def _list_execution_segments(connection, plan_date: str) -> list[dict]:
            ORDER BY s.started_at, s.id""",
         (plan_date,),
     ).fetchall()
-    return [_serialize_execution_segment_row(row) for row in rows]
+    return [_serialize_execution_segment_row(row) | {"reminder": reminder_for_segment(connection,row["id"])} for row in rows]
 
 
 def _list_duration_records(connection, plan_date: str) -> list[dict]:
@@ -531,7 +546,7 @@ def _total_minutes_by_task(segments: list[dict]) -> dict[int, int]:
     for segment in segments:
         if not segment.get("included", True):
             continue
-        if segment["segment_kind"] not in ("effective", "counted_label"):
+        if not counts_in_learning_session(segment):
             continue
         task_id = segment["task_id"]
         totals[task_id] = totals.get(task_id, 0) + _record_seconds(segment)
@@ -584,9 +599,10 @@ def _aggregate_execution_board(tasks: list[dict], segments: list[dict]) -> list[
             label_bucket[key]["seconds"] += seconds
             label_bucket[key]["count"] += 1
             continue
-        bucket_name = "_counted" if segment["segment_kind"] == "counted_label" else "_interrupt"
-        public_name = "counted_labels" if segment["segment_kind"] == "counted_label" else "interrupt_labels"
-        if segment["segment_kind"] == "counted_label":
+        counted = counts_in_learning_session(segment)
+        bucket_name = "_counted" if counted else "_interrupt"
+        public_name = "counted_labels" if counted else "interrupt_labels"
+        if counted:
             board["counted_label_seconds"] += seconds
             board["total_seconds"] += seconds
         else:
@@ -614,7 +630,8 @@ def _aggregate_execution_board(tasks: list[dict], segments: list[dict]) -> list[
             board["effective_labels"].append({"label_id": None, "label_name": "旧版时长记录", "seconds": legacy * 60, "count": 1})
         effective_seconds = max(0, int(board["effective_seconds"] or 0))
         total_seconds = max(0, int(board["total_seconds"] or 0))
-        board["effective_ratio"] = round(effective_seconds / total_seconds, 4) if total_seconds else 0
+        board["time_summary"] = time_summary([item for item in segments if item["task_id"] == task["id"]], (legacy or 0)*60)
+        board["effective_ratio"] = board["time_summary"]["effective_ratio"] or 0
         for label in board["effective_labels"]:
             label_seconds = max(0, int(label["seconds"] or 0))
             label["effective_share"] = round(label_seconds / effective_seconds, 4) if effective_seconds else 0
@@ -705,15 +722,17 @@ def _build_execution_payload(connection, plan_date: str) -> dict:
         _sync_plan_actual_minutes_from_execution(connection, plan["id"], records)
         tasks = _get_plan_task_rows(connection, plan["id"])
         plan_payload = _serialize_plan(connection, plan_date)
+    boards = _aggregate_execution_board(tasks, records)
     return {
         "date": plan_date,
         "plan": plan_payload,
         "tasks": tasks,
         "labels": _serialize_execution_labels(settings),
-        "active_segment": _serialize_execution_segment_row(active) if active else None,
+        "active_segment": (_serialize_execution_segment_row(active) | {"reminder": reminder_for_segment(connection,active["id"])}) if active else None,
         "segments": segments,
         "duration_records": duration_records,
-        "task_execution_board": _aggregate_execution_board(tasks, records),
+        "task_execution_board": boards,
+        "time_summary": combine_summaries([board["time_summary"] for board in boards]),
         "has_execution": _has_saved_execution(tasks, records),
         "has_review": connection.execute("SELECT 1 FROM reviews WHERE review_date=?", (plan_date,)).fetchone() is not None,
     }
@@ -744,6 +763,7 @@ def _close_active_execution_segment(connection, plan_date: str | None = None, en
     active = _get_active_execution_segment(connection, plan_date)
     if not active:
         return None
+    cancel_reminders(connection,active["id"])
     effective_end = ended_at or _now_iso()
     if _parse_iso_datetime(effective_end) <= _parse_iso_datetime(active["started_at"]):
         effective_end = active["started_at"]
@@ -756,6 +776,7 @@ def _serialize_review_row(review) -> dict:
         return dict(EMPTY_REVIEW)
     return {
         "mood": review["mood"] or "",
+        "learning_outcome": review["learning_outcome"] or "",
         "hardest_point": review["hardest_point"] or review["distraction"] or "",
         "effective_method": review["effective_method"] or "",
         "optimization_note": review["optimization_note"] or "",
@@ -769,7 +790,7 @@ def _serialize_daily_review(connection, plan_date: str) -> dict:
     plan = connection.execute("SELECT * FROM plans WHERE plan_date=?", (plan_date,)).fetchone()
     review = connection.execute(
         """SELECT distraction,mood,hardest_point,effective_method,optimization_note,
-                  real_progress,tomorrow_focus,reflection_text
+                  real_progress,tomorrow_focus,reflection_text,learning_outcome
            FROM reviews WHERE review_date=?""",
         (plan_date,),
     ).fetchone()
@@ -822,6 +843,7 @@ def _serialize_daily_review(connection, plan_date: str) -> dict:
         "main_total_minutes": seconds["main_total"] // 60,
         "sub_total_minutes": seconds["sub_total"] // 60,
         "sub_completed_count": sum(row["completed"] for row in sub_tasks),
+        "time_summary": combine_summaries([board["time_summary"] for board in task_board]),
         "has_review": bool(review),
         "has_execution": _has_saved_execution(task_rows, records),
         "task_execution_board": task_board,
@@ -997,6 +1019,7 @@ def _compute_weekly_metrics(connection, start: date, end: date, days: list[dict]
         item["total_minutes"] = item["total_seconds"] // 60
         item["effective_minutes"] = item["effective_seconds"] // 60
     return {
+        "time_summary": combine_summaries([day["time_summary"] for day in eligible]),
         "start_date": start.isoformat(), "end_date": end.isoformat(),
         "review_days": sum(day["has_review"] for day in days if day["date"] <= date.today().isoformat()),
         "task_count": task_count, "completed_count": completed,
@@ -1019,6 +1042,25 @@ def _build_weekly_snapshot(connection, start: date, end: date) -> dict:
     days = [_serialize_daily_review(connection, (start + timedelta(days=offset)).isoformat())
             for offset in range((end - start).days + 1)]
     return _compute_weekly_metrics(connection, start, end, days) | {"days": days}
+
+
+def _weekly_comparison(connection, snapshot: dict) -> dict:
+    """本周只与上周相同星期范围比较；历史周比较两个完整自然周。"""
+    start, end = date.fromisoformat(snapshot["start_date"]), date.fromisoformat(snapshot["end_date"])
+    through = min(end, date.today())
+    if through < start:
+        return {"available": False, "in_progress": False}
+    previous_start, previous_end = start - timedelta(days=7), through - timedelta(days=7)
+    previous = _compute_weekly_metrics(connection, previous_start, previous_end)
+    current_seconds, previous_seconds = snapshot["total_seconds"], previous["total_seconds"]
+    return {
+        "available": True, "in_progress": start <= date.today() <= end,
+        "start_date": str(start), "through_date": str(through),
+        "previous_start_date": str(previous_start), "previous_end_date": str(previous_end),
+        "current_seconds": current_seconds, "previous_seconds": previous_seconds,
+        "difference_seconds": current_seconds - previous_seconds,
+        "change_ratio": round((current_seconds - previous_seconds) / previous_seconds, 4) if previous_seconds else None,
+    }
 
 
 def _calendar_day_state(day: date, project_start: date, today: date, plan_status: str | None, has_review: bool, has_history: bool = False) -> dict:
@@ -1109,6 +1151,7 @@ def _build_chatgpt_prompt(snapshot: dict, deepseek_analysis: dict | None, export
         f"主任务计划分钟：{snapshot['planned_minutes']} 分",
         f"主任务实际分钟：{snapshot['actual_minutes']} 分",
         f"主航线总计投入：{snapshot['total_minutes']} 分",
+        summary_text(snapshot["time_summary"]),
         f"秒级合计：主航线有效 {snapshot['actual_seconds']} 秒，总计 {snapshot['total_seconds']} 秒（分钟显示向下取整，零头未丢失）",
         f"主航线有效率：{round(snapshot['effective_ratio'] * 100)}%（有效时间总和 / 总计时间总和）",
         "统计包含已保存执行记录，提交仅表示收尾完成。",
@@ -1133,6 +1176,7 @@ def _build_chatgpt_prompt(snapshot: dict, deepseek_analysis: dict | None, export
             f"  主任务分钟：计划 {day['main_planned_minutes']} / 实际 {day['main_actual_minutes']}",
             f"  副航线实际：{day['sub_actual_minutes']} 分",
             f"  英语 {day['english_minutes']} 分，其中背单词 {day['vocabulary_minutes']} 分",
+            f"  具体成果：{review.get('learning_outcome') or '未写'}",
             f"  情绪：{review['mood'] or '未写'}",
             f"  最卡点：{review['hardest_point'] or '未写'}",
             f"  有效方法：{review['effective_method'] or '未写'}",
@@ -1177,6 +1221,7 @@ def _build_daily_gpt_prompt(connection, plan_date: str, export_template: str) ->
         f"计划状态：{daily['status_label']}",
         f"主任务完成：{daily['main_completed_count']} / {daily['main_task_count']}",
         f"主任务分钟：计划 {daily['main_planned_minutes']} / 实际 {daily['main_actual_minutes']}",
+        summary_text(daily["time_summary"]),
         f"秒级合计：主航线有效 {daily['main_actual_seconds']} 秒，总计 {daily['main_total_seconds']} 秒（分钟显示向下取整，零头未丢失）",
         f"副航线实际：{daily['sub_actual_minutes']} 分",
         f"英语 {daily['english_minutes']} 分，其中背单词 {daily['vocabulary_minutes']} 分（已包含在实际分钟中）",
@@ -1198,6 +1243,7 @@ def _build_daily_gpt_prompt(connection, plan_date: str, export_template: str) ->
     lines.extend([
         "",
         "今天的结构化复盘：",
+        f"- 具体成果：{review.get('learning_outcome') or '未写'}",
         f"- 情绪：{review['mood'] or '未写'}",
         f"- 最卡点：{review['hardest_point'] or '未写'}",
         f"- 有效方法：{review['effective_method'] or '未写'}",
@@ -1538,9 +1584,9 @@ def start_execution_task(plan_date: date, payload: ExecutionTaskStartInput, requ
         started_at = _now_iso()
         _assert_no_segment_overlap(connection, plan_date.isoformat(), task["id"], started_at, None)
         connection.execute(
-            """INSERT INTO task_execution_segments(plan_date,task_id,segment_kind,label_id,label_name,started_at)
-               VALUES(?,?,?,?,?,?)""",
-            (plan_date.isoformat(), task["id"], "effective", label_id, label_name, started_at),
+            """INSERT INTO task_execution_segments(plan_date,task_id,segment_kind,label_id,label_name,started_at,time_category)
+               VALUES(?,?,?,?,?,?,?)""",
+            (plan_date.isoformat(), task["id"], "effective", label_id, label_name, started_at, "learning"),
         )
         if payload.duplicate_choice == "manual" and label_id == "effective_english_words" and task["category"] == "english":
             connection.execute("UPDATE task_execution_segments SET included=0 WHERE id=last_insert_rowid()"
@@ -1560,6 +1606,8 @@ def start_execution_label(plan_date: date, payload: ExecutionLabelStartInput, re
         if not label:
             raise HTTPException(404, "标签不存在")
         active = _get_active_execution_segment(connection, plan_date.isoformat())
+        if active and active["label_id"] == label["id"] and (payload.task_id is None or payload.task_id == active["task_id"]):
+            return _build_execution_payload(connection,plan_date.isoformat())
         task_id = payload.task_id or (active["task_id"] if active else None)
         if task_id is None:
             raise HTTPException(409, "请先开始一个任务，再切换到标签")
@@ -1570,10 +1618,12 @@ def start_execution_label(plan_date: date, payload: ExecutionLabelStartInput, re
         _assert_no_segment_overlap(connection, plan_date.isoformat(), task["id"], started_at, None)
         segment_kind = "counted_label" if label["bucket"] == "counted" else "interrupt_label"
         connection.execute(
-            """INSERT INTO task_execution_segments(plan_date,task_id,segment_kind,label_id,label_name,started_at)
-               VALUES(?,?,?,?,?,?)""",
-            (plan_date.isoformat(), task["id"], segment_kind, label["id"], label["name"], started_at),
+            """INSERT INTO task_execution_segments(plan_date,task_id,segment_kind,label_id,label_name,started_at,time_category)
+               VALUES(?,?,?,?,?,?,?)""",
+            (plan_date.isoformat(), task["id"], segment_kind, label["id"], label["name"], started_at, label_category(label)),
         )
+        segment_id = connection.execute("SELECT last_insert_rowid()").fetchone()[0]
+        schedule_reminder(connection,segment_id,payload.reminder_minutes,request.app)
         connection.execute("UPDATE plans SET status='approved' WHERE id=? AND status='submitted'", (task["plan_id"],))
         _sync_plan_actual_minutes_from_execution(connection, task["plan_id"])
         return _build_execution_payload(connection, plan_date.isoformat())
@@ -1614,8 +1664,8 @@ def create_execution_segment(plan_date: date, payload: ExecutionSegmentCreateInp
         )
         connection.execute(
             """INSERT INTO task_execution_segments(
-                   plan_date,task_id,segment_kind,label_id,label_name,started_at,ended_at
-               ) VALUES(?,?,?,?,?,?,?)""",
+                   plan_date,task_id,segment_kind,label_id,label_name,started_at,ended_at,time_category
+               ) VALUES(?,?,?,?,?,?,?,?)""",
             (
                 plan_date.isoformat(),
                 task["id"],
@@ -1624,6 +1674,7 @@ def create_execution_segment(plan_date: date, payload: ExecutionSegmentCreateInp
                 label_name,
                 _local_iso(payload.started_at),
                 _local_iso(payload.ended_at),
+                _segment_category(settings,payload.segment_kind,label_id,payload.time_category),
             ),
         )
         if payload.duplicate_choice == "manual" and label_id == "effective_english_words" and task["category"] == "english":
@@ -1676,7 +1727,7 @@ def update_execution_segment(plan_date: date, segment_id: int, payload: Executio
         )
         connection.execute(
             """UPDATE task_execution_segments
-               SET task_id=?, segment_kind=?, label_id=?, label_name=?, started_at=?, ended_at=?
+               SET task_id=?, segment_kind=?, label_id=?, label_name=?, started_at=?, ended_at=?, time_category=?
                WHERE id=?""",
             (
                 task["id"],
@@ -1685,6 +1736,7 @@ def update_execution_segment(plan_date: date, segment_id: int, payload: Executio
                 label_name,
                 _local_iso(payload.started_at),
                 _local_iso(payload.ended_at),
+                existing["time_category"] if keep_label_snapshot and payload.time_category is None else _segment_category(settings,payload.segment_kind,label_id,payload.time_category),
                 segment_id,
             ),
         )
@@ -1853,11 +1905,15 @@ def resolve_carryover(carryover_id: int, payload: CarryoverResolution, request: 
 @router.post("/daily-reviews")
 def save_review(payload: ReviewInput, request: Request):
     with _db(request) as connection:
+        connection.execute('BEGIN IMMEDIATE')
+        # 旧客户端不认识成果字段，保存其他复盘内容时保留已有成果。
+        previous = connection.execute('SELECT learning_outcome FROM reviews WHERE review_date=?', (payload.date.isoformat(),)).fetchone()
+        outcome = payload.learning_outcome if 'learning_outcome' in payload.model_fields_set else (previous['learning_outcome'] if previous else '')
         connection.execute(
             """INSERT INTO reviews(
                    review_date,distraction,mood,hardest_point,effective_method,
-                   optimization_note,real_progress,tomorrow_focus,reflection_text
-               ) VALUES(?,?,?,?,?,?,?,?,?)
+                   optimization_note,real_progress,tomorrow_focus,reflection_text,learning_outcome
+               ) VALUES(?,?,?,?,?,?,?,?,?,?)
                ON CONFLICT(review_date) DO UPDATE SET
                    distraction=excluded.distraction,
                    mood=excluded.mood,
@@ -1866,7 +1922,8 @@ def save_review(payload: ReviewInput, request: Request):
                    optimization_note=excluded.optimization_note,
                    real_progress=excluded.real_progress,
                    tomorrow_focus=excluded.tomorrow_focus,
-                   reflection_text=excluded.reflection_text""",
+                   reflection_text=excluded.reflection_text,
+                   learning_outcome=excluded.learning_outcome""",
             (
                 payload.date.isoformat(),
                 payload.hardest_point,
@@ -1877,6 +1934,7 @@ def save_review(payload: ReviewInput, request: Request):
                 payload.real_progress,
                 payload.tomorrow_focus,
                 payload.reflection_text,
+                outcome,
             ),
         )
         return {"saved": True}
@@ -2001,6 +2059,7 @@ def weekly_review(request: Request, end_date: date | None = None, anchor_date: d
         week_key = end.isoformat()
         week_label = f"{start.isoformat()} → {end.isoformat()}"
         return snapshot | {
+            "comparison": _weekly_comparison(connection, snapshot),
             "analysis": report["deepseek_analysis"],
             "analysis_stale": report["analysis_stale"],
             "ai_status": report["ai_status"],
@@ -2179,6 +2238,10 @@ def save_settings(payload: SettingsInput, request: Request):
         ]:
             if key not in payload.model_fields_set:
                 data[key] = existing.get(key, DEFAULT_SETTINGS[key])
+        previous_labels = {label["id"]: label for label in existing.get("execution_labels", [])}
+        for label in data.get("execution_labels", []):
+            if label.get("time_category") is None and previous_labels.get(label["id"], {}).get("time_category"):
+                label["time_category"] = previous_labels[label["id"]]["time_category"]
         old_deleted = existing.get("deleted_effective_label_ids", {})
         new_deleted = data.get("deleted_effective_label_ids", {})
         data["deleted_effective_label_ids"] = {
@@ -2271,3 +2334,8 @@ def export_backup(request: Request):
         media_type="application/octet-stream",
         filename=backup_path.name,
     )
+
+
+@router.get("/notifications/status")
+def get_notification_status(request: Request):
+    return notification_status(request.app)

@@ -14,6 +14,8 @@
 
 ## 模块文档
 
+- `android-reminders.md`：本机已开发的时间分类、吃饭／休息提醒操作、Android订阅条件、环境配置与故障口径；正式发布状态见HANDOFF.md。
+
 - 根目录 `README.md`：项目总说明、真实使用状态、部署方式、配置项与文档导航。
 - `backend-api.md`：FastAPI 路由、SQLite 模型、执行时间段状态机、有效细分标签、Windows / Termux 启动辅助脚本。
 - `backend-services.md`：本地规则、兼容旧 AI 入口、GPT 协作文案和安全边界。

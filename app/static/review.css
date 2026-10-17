@@ -1,15 +1,37 @@
 /* 暖纸复盘：周内导航、线性页签与有主次的周看板。 */
-.review-week-navigation{margin:0 0 26px;min-width:0}
+.review-date-sheet{min-width:0}
+.review-week-navigation{margin:0;min-width:0}
 .review-week-heading{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:10px;color:var(--muted);font-size:14px}
 .review-week-actions{display:flex;align-items:center;gap:4px;flex-shrink:0}
 .review-week-actions button{min-height:44px;padding:8px 12px}
-.review-week-steps{display:flex;gap:3px;overflow-x:auto;padding:3px 0 8px;scrollbar-width:thin;overscroll-behavior-x:contain}
-.review-week-step{position:relative;display:flex;flex:1 0 88px;flex-direction:column;align-items:center;justify-content:center;gap:5px;min-height:64px;padding:10px 20px;border:0;border-radius:0;color:var(--muted);background:var(--soft);clip-path:polygon(0 0,calc(100% - 12px) 0,100% 50%,calc(100% - 12px) 100%,0 100%,12px 50%)}
-.review-week-step:first-child{clip-path:polygon(0 0,calc(100% - 12px) 0,100% 50%,calc(100% - 12px) 100%,0 100%)}
+.review-week-steps{display:flex;gap:3px;overflow-x:auto;padding:3px 0 0;scrollbar-width:none;overscroll-behavior-x:contain}
+.review-week-steps::-webkit-scrollbar{display:none}
+.review-week-scroll-hint{margin:0 0 6px;color:var(--muted);font-size:12px;line-height:1.6}
+.review-date-page>.load-retry{margin-bottom:12px;min-height:44px}
+.learning-outcome-summary{padding:4px 0 16px;font-size:15px;line-height:1.7;overflow-wrap:anywhere}
+.learning-outcomes{padding:18px 0;border-bottom:1px solid var(--line);margin-bottom:24px}
+.learning-outcomes h2{font-size:18px;margin:0 0 10px}
+.learning-outcomes ul{list-style:none;margin:0;padding:0}
+.weekly-outcome-link{display:flex;gap:16px;align-items:baseline;width:100%;min-height:44px;padding:9px 0;text-align:left;border:0;border-radius:0;background:transparent;color:var(--ink);font-size:14px;line-height:1.7}
+.weekly-outcome-link span:first-child{flex:0 0 auto;color:var(--muted)}
+.weekly-outcome-link span:last-child{min-width:0;overflow-wrap:anywhere}
+.weekly-outcome-link:hover{color:var(--accent)}
+/* 选中鱼骨与正文共用纸面，沿原下边缘接续，不额外绘制连接杆。 */
+.review-week-step-slot{position:relative;flex:1 0 88px;min-width:0;padding-bottom:8px}
+.review-week-step-slot.is-active::after{content:"";position:absolute;bottom:0;left:0;right:12px;height:9px;background:var(--surface);pointer-events:none}
+
+.review-week-step{position:relative;display:flex;width:100%;flex-direction:column;align-items:center;justify-content:center;gap:5px;min-height:64px;padding:10px 20px;border:0;border-radius:0;color:var(--muted);background:var(--soft);clip-path:polygon(0 0,calc(100% - 12px) 0,100% 50%,calc(100% - 12px) 100%,0 100%,12px 50%)}
+.review-week-step-slot:first-child .review-week-step{clip-path:polygon(0 0,calc(100% - 12px) 0,100% 50%,calc(100% - 12px) 100%,0 100%)}
+.review-date-page{min-width:0;padding:18px 0 0;background:var(--surface)}
+.review-date-page>.replacement-day-link{margin:0 0 12px}
+.review-date-page>#review-loading{margin:0 0 12px}
 .review-week-step strong{font-size:15px;white-space:nowrap;font-weight:500}
 .review-week-step small{display:flex;align-items:center;gap:5px;font-size:11px;white-space:nowrap}
 .review-week-step:hover:not(:disabled){background:#e6dfd2;color:var(--ink)}
-.review-week-step.is-active,.review-week-step.is-active:hover{background:var(--ink);color:var(--surface)}
+.review-week-step.is-active,.review-week-step.is-active:hover{background:var(--surface);color:var(--ink)}
+.review-week-step.is-active::before{content:"";position:absolute;top:0;left:16px;right:20px;height:2px;background:var(--accent)}
+.review-week-step.is-active strong{font-weight:650}
+.review-week-step.is-active small{color:var(--accent)}
 .review-week-step.is-today:not(.is-active){color:var(--orange)}
 .review-week-step:focus-visible{outline:0;box-shadow:inset 0 0 0 3px var(--orange)}
 .review-week-step:disabled{opacity:.45;cursor:default}
@@ -67,10 +89,11 @@
 .weekly-distribution-track span{display:block;height:100%;background:#a49276}
 .weekly-distribution-item small{font-size:12px;color:var(--muted)}
 @media(max-width:760px){
- .review-week-navigation{margin-bottom:18px}
+ .review-date-page{padding:18px 0 0}
  .review-week-heading{font-size:12px;gap:4px}
  .review-week-actions button{padding:8px 10px}
- .review-week-step{flex:0 0 86px;min-height:62px}
+ .review-week-step-slot{flex:0 0 86px}
+ .review-week-step{min-height:62px}
  .review-section-tabs{gap:24px;margin-bottom:20px}
  .review-section-tab{font-size:15px}
  .review-metrics{grid-template-columns:repeat(3,minmax(0,1fr))}
@@ -92,3 +115,20 @@
  .sunday-weekly-guide{align-items:flex-start;flex-direction:column}
 }
 @media(prefers-reduced-motion:reduce){.review-tab-indicator{transition:none}.review-panel-enter{animation:none}}
+
+/* 周视图明确整周范围；同范围比较保持次要层级。 */
+body[data-page=review] .hero>div:first-child{min-width:0}
+body[data-page=review] .date-actions{min-width:0}
+body[data-page=review] .date-chip-button{max-width:100%}
+body[data-page=review] .date-trigger{white-space:normal;overflow-wrap:anywhere}
+.review-period-status{font-size:13px!important;color:var(--accent);margin:5px 0 0!important}
+.weekly-comparison{padding:16px 0 0;line-height:1.65}
+.weekly-comparison p{font-size:14px;margin:0 0 4px}
+.weekly-comparison small{display:block;font-size:12px;color:var(--muted);overflow-wrap:anywhere}
+#daily-review-save-status,#daily-gpt-save-status,#weekly-final-save-status,#weekly-gpt-save-status{font-size:13px;line-height:1.7;min-height:22px;margin:10px 0;overflow-wrap:anywhere}
+@media(max-width:760px){
+ body[data-page=review] .hero>.date-actions{max-width:100%;flex-wrap:wrap}
+ body[data-page=review] .date-chip-button{max-width:220px}
+ .review-week-heading{flex-wrap:wrap}
+ #review-selected-label{line-height:1.6}
+}

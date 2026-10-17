@@ -12,6 +12,8 @@ Category = Literal["math", "english", "computer", "ai_project", "rehab", "sleep"
 ReviewMood = Literal["很好", "平稳", "疲惫", "烦躁", "低落", ""]
 ReviewProgress = Literal["明显推进", "有一点推进", "原地打转", "基本没推进", ""]
 ExecutionLabelBucket = Literal["counted", "interrupt"]
+TimeCategory = Literal["learning", "distraction", "rest", "external", "life"]
+NonLearningCategory = Literal["distraction", "rest", "external", "life"]
 ExecutionSegmentKind = Literal["effective", "counted_label", "interrupt_label"]
 
 
@@ -26,6 +28,7 @@ class ExecutionLabelItem(BaseModel):
     id: str = Field(min_length=1, max_length=100)
     name: str = Field(min_length=1, max_length=50)
     bucket: ExecutionLabelBucket
+    time_category: NonLearningCategory | None = None
     is_system: bool = False
 
 
@@ -115,6 +118,7 @@ class ReviewInput(BaseModel):
     real_progress: ReviewProgress = ""
     tomorrow_focus: str = Field(max_length=300)
     reflection_text: str = Field(default="", max_length=4000)
+    learning_outcome: str = Field(default="", max_length=300)
 
 
 class WeeklyAnalysisResult(BaseModel):
@@ -142,11 +146,13 @@ class ExecutionTaskStartInput(BaseModel):
 
 
 class ExecutionLabelStartInput(BaseModel):
+    reminder_minutes: int | None = Field(default=None, ge=1, le=1440)
     label_id: str = Field(min_length=1, max_length=100)
     task_id: int | None = None
 
 
 class ExecutionSegmentCreateInput(BaseModel):
+    time_category: TimeCategory | None = None
     duplicate_choice: Literal["both", "manual", "timer"] | None = None
     task_id: int
     segment_kind: ExecutionSegmentKind
@@ -156,6 +162,7 @@ class ExecutionSegmentCreateInput(BaseModel):
 
 
 class ExecutionSegmentUpdateInput(BaseModel):
+    time_category: TimeCategory | None = None
     duplicate_choice: Literal["both", "manual", "timer"] | None = None
     task_id: int
     segment_kind: ExecutionSegmentKind

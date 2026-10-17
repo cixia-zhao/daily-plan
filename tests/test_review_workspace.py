@@ -36,7 +36,7 @@ def test_saved_execution_counts_before_submit_and_after_edit(tmp_path):
         math = next(t for t in draft['tasks'] if t['category'] == 'math')
         record(client, day, math, '09:00:00', f'09:{minutes:02}:00')
         if offset == 0:
-            record(client, day, math, '09:10:00', '09:20:00', 'counted_label', 'counted_toilet')
+            record(client, day, math, '09:10:00', '09:20:00', 'counted_label', 'counted_game')
             sub = next(t for t in draft['tasks'] if t['is_sub'])
             record(client, day, sub, '10:00:00', '10:30:00')
     client.post('/api/daily-reviews', json={'date': str(monday), 'effective_method': '先写目标', 'tomorrow_focus': ''})

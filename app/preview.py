@@ -18,6 +18,7 @@ def create_preview_app():
         backup_dir=ROOT / "data" / "ui-preview-backups",
         runtime_mode="development",
         disable_ai=True,
+        disable_notifications=True,
     )
     app.state.ui_preview = True
     return app
