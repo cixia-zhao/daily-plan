@@ -1,0 +1,24 @@
+[Unit]
+Description=Daily Plan Android notification channel
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=daily-plan-ntfy
+Group=daily-plan-ntfy
+WorkingDirectory=/var/lib/daily-plan-ntfy
+ExecStart=/opt/daily-plan-ntfy/2.31.1/ntfy serve --config /etc/daily-plan-ntfy/server.yml
+Restart=on-failure
+RestartSec=5
+StateDirectory=daily-plan-ntfy
+StateDirectoryMode=0700
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/daily-plan-ntfy
+
+[Install]
+WantedBy=multi-user.target

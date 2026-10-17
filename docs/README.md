@@ -1,7 +1,7 @@
 # 项目模块文档索引
 
-> 最后更新：2026-10-17
-> 时间分类与复盘交互已发布，应用版本dc7d39c；当前验收与HTTPS续期修复见releases/2026-10-17-time-review.md。正式通知尚未配置，规则见frontend.md、backend-api.md和根目录HANDOFF.md。
+> 最后更新：2026-10-18
+> 时间分类与复盘交互已发布，应用版本dc7d39c；当前验收与HTTPS续期修复见releases/2026-10-17-time-review.md。正式ntfy已接通，手机流量／代理开启时锁屏送达已验收，规则见frontend.md、backend-api.md和根目录HANDOFF.md。
 
 “今日航线”是单用户、本地优先的每日任务工具。当前最真实的核心数据流已经是：晨间输入 → 调整草稿并人工确认 → 直接进入执行台记录时间段 → 单独保存日复盘 → 需要时复制给 GPT 协作并贴回留档。
 
@@ -14,7 +14,7 @@
 
 ## 模块文档
 
-- `android-reminders.md`：本机已开发的时间分类、吃饭／休息提醒操作、Android订阅条件、环境配置与故障口径；正式发布状态见HANDOFF.md。
+- `android-reminders.md`：已发布的时间分类、吃饭／休息提醒操作、Android订阅条件、环境配置与故障口径；正式发布状态见HANDOFF.md。
 
 - 根目录 `README.md`：项目总说明、真实使用状态、部署方式、配置项与文档导航。
 - `backend-api.md`：FastAPI 路由、SQLite 模型、执行时间段状态机、有效细分标签、Windows / Termux 启动辅助脚本。

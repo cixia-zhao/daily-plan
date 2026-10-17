@@ -1,0 +1,12 @@
+# 手机仅订阅此服务；网页仍由原应用处理。
+base-url: "https://120.55.53.215"
+listen-http: "127.0.0.1:8099"
+auth-file: "/var/lib/daily-plan-ntfy/auth.db"
+auth-default-access: "deny-all"
+cache-file: "/var/lib/daily-plan-ntfy/cache.db"
+cache-duration: "1h"
+behind-proxy: true
+proxy-trusted-hosts: "127.0.0.1/32"
+enable-login: true
+enable-signup: false
+web-root: "disable"
