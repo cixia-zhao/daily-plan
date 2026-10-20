@@ -1,0 +1,25 @@
+const {chromium}=require('playwright');const assert=require('node:assert/strict');
+const base=process.env.DAILY_PLAN_TEST_URL;if(!base||!['127.0.0.1','localhost'].includes(new URL(base).hostname))throw Error('仅本机临时库');
+(async()=>{const browser=await chromium.launch({headless:true,executablePath:process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH});try{
+ const page=await browser.newPage({viewport:{width:390,height:844},isMobile:true,hasTouch:true,timezoneId:'Asia/Shanghai'});await page.clock.install({time:new Date('2026-10-19T12:00:00+08:00')});
+ const errors=[];page.on('pageerror',e=>errors.push(e.message));
+ const api=async(path,method='GET',data)=>{const r=await page.request.fetch(`${base}/api/${path}`,{method,data});assert(r.ok(),await r.text());return r.json();};
+ assert((await api('system/health')).database_path.startsWith('/tmp/'));
+ await page.goto(base+'/');await page.waitForFunction(()=>document.querySelectorAll('[data-target-category]').length===4);
+ assert(await page.locator('#morning-energy-field').isHidden());assert(await page.locator('#morning-day-type-field').isHidden());
+ await page.locator('#checkin-form [type=submit]').click();await page.locator('#plan-section').waitFor();
+ let plan=await api('daily-plans/2026-10-19');assert.equal(plan.energy,'normal');assert.equal(plan.day_type,'normal');
+ await api('daily-data/2026-10-19','DELETE');
+ const toggle=async(energy,dayType)=>{await page.goto(base+'/settings');await page.locator('[name=show_energy_selector]').locator('..').waitFor({state:'attached'});
+ await page.locator('summary').filter({hasText:'日常计划'}).click();await page.waitForFunction(()=>document.querySelector('[name=current_stage]').value.length>0);
+ await page.locator('[name=show_energy_selector]').setChecked(energy);await page.locator('[name=show_day_type_selector]').setChecked(dayType);
+ await page.locator('#settings-form [type=submit]').click();await page.waitForFunction(()=>document.querySelector('#toast').textContent.includes('保存'));
+ await page.goto(base+'/');await page.waitForFunction(()=>document.querySelectorAll('[data-target-category]').length===4);};
+ await toggle(true,false);assert(await page.locator('#morning-energy-field').isVisible());assert(await page.locator('#morning-day-type-field').isHidden());
+ await page.locator('[name=energy][value=ample]').check();await page.locator('#checkin-form [type=submit]').click();await page.locator('#plan-section').waitFor();
+ plan=await api('daily-plans/2026-10-19');assert.equal(plan.energy,'ample');assert.equal(plan.day_type,'normal');await api('daily-data/2026-10-19','DELETE');
+ await toggle(false,true);assert(await page.locator('#morning-energy-field').isHidden());assert(await page.locator('#morning-day-type-field').isVisible());
+ await page.locator('#day-type').selectOption('early_class');await page.locator('#checkin-form [type=submit]').click();await page.locator('#plan-section').waitFor();
+ plan=await api('daily-plans/2026-10-19');assert.equal(plan.energy,'normal');assert.equal(plan.day_type,'early_class');
+ assert.deepEqual(errors,[]);console.log('PASS: 精力／当天类型默认隐藏、设置分别恢复、隐藏提交普通值、显示后选择保留');
+}finally{await browser.close();}})().catch(e=>{console.error(e);process.exitCode=1;});

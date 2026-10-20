@@ -60,7 +60,6 @@ if (!baseUrl || !['127.0.0.1','localhost','[::1]'].includes(new URL(baseUrl).hos
     await englishCard.locator('h3').click();
     await page.locator('#mobile-interrupt-toggle').click();
     await page.locator('[data-label-id=interrupt_meal]').click();
-    await page.locator('.activity-reminder-dialog select[name=remind]').selectOption('no');
     await page.locator('.activity-reminder-dialog button[type=submit]').click();
     await waitForActive('吃饭');
     result=await state();
@@ -91,7 +90,7 @@ if (!baseUrl || !['127.0.0.1','localhost','[::1]'].includes(new URL(baseUrl).hos
       assert(!(await page.locator('#mobile-counted-panel').isVisible()));
       const left=await page.locator('#execute-panel').boundingBox();
       const timeline=await page.locator('#timeline-panel').boundingBox();
-      assert(size.width>760 ? timeline.x>=left.x+left.width : timeline.y>=left.y+left.height,'平板右侧时间轴／手机下方时间轴');
+      assert(timeline.y>=left.y+left.height,'折叠时间轴在任务下方，不预留空侧栏');
     }
     await page.locator('#execute-stop').click();
     await waitForActive('当前空闲');

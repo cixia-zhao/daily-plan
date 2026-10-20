@@ -9,10 +9,15 @@
       <summary>日常计划</summary>
       <div class="details-content">
         <div class="form-grid"><label>当前阶段<input name="current_stage" required maxlength="100"></label><label>AI 项目每周上限<input name="ai_project_weekly_frequency" type="number" min="0" max="7"></label><label>项目起始日<input name="project_start_date" type="date" required></label></div>
-        <label class="alert-check"><input name="rehab_enabled" type="checkbox"><span><strong>主航线包含运动</strong><small>关闭后，草稿不再自动生成运动。</small></span></label>
+        <label class="alert-check" hidden><input name="rehab_enabled" type="checkbox"><span><strong>主航线包含运动</strong><small>关闭后，草稿不再自动生成运动。</small></span></label>
+        <label class="alert-check"><input name="show_energy_selector" type="checkbox"><span><strong>今天页显示精力档</strong><small>关闭后使用普通精力，不影响手填目标。</small></span></label>
+        <label class="alert-check"><input name="show_day_type_selector" type="checkbox"><span><strong>今天页显示当天类型</strong><small>关闭后使用普通日。</small></span></label>
         <details><summary>历史精力档参考值（不限制目标）</summary><div class="form-grid"><label>保底档总时间<input name="budget_minimum" type="number" min="30" max="720" step="15" required></label><label>普通档总时间<input name="budget_normal" type="number" min="30" max="720" step="15" required></label><label>充足档总时间<input name="budget_ample" type="number" min="30" max="720" step="15" required></label></div></details>
-        <h2>主航线草稿默认分钟</h2><p class="muted">控制晨间数学、英语、408、运动默认目标；默认是 0，目标没有合计上限。</p><div id="draft-main-minute-fields" class="form-grid"></div>
-        <h2>任务名称</h2><div id="task-title-fields" class="form-grid"></div>
+        <h2>主航线项目</h2><p class="muted">按这里的顺序生成目标。移出项目只影响以后新建的清单，已有记录保留。</p>
+        <div id="main-project-fields"></div>
+        <div class="main-project-add-row"><input id="main-project-new-name" maxlength="100" placeholder="新项目名称，例如吉他" aria-label="新项目名称"><button id="main-project-add" class="ghost-button" type="button">新建项目</button></div>
+        <div class="main-project-add-row"><select id="main-project-existing" aria-label="加入已有项目"></select><button id="main-project-add-existing" class="ghost-button" type="button">加入</button></div>
+        <h2>其他活动名称</h2><div id="task-title-fields" class="form-grid"></div>
       </div>
     </details>
     <details class="settings-group">

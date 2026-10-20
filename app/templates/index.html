@@ -35,14 +35,14 @@
 <div id="today-checkin-stage">
 <section class="panel checkin-panel">
   <div class="section-heading"><div><p class="step">01 · 晨间校准</p><h2>填写今天的目标</h2></div></div>
-  <form id="checkin-form">
+  <form id="checkin-form" novalidate>
     <h3>今天想做到多少？</h3><div id="morning-targets" class="form-grid"></div><p id="morning-total" class="time-summary">计划合计 0 分</p>
-    <fieldset><legend>精力档</legend><div class="segmented">
+    <fieldset id="morning-energy-field" hidden><legend>精力档</legend><div class="segmented">
       <label><input type="radio" name="energy" value="minimum"><span>保底<small>只求不断线</small></span></label>
       <label><input type="radio" name="energy" value="normal" checked><span>普通<small>稳稳推进</small></span></label>
       <label><input type="radio" name="energy" value="ample"><span>充足<small>可以多走一步</small></span></label>
     </div></fieldset>
-    <div class="form-grid">
+    <div id="morning-day-type-field" class="form-grid" hidden>
       <label>当天类型<select id="day-type"><option value="normal">普通日</option><option value="early_class">早课日</option></select></label>
     </div>
     <button class="primary wide" type="submit"><span>生成今天的草稿</span><span aria-hidden="true">→</span></button>

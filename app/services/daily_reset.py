@@ -7,7 +7,7 @@ from fastapi import HTTPException
 
 
 # 仅允许固定业务表，不能由请求指定表名或恢复整个数据库。
-TABLE_ORDER = ('plans', 'tasks', 'task_execution_segments', 'task_duration_records', 'carryovers', 'reviews')
+TABLE_ORDER = ('plans', 'tasks', 'task_execution_segments', 'execution_quick_corrections', 'task_duration_records', 'carryovers', 'reviews', 'vocabulary_daily_counts')
 
 
 def capture_day(connection, plan_date: str) -> dict:
@@ -17,6 +17,8 @@ def capture_day(connection, plan_date: str) -> dict:
         'plans': select('SELECT * FROM plans WHERE plan_date=?', (plan_date,)),
         'tasks': select('SELECT t.* FROM tasks t JOIN plans p ON p.id=t.plan_id WHERE p.plan_date=?', (plan_date,)),
         'reviews': select('SELECT * FROM reviews WHERE review_date=?', (plan_date,)),
+        'vocabulary_daily_counts': select('SELECT * FROM vocabulary_daily_counts WHERE plan_date=?', (plan_date,)),
+        'execution_quick_corrections': select('SELECT * FROM execution_quick_corrections WHERE plan_date=?', (plan_date,)),
     }
     for table in ('task_execution_segments', 'task_duration_records', 'carryovers'):
         data[table] = select(f'SELECT r.* FROM {table} r JOIN tasks t ON t.id=r.task_id JOIN plans p ON p.id=t.plan_id WHERE p.plan_date=?', (plan_date,))
@@ -27,9 +29,9 @@ def snapshot_metadata(row) -> dict:
     data = json.loads(row['snapshot_json'])
     return {
         'id': row['id'], 'date': row['plan_date'], 'created_at': row['created_at'],
-        'counts': {name: len(data[table]) for name, table in (
+        'counts': {name: len(data.get(table, [])) for name, table in (
             ('tasks','tasks'), ('segments','task_execution_segments'), ('durations','task_duration_records'),
-            ('carryovers','carryovers'), ('reviews','reviews'))},
+            ('carryovers','carryovers'), ('reviews','reviews'), ('vocabulary_counts','vocabulary_daily_counts'))},
     }
 
 
@@ -58,8 +60,8 @@ def restore_snapshot(connection, plan_date: str, snapshot_id: int, restored_at: 
         segment['ended_at'] = segment['ended_at'] or row['created_at']
         check_overlap(connection,plan_date,segment['task_id'],segment['started_at'],segment['ended_at'])
     for table in TABLE_ORDER:
-        for record in data[table]:
-            pk = 'review_date' if table == 'reviews' else 'id'
+        for record in data.get(table, []):
+            pk = 'review_date' if table == 'reviews' else 'plan_date' if table == 'vocabulary_daily_counts' else 'id'
             if connection.execute(f'SELECT 1 FROM {table} WHERE {pk}=?',(record[pk],)).fetchone():
                 raise HTTPException(409, '恢复记录与现有记录冲突，未覆盖任何数据')
             columns = list(record)

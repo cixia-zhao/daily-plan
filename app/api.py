@@ -13,11 +13,13 @@ from .database import connect
 from .services.reminders import schedule_reminder, cancel_reminders, reminder_for_segment, notification_status
 from .services.time_accounting import label_category, record_category, counts_in_learning_session, time_summary, combine_summaries, summary_text
 from .services.daily_reset import restore_snapshot, save_reset_snapshot, snapshot_metadata
+from .services.quick_corrections import resize_correction, undo_correction
 from .schemas import (
     CarryoverResolution,
     Category,
     EffectiveLabelNameInput,
     DurationRecordInput,
+    VocabularyCountsInput,
     TemporaryTaskInput,
     EffectiveLabelItem,
     DraftRequest,
@@ -26,6 +28,7 @@ from .schemas import (
     ExecutionSegmentCreateInput,
     ExecutionSegmentUpdateInput,
     ExecutionTaskStartInput,
+    QuickCorrectionInput,
     GPTRecordSaveInput,
     PlanUpdate,
     PromptConfigItem,
@@ -119,6 +122,9 @@ DEFAULT_SETTINGS = {
     "current_stage": "恢复秩序期",
     "ai_project_weekly_frequency": 3,
     "rehab_enabled": True,
+    "show_energy_selector": False,
+    "show_day_type_selector": False,
+    "main_project_categories": None,
     "weekly_review_mode": "separate",
     "weekly_review_day": 6,
     "project_start_date": date.today().isoformat(),
@@ -239,6 +245,8 @@ def _get_settings(connection) -> dict:
     settings.setdefault("draft_main_minutes_by_category", DEFAULT_SETTINGS["draft_main_minutes_by_category"])
     settings["effective_labels_by_category"] = _effective_labels_by_category(settings)
     settings["draft_main_minutes_by_category"] = _draft_main_minutes_by_category(settings)
+    if settings.get("main_project_categories") is None:
+        settings["main_project_categories"] = list(DEFAULT_DRAFT_MAIN_MINUTES_BY_CATEGORY)
     settings.setdefault("weekly_analysis_prompts", DEFAULT_SETTINGS["weekly_analysis_prompts"])
     settings.setdefault("weekly_analysis_active_prompt_id", "weekly_analysis_system_default")
     settings.setdefault("chatgpt_export_prompts", DEFAULT_SETTINGS["chatgpt_export_prompts"])
@@ -305,7 +313,7 @@ def _draft_main_minutes_by_category(settings: dict) -> dict[str, int]:
     raw = settings.get("draft_main_minutes_by_category") or DEFAULT_DRAFT_MAIN_MINUTES_BY_CATEGORY
     merged = dict(DEFAULT_DRAFT_MAIN_MINUTES_BY_CATEGORY)
     for category, value in raw.items():
-        if category not in merged:
+        if category not in settings.get("task_titles", {}) and not str(category).startswith("custom_"):
             continue
         try:
             merged[category] = max(0, min(720, int(value)))
@@ -329,6 +337,26 @@ def _serialize_effective_labels_by_category(settings: dict) -> dict[str, list[di
         category: [EffectiveLabelItem(**item).model_dump(mode="json") for item in labels]
         for category, labels in _effective_labels_by_category(settings).items()
     }
+
+
+def _main_project_categories(settings: dict) -> list[str]:
+    categories=settings.get("main_project_categories")
+    if categories is None:
+        categories=list(DEFAULT_DRAFT_MAIN_MINUTES_BY_CATEGORY)
+    return [category for category in categories if category!='rehab' or settings.get('rehab_enabled', True)]
+
+
+def _configure_main_projects(tasks: list[TaskDraft], settings: dict) -> list[TaskDraft]:
+    categories=_main_project_categories(settings)
+    if not categories:
+        raise HTTPException(422, "请先在设置中保留至少一个主项目")
+    by_category={task.category:task for task in tasks}
+    main=[]
+    for category in categories:
+        task=by_category.get(category) or TaskDraft(title=settings['task_titles'].get(category,'新项目'),category=category,
+            estimated_minutes=0,priority=3,completion_criteria='完成今天设定的目标',task_type='daily_goal')
+        main.append(task.model_copy(update={'is_sub':0}))
+    return main+[task for task in tasks if task.is_sub and task.category not in categories]
 
 
 def _apply_draft_main_minutes(tasks: list[TaskDraft], settings: dict) -> list[TaskDraft]:
@@ -491,6 +519,7 @@ def _serialize_execution_segment_row(row) -> dict:
         "minutes": seconds // 60,
         "seconds": seconds,
         "included": bool(row["included"]),
+        "is_estimated": bool(row["is_estimated"]),
     }
 
 
@@ -610,7 +639,10 @@ def _aggregate_execution_board(tasks: list[dict], segments: list[dict]) -> list[
         key = segment["label_id"] or segment["label_name"] or "unknown"
         label_bucket = board[bucket_name]
         if key not in label_bucket:
-            label_bucket[key] = {"label_id": segment["label_id"], "label_name": segment["label_name"] or "未命名标签", "seconds": 0, "count": 0}
+            name = segment["label_name"] or "未命名标签"
+            if segment.get('is_estimated'):
+                name += '（补记·估计）'
+            label_bucket[key] = {"label_id": segment["label_id"], "label_name": name, "seconds": 0, "count": 0}
             board[public_name].append(label_bucket[key])
         label_bucket[key]["seconds"] += seconds
         label_bucket[key]["count"] += 1
@@ -685,7 +717,7 @@ def _sync_plan_actual_minutes_from_execution(connection, plan_id: int, segments:
             completed = int(bool(task["completion_override"]))
         else:
             # 学习目标以有效投入达标；计总标签继续保留在投入统计中。
-            learning = task["category"] in {"math", "english", "computer", "ai_project", "vibe_coding", "algorithm", "reading", "writing"}
+            learning = str(task["category"]).startswith("custom_") or task["category"] in {"math", "english", "computer", "ai_project", "vibe_coding", "algorithm", "reading", "writing"}
             completion_minutes = effective_minutes if learning else total_minutes
             reaches_planned_total = task["estimated_minutes"] > 0 and completion_minutes >= task["estimated_minutes"]
             if task["task_type"] is None:
@@ -707,6 +739,11 @@ def _sync_plan_actual_minutes_from_execution(connection, plan_id: int, segments:
 
 def _has_saved_execution(tasks, records) -> bool:
     return bool(records) or any((task["actual_minutes"] or 0) > 0 or task["habit_status"] is not None or task["completed"] for task in tasks)
+
+
+def _vocabulary_counts(connection, plan_date: str) -> dict | None:
+    row = connection.execute("SELECT * FROM vocabulary_daily_counts WHERE plan_date=?", (plan_date,)).fetchone()
+    return dict(row) if row else None
 
 
 def _build_execution_payload(connection, plan_date: str) -> dict:
@@ -731,6 +768,7 @@ def _build_execution_payload(connection, plan_date: str) -> dict:
         "active_segment": (_serialize_execution_segment_row(active) | {"reminder": reminder_for_segment(connection,active["id"])}) if active else None,
         "segments": segments,
         "duration_records": duration_records,
+        "vocabulary_counts": _vocabulary_counts(connection, plan_date),
         "task_execution_board": boards,
         "time_summary": combine_summaries([board["time_summary"] for board in boards]),
         "has_execution": _has_saved_execution(tasks, records),
@@ -838,6 +876,7 @@ def _serialize_daily_review(connection, plan_date: str) -> dict:
         "main_planned_minutes": sum(row["estimated_minutes"] for row in main_tasks),
         "english_minutes": seconds["english"] // 60,
         "vocabulary_minutes": seconds["vocabulary"] // 60,
+        "vocabulary_counts": _vocabulary_counts(connection, plan_date),
         "main_actual_minutes": seconds["main_actual"] // 60,
         "sub_actual_minutes": seconds["sub_actual"] // 60,
         "main_total_minutes": seconds["main_total"] // 60,
@@ -951,6 +990,7 @@ def _list_gpt_records(connection, record_type: str) -> list[dict]:
 
 def _clear_daily_data(connection, plan_date: str) -> dict:
     deleted_review = connection.execute("DELETE FROM reviews WHERE review_date=?", (plan_date,)).rowcount > 0
+    deleted_counts = connection.execute("DELETE FROM vocabulary_daily_counts WHERE plan_date=?", (plan_date,)).rowcount > 0
     plan = connection.execute("SELECT id FROM plans WHERE plan_date=?", (plan_date,)).fetchone()
     deleted_plan = False
     if plan:
@@ -960,7 +1000,8 @@ def _clear_daily_data(connection, plan_date: str) -> dict:
         "date": plan_date,
         "deleted_plan": deleted_plan,
         "deleted_review": deleted_review,
-        "message": "当日数据已清空" if deleted_plan or deleted_review else "当日原本没有可清空的数据",
+        "deleted_vocabulary_counts": deleted_counts,
+        "message": "当日数据已清空" if deleted_plan or deleted_review or deleted_counts else "当日原本没有可清空的数据",
     }
 
 
@@ -989,7 +1030,7 @@ def _insert_tasks(connection, plan_id: int, tasks: list[TaskDraft]) -> None:
 def _validate_plan_tasks_for_update(tasks: list[TaskDraft], available_minutes: int) -> None:
     if not tasks or len(tasks) > 15:
         raise HTTPException(422, "任务数量不合规")
-    if not validate_ai_tasks(tasks, available_minutes):
+    if not validate_ai_tasks(tasks, available_minutes, required_main_categories=set()):
         raise HTTPException(422, "任务数量、时长或类别不合规")
 
 
@@ -1112,7 +1153,10 @@ def _build_calendar_status(connection, month_start: date, project_start: date) -
     reset_dates = {row[0] for row in connection.execute(
         "SELECT DISTINCT plan_date FROM daily_reset_snapshots WHERE restored_at IS NULL AND plan_date BETWEEN ? AND ?",
         (month_start.isoformat(), month_end.isoformat()))}
-    history_dates = set(plan_statuses) | review_dates | execution_dates | reset_dates
+    count_dates = {row[0] for row in connection.execute(
+        "SELECT plan_date FROM vocabulary_daily_counts WHERE plan_date BETWEEN ? AND ?",
+        (month_start.isoformat(), month_end.isoformat()))}
+    history_dates = set(plan_statuses) | review_dates | execution_dates | reset_dates | count_dates
 
     days = []
     cursor = month_start
@@ -1393,6 +1437,26 @@ def _list_weekly_reports(connection) -> list[dict]:
     ]
 
 
+@router.get("/target-suggestions")
+def get_target_suggestions(request: Request, before_date: date):
+    # 只使用已经保存的过去目标，不从未提交输入或未来计划学习。
+    categories = {}
+    with _db(request) as connection:
+        categories = {key: [] for key in _main_project_categories(_get_settings(connection))}
+        rows = connection.execute(
+            """SELECT t.category,t.estimated_minutes FROM tasks t JOIN plans p ON p.id=t.plan_id
+               WHERE p.plan_date<? AND p.plan_date<=? AND t.is_sub=0 AND t.source!='carryover'
+               AND t.estimated_minutes BETWEEN 0 AND 720
+               ORDER BY p.plan_date DESC,t.position,t.id""",
+            (before_date.isoformat(), date.today().isoformat()),
+        )
+        for row in rows:
+            values=categories.get(row['category'])
+            if values is not None and len(values)<4 and row['estimated_minutes'] not in values:
+                values.append(row['estimated_minutes'])
+    return {"date": before_date.isoformat(), "categories": categories}
+
+
 @router.post("/daily-plans/draft", status_code=status.HTTP_201_CREATED)
 def create_draft(payload: DraftRequest, request: Request):
     checkin = payload.model_copy(update={"plan_date": payload.date})
@@ -1404,8 +1468,7 @@ def create_draft(payload: DraftRequest, request: Request):
         day = payload.date.isoformat()
         _capture_unfinished(connection, day)
         settings = _get_settings(connection)
-        if not settings["rehab_enabled"]:
-            tasks = [task for task in tasks if task.category != "rehab"]
+        tasks = _configure_main_projects(tasks, settings)
 
         tasks = [task.model_copy(update={"title": settings["task_titles"].get(task.category, task.title)}) for task in tasks]
         tasks = _apply_draft_main_minutes(tasks, settings)
@@ -1427,6 +1490,8 @@ def create_draft(payload: DraftRequest, request: Request):
                 source="carryover",
                 task_type="todo",
             ))
+        if len(tasks)>15:
+            raise HTTPException(422, "当天最多15项活动，请减少主项目或先处理待审项")
         planner = getattr(request.app.state, "ai_planner", None)
         if planner is not None:
             result = planner.generate(checkin, tasks)
@@ -1629,6 +1694,57 @@ def start_execution_label(plan_date: date, payload: ExecutionLabelStartInput, re
         return _build_execution_payload(connection, plan_date.isoformat())
 
 
+@router.post("/daily-execution/{plan_date}/quick-corrections")
+def quick_correct_execution(plan_date: date, payload: QuickCorrectionInput, request: Request):
+    day = plan_date.isoformat()
+    with _db(request) as connection:
+        connection.execute('BEGIN IMMEDIATE')
+        previous = connection.execute('SELECT * FROM execution_quick_corrections WHERE request_id=?', (payload.request_id,)).fetchone()
+        if previous:
+            if (previous['plan_date'], previous['source_segment_id'], previous['minutes'], previous['time_category']) != (day, payload.source_segment_id, payload.minutes, payload.time_category):
+                raise HTTPException(409, '这次补记请求已使用，请核对记录后重新打开补记')
+            return _build_execution_payload(connection, day)
+        active = _get_active_execution_segment(connection)
+        if not active or active['id'] != payload.source_segment_id or active['plan_date'] != day:
+            raise HTTPException(409, '当前计时已停止或切换，请核对记录后重新打开补记')
+        if active['segment_kind'] != 'effective' or not active['included']:
+            raise HTTPException(409, '请在正在记录的有效学习段补记，其他活动保持原样')
+        task = _get_task_row_for_execution(connection, day, active['task_id'])
+        now = _now_iso()
+        end = _parse_iso_datetime(now)
+        start = end - timedelta(minutes=payload.minutes)
+        if start < _parse_iso_datetime(active['started_at']):
+            raise HTTPException(409, '补记时长超过当前有效学习段，请选择更短的时长；原记录保留')
+        start_text = _local_iso(start)
+        # 原有效段保留ID及标签快照；新补记与继续段在同一事务提交。
+        cancel_reminders(connection, active['id'])
+        connection.execute('UPDATE task_execution_segments SET ended_at=? WHERE id=?', (start_text, active['id']))
+        _assert_no_segment_overlap(connection, day, task['id'], start_text, now)
+        category = payload.time_category
+        label_id = 'quick_distraction' if category == 'distraction' else 'quick_life'
+        label_name = '分心' if category == 'distraction' else '厕所／生活'
+        cursor = connection.execute(
+            '''INSERT INTO task_execution_segments(plan_date,task_id,segment_kind,time_category,label_id,label_name,started_at,ended_at,is_estimated)
+               VALUES(?,?,?,?,?,?,?,?,1)''',
+            (day, task['id'], 'counted_label' if category == 'distraction' else 'interrupt_label', category, label_id, label_name, start_text, now),
+        )
+        correction_id = cursor.lastrowid
+        _assert_no_segment_overlap(connection, day, task['id'], now, None)
+        cursor = connection.execute(
+            '''INSERT INTO task_execution_segments(plan_date,task_id,segment_kind,time_category,label_id,label_name,started_at,included)
+               VALUES(?,?,?,?,?,?,?,?)''',
+            (day, task['id'], 'effective', active['time_category'], active['label_id'], active['label_name'], now, active['included']),
+        )
+        connection.execute(
+            '''INSERT INTO execution_quick_corrections(plan_date,request_id,source_segment_id,correction_segment_id,continuation_segment_id,minutes,time_category,created_at)
+               VALUES(?,?,?,?,?,?,?,?)''',
+            (day, payload.request_id, active['id'], correction_id, cursor.lastrowid, payload.minutes, category, now),
+        )
+        connection.execute("UPDATE plans SET status='approved' WHERE id=? AND status='submitted'", (task['plan_id'],))
+        _sync_plan_actual_minutes_from_execution(connection, task['plan_id'])
+        return _build_execution_payload(connection, day)
+
+
 @router.post("/daily-execution/{plan_date}/stop")
 def stop_execution(plan_date: date, request: Request):
     with _db(request) as connection:
@@ -1713,6 +1829,8 @@ def update_execution_segment(plan_date: date, segment_id: int, payload: Executio
             label_id, label_name = existing["label_id"], existing["label_name"]
         else:
             label_id, label_name = _resolve_segment_label(settings, task["category"], payload.label_id, payload.segment_kind)
+        if existing['is_estimated']:
+            resize_correction(connection, existing, payload, _local_iso(payload.started_at), _local_iso(payload.ended_at), _now_iso())
         if task["category"] == "english" and payload.segment_kind == "effective" and label_id == "effective_english_words" and _list_duration_records(connection, plan_date.isoformat()):
             if payload.duplicate_choice is None:
                 raise HTTPException(409, "当天已有墨墨录入，请明确选择保留哪份背单词记录")
@@ -1755,8 +1873,9 @@ def update_execution_segment(plan_date: date, segment_id: int, payload: Executio
 @router.delete("/daily-execution/{plan_date}/segments/{segment_id}")
 def delete_execution_segment(plan_date: date, segment_id: int, request: Request):
     with _db(request) as connection:
+        connection.execute('BEGIN IMMEDIATE')
         existing = connection.execute(
-            """SELECT s.id, s.ended_at, t.plan_id
+            """SELECT s.*, t.plan_id
                FROM task_execution_segments s
                JOIN tasks t ON t.id=s.task_id
                WHERE s.id=? AND s.plan_date=?""",
@@ -1766,7 +1885,10 @@ def delete_execution_segment(plan_date: date, segment_id: int, request: Request)
             raise HTTPException(404, "时间段不存在")
         if existing["ended_at"] is None:
             raise HTTPException(409, "请先停止当前正在计时的记录，再删除它")
-        connection.execute("DELETE FROM task_execution_segments WHERE id=?", (segment_id,))
+        if existing['is_estimated']:
+            undo_correction(connection, existing)
+        else:
+            connection.execute("DELETE FROM task_execution_segments WHERE id=?", (segment_id,))
         connection.execute("UPDATE plans SET status='approved' WHERE id=? AND status='submitted'", (existing["plan_id"],))
         _sync_plan_actual_minutes_from_execution(connection, existing["plan_id"])
         return _build_execution_payload(connection, plan_date.isoformat())
@@ -1827,6 +1949,33 @@ def _apply_vocabulary_choice(connection, plan_date: str, choice: str | None):
            SELECT t.id FROM tasks t JOIN plans p ON p.id=t.plan_id WHERE p.plan_date=?)""",
         (int(choice != "timer"), plan_date)
     )
+
+
+@router.get("/vocabulary-counts/{plan_date}")
+def get_vocabulary_counts(plan_date: date, request: Request):
+    with _db(request) as connection:
+        return {"date": plan_date.isoformat(), "vocabulary_counts": _vocabulary_counts(connection, plan_date.isoformat())}
+
+
+@router.put("/vocabulary-counts/{plan_date}")
+def save_vocabulary_counts(plan_date: date, payload: VocabularyCountsInput, request: Request):
+    with _db(request) as connection:
+        connection.execute("BEGIN IMMEDIATE")
+        connection.execute(
+            """INSERT INTO vocabulary_daily_counts(plan_date,new_words,review_words,updated_at) VALUES(?,?,?,?)
+               ON CONFLICT(plan_date) DO UPDATE SET new_words=excluded.new_words,
+               review_words=excluded.review_words,updated_at=excluded.updated_at""",
+            (plan_date.isoformat(), payload.new_words, payload.review_words, _now_iso()),
+        )
+        return {"date": plan_date.isoformat(), "vocabulary_counts": _vocabulary_counts(connection, plan_date.isoformat())}
+
+
+@router.delete("/vocabulary-counts/{plan_date}")
+def delete_vocabulary_counts(plan_date: date, request: Request):
+    with _db(request) as connection:
+        connection.execute("BEGIN IMMEDIATE")
+        connection.execute("DELETE FROM vocabulary_daily_counts WHERE plan_date=?", (plan_date.isoformat(),))
+        return {"date": plan_date.isoformat(), "vocabulary_counts": _vocabulary_counts(connection, plan_date.isoformat())}
 
 
 @router.post("/daily-execution/{plan_date}/vocabulary", status_code=201)
@@ -2221,6 +2370,9 @@ def save_settings(payload: SettingsInput, request: Request):
         existing = _get_settings(connection)
         data = payload.model_dump(mode="json")
         for key in [
+            "show_energy_selector",
+            "show_day_type_selector",
+            "main_project_categories",
             "weekly_review_mode",
             "weekly_review_day",
             "execution_labels",
@@ -2238,6 +2390,18 @@ def save_settings(payload: SettingsInput, request: Request):
         ]:
             if key not in payload.model_fields_set:
                 data[key] = existing.get(key, DEFAULT_SETTINGS[key])
+        projects=data.get('main_project_categories')
+        if projects is not None:
+            if len(set(projects))!=len(projects):
+                raise HTTPException(422, '主项目不能重复')
+            # 移除项目只改变顺序配置；名称和默认分钟的历史映射保留。
+            data['task_titles']={**existing['task_titles'],**data['task_titles']}
+            data['draft_main_minutes_by_category']={**existing['draft_main_minutes_by_category'],**data['draft_main_minutes_by_category']}
+            for category in projects:
+                title=data['task_titles'].get(category, '').strip()
+                if not title or len(title)>100:
+                    raise HTTPException(422, '每个主项目请填写1～100字的名称')
+                data['task_titles'][category]=title
         previous_labels = {label["id"]: label for label in existing.get("execution_labels", [])}
         for label in data.get("execution_labels", []):
             if label.get("time_category") is None and previous_labels.get(label["id"], {}).get("time_category"):

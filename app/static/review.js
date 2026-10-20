@@ -197,6 +197,10 @@ if (page === 'review') {
     reviewState = result;
     renderDailyOutcome(result.review.learning_outcome);
     renderTimeSummary($('#daily-time-summary'), result.time_summary);
+    const counts=result.vocabulary_counts;
+    $('#daily-word-count-summary').hidden=!counts;
+    $('#daily-word-count-summary').textContent=counts ? `背单词：新学 ${counts.new_words} 个 · 复习 ${counts.review_words} 个（当天记录，不折算时长）` : '';
+
     $('#daily-completed').textContent = `${result.main_completed_count} / ${result.main_task_count}`;
     $('#daily-total').textContent = `共 ${result.main_task_count} 项主任务`;
     $('#daily-main-minutes').textContent = `${result.main_planned_minutes} 分`;

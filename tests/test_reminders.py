@@ -14,7 +14,7 @@ def setup(tmp_path):
     return client,day,task
 
 
-def start(client,day,task,label='interrupt_meal',minutes=1):
+def start(client,day,task,label='interrupt_meal',minutes=15):
     r=client.post(f'/api/daily-execution/{day}/labels/start',json={'task_id':task['id'],'label_id':label,'reminder_minutes':minutes})
     assert r.status_code==200,r.text
     return r.json()['active_segment']
@@ -71,7 +71,7 @@ def test_transport_failure_expiry_missing_config_and_preview(tmp_path):
     dispatch_due(client.app.state.database_path,calls.append,now=utc_now()+timedelta(minutes=11))
     assert state(client)[-1]==('expired',) and not calls
     client.post(f'/api/daily-execution/{day}/stop');client.app.state.ui_preview=False
-    response=client.post(f'/api/daily-execution/{day}/labels/start',json={'task_id':task['id'],'label_id':'interrupt_meal','reminder_minutes':1})
+    response=client.post(f'/api/daily-execution/{day}/labels/start',json={'task_id':task['id'],'label_id':'interrupt_meal','reminder_minutes':15})
     assert response.status_code==409
     assert client.get(f'/api/daily-execution/{day}').json()['active_segment'] is None
     assert client.post(f'/api/daily-execution/{day}/labels/start',json={'task_id':task['id'],'label_id':'interrupt_meal'}).status_code==200
@@ -111,10 +111,10 @@ def test_preview_ignores_external_configuration(tmp_path,monkeypatch):
 def test_invalid_minutes_and_failed_start_preserve_running_learning(tmp_path):
     client,day,task=setup(tmp_path)
     original=client.post(f'/api/daily-execution/{day}/tasks/start',json={'task_id':task['id']}).json()['active_segment']
-    for minutes in [0,1441,-5,1.5]:
+    for minutes in [0,1,14,1441,-5,1.5,True,"15"]:
         assert client.post(f'/api/daily-execution/{day}/labels/start',json={'task_id':task['id'],'label_id':'interrupt_meal','reminder_minutes':minutes}).status_code==422
     client.app.state.ui_preview=False
-    assert client.post(f'/api/daily-execution/{day}/labels/start',json={'task_id':task['id'],'label_id':'interrupt_meal','reminder_minutes':1}).status_code==409
+    assert client.post(f'/api/daily-execution/{day}/labels/start',json={'task_id':task['id'],'label_id':'interrupt_meal','reminder_minutes':15}).status_code==409
     assert client.get(f'/api/daily-execution/{day}').json()['active_segment']['id']==original['id']
 
 
@@ -124,3 +124,21 @@ def test_restart_handles_unconfirmed_send_without_repeating(tmp_path):
         db.execute("UPDATE execution_reminders SET status='sending',claimed_at=?",(iso(utc_now()-timedelta(minutes=3)),))
     calls=[];dispatch_due(client.app.state.database_path,calls.append)
     assert not calls and state(client)==[('failed',)]
+
+
+def test_cancel_after_claim_before_transport(tmp_path,monkeypatch):
+    """领取与网络发送之间若用户停止，应在发送前的二次检查拦住。"""
+    from contextlib import contextmanager
+    from app.services import reminders
+    client,day,task=setup(tmp_path);start(client,day,task);due(client)
+    original=reminders.connect; rounds=0
+    @contextmanager
+    def stop_before_send(path):
+        nonlocal rounds
+        rounds+=1
+        if rounds==2:
+            assert client.post(f'/api/daily-execution/{day}/stop').status_code==200
+        with original(path) as db: yield db
+    monkeypatch.setattr(reminders,'connect',stop_before_send)
+    calls=[];dispatch_due(client.app.state.database_path,calls.append)
+    assert calls==[] and state(client)==[('cancelled',)]

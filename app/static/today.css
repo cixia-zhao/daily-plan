@@ -142,3 +142,13 @@ body:not(.today-list-stage) #today-page-header { max-width: 740px; margin-left: 
 #plan-section .action-buttons > button { border-radius: 8px; }
 #plan-total-display { font-weight: 500; }
 .primary-nav > a, .nav-more summary { font-weight: 500; }
+
+/* 目标候选与手填并存，不再为科目添加装饰符号。 */
+#plan-section .task-archive-card.task-text-only{grid-template-columns:minmax(0,1fr) 44px}
+#plan-section .task-text-only .route-target{grid-column:1/-1}
+.target-suggestions{position:fixed;z-index:40;padding:12px;border:1px solid var(--line);border-radius:10px;background:var(--surface);box-shadow:0 4px 16px rgba(20,20,19,.08);max-height:260px;overflow:auto}
+.target-suggestions p{margin:0 0 6px;color:var(--muted);font-size:12px}
+.target-suggestions .target-suggestion-options+p{margin-top:12px}
+.target-suggestion-options{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px}
+.target-suggestion-options button{min-height:44px;padding:6px 3px;background:transparent;border:1px solid var(--line);border-radius:6px;font-size:14px;color:var(--ink)}
+.target-suggestion-options button:hover,.target-suggestion-options button:focus-visible{border-color:var(--accent);background:var(--soft)}

@@ -39,3 +39,22 @@
 - [SmoothUI：通用 AI 界面问题](https://smoothui.dev/blog/ai-design-slop)：参考“渲染、检查、修正”的循环，不安装其推广工具或复制第三方组件。
 
 本次没有改业务规则、数据库或服务器配置。深陶土文字 #a94f32 对纸色 #faf9f5 的计算对比度约 5.18:1；炭黑对纸色约 17.5:1。辅助文字从更浅暖灰加深为 #5e5d59。对比度检查是颜色计算，不替代完整无障碍审计。
+
+
+## 2026-10-19：减少装饰与输入成本（独立预览）
+
+本轮实际搜索并阅读[NN/G：坏图标的成本与判断](https://www.nngroup.com/articles/bad-icons/)，资料指出图标应有超过空间和认知成本的作用；标签已经清楚时，不必为每个条目强配图标。据此移除草稿科目前的∑／Aa等装饰，以纯文字、字号和留白组织，保留有操作意义的完成控件。此处是本项目的设计选择，并非所有图标都应去除。
+
+目标候选参考[Material：可输入的展开式菜单](https://github.com/material-components/material-components-android/blob/master/docs/components/Menu.md)的输入框与候选并存方式；实现为轻浮层，手填仍可用，常用分钟与历史值分别显示，不自动替用户决定目标。手机／平板保持44px与正常字号。
+
+执行台收起常态说明，保留请求／错误反馈；快捷操作排单行，时间轴按展开状态和是否有历史选择布局，不为无内容的右栏保留整列。未引入彩色阶段条或番茄钟；这些尚待用户选择。
+
+## 2026-10-20：进度条视觉与动效修订（独立预览）
+
+用户反馈5px弱高光像黑线，无可见动效。实际搜索并阅读以下官方正文，未引入框架依赖或复制主题：
+
+- [Material官方进度组件](https://github.com/material-components/material-components-android/blob/master/docs/components/ProgressIndicator.md)：厚轨道、圆角、活动填充与未完成轨道的区分；明确过小尺寸会弱化动态识别。本项目采用10px圆角，保留暖陶土配色。
+- [Bootstrap进度条](https://getbootstrap.com/docs/5.3/components/progress/)：参考可移动纹理与条外标签，采用自写CSS的1.4秒循环纹理，不采用默认彩色主题；实际宽度仍只由有效时间决定。
+- [Carbon进度规范](https://www.carbondesignsystem.com/building-blocks/core/components/progress-bar/guidelines)：参考定量进度与活动状态的区分。其组件主要面向系统操作，不把学习目标伪装成下载／加载；本项目用实际有效／目标表达量，用文字和小标表达是否正在计时。
+
+Apple原站搜索命中，但打开正文仅动态占位，未声称实读其具体建议。首版取消达标动效是实现选择，不是技术限制；修订后达标继续学习时纹理仍运行。休息／分心／停止不动，减少动态效果保留静态状态，所有统计与提醒语义保持。浏览器专项比较两帧真实像素，覆盖未达标和达标后，不仅检查CSS动画名称；四视口及手机／平板截图已检查。

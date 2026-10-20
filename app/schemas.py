@@ -8,7 +8,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 Energy = Literal["minimum", "normal", "ample"]
 DayType = Literal["normal", "early_class"]
-Category = Literal["math", "english", "computer", "ai_project", "rehab", "sleep", "vibe_coding", "algorithm", "reading", "writing"]
+Category = Literal["math", "english", "computer", "ai_project", "rehab", "sleep", "vibe_coding", "algorithm", "reading", "writing"] | Annotated[str, Field(pattern=r"^custom_[a-z0-9_]{1,40}$")]
 ReviewMood = Literal["很好", "平稳", "疲惫", "烦躁", "低落", ""]
 ReviewProgress = Literal["明显推进", "有一点推进", "原地打转", "基本没推进", ""]
 ExecutionLabelBucket = Literal["counted", "interrupt"]
@@ -146,9 +146,16 @@ class ExecutionTaskStartInput(BaseModel):
 
 
 class ExecutionLabelStartInput(BaseModel):
-    reminder_minutes: int | None = Field(default=None, ge=1, le=1440)
+    reminder_minutes: int | None = Field(default=None, strict=True, ge=15, le=1440)
     label_id: str = Field(min_length=1, max_length=100)
     task_id: int | None = None
+
+
+class QuickCorrectionInput(BaseModel):
+    request_id: str = Field(pattern=r"^[a-zA-Z0-9_-]{16,80}$")
+    source_segment_id: int = Field(gt=0)
+    minutes: int = Field(strict=True, ge=1, le=1440)
+    time_category: Literal["distraction", "life"]
 
 
 class ExecutionSegmentCreateInput(BaseModel):
@@ -181,6 +188,9 @@ class SettingsInput(BaseModel):
     current_stage: str = Field(min_length=1, max_length=100)
     ai_project_weekly_frequency: int = Field(ge=0, le=7)
     rehab_enabled: bool = True
+    show_energy_selector: bool = False
+    show_day_type_selector: bool = False
+    main_project_categories: list[Category] | None = Field(default=None, min_length=1, max_length=11)
     weekly_review_mode: Literal["separate", "replace_day"] = "separate"
     weekly_review_day: int = Field(default=6, ge=0, le=6)
     project_start_date: date = Field(default_factory=date.today)
@@ -200,3 +210,9 @@ class SettingsInput(BaseModel):
     daily_gpt_active_prompt_id: str = "daily_gpt_system_default"
     weekly_gpt_prompts: list[PromptConfigItem] = Field(default_factory=list)
     weekly_gpt_active_prompt_id: str = "weekly_gpt_system_default"
+
+
+class VocabularyCountsInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    new_words: int = Field(strict=True, ge=0, le=10000)
+    review_words: int = Field(strict=True, ge=0, le=10000)

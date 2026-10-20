@@ -92,10 +92,22 @@ CREATE TABLE IF NOT EXISTS task_execution_segments (
     started_at TEXT NOT NULL,
     ended_at TEXT,
     included INTEGER NOT NULL DEFAULT 1,
+    is_estimated INTEGER NOT NULL DEFAULT 0,
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 CREATE INDEX IF NOT EXISTS idx_execution_segments_plan_date ON task_execution_segments(plan_date);
 CREATE INDEX IF NOT EXISTS idx_execution_segments_task_id ON task_execution_segments(task_id);
+CREATE TABLE IF NOT EXISTS execution_quick_corrections (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    plan_date TEXT NOT NULL,
+    request_id TEXT NOT NULL UNIQUE,
+    source_segment_id INTEGER NOT NULL REFERENCES task_execution_segments(id) ON DELETE CASCADE,
+    correction_segment_id INTEGER NOT NULL UNIQUE REFERENCES task_execution_segments(id) ON DELETE CASCADE,
+    continuation_segment_id INTEGER NOT NULL REFERENCES task_execution_segments(id) ON DELETE CASCADE,
+    minutes INTEGER NOT NULL,
+    time_category TEXT NOT NULL,
+    created_at TEXT NOT NULL
+);
 CREATE TABLE IF NOT EXISTS task_duration_records (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     task_id INTEGER NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
@@ -105,6 +117,12 @@ CREATE TABLE IF NOT EXISTS task_duration_records (
     source TEXT NOT NULL DEFAULT '墨墨',
     included INTEGER NOT NULL DEFAULT 1,
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE TABLE IF NOT EXISTS vocabulary_daily_counts (
+    plan_date TEXT PRIMARY KEY,
+    new_words INTEGER NOT NULL CHECK(new_words >= 0 AND new_words <= 10000),
+    review_words INTEGER NOT NULL CHECK(review_words >= 0 AND review_words <= 10000),
+    updated_at TEXT NOT NULL
 );
 CREATE TABLE IF NOT EXISTS app_settings (
     key TEXT PRIMARY KEY,

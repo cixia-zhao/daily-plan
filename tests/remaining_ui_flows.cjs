@@ -32,7 +32,8 @@ if(!base || !['127.0.0.1','localhost'].includes(new URL(base).hostname)) throw E
    if(width===390||width===768) await page.screenshot({path:`/tmp/daily-plan-sticky-${width}.png`});
   }
   await page.setViewportSize({width:390,height:844});
-  await page.locator('#execute-choose-task').click();
+  assert.equal(await page.locator('#execute-choose-task').count(),0);
+  await card.scrollIntoViewIfNeeded();
   const taskBox=await card.boundingBox(),currentBox=await page.locator('#execute-current-panel').boundingBox();
   assert(taskBox.y>=currentBox.y+currentBox.height-1,'切换任务入口把清单带到当前执行区下方');
   let release,entered;const gate=new Promise(r=>release=r),arrived=new Promise(r=>entered=r);

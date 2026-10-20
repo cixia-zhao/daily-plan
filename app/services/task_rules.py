@@ -60,11 +60,12 @@ def build_rule_plan(checkin: MorningCheckIn) -> RulePlan:
     )
 
 
-def validate_ai_tasks(tasks: list[TaskDraft], available_minutes: int) -> bool:
+def validate_ai_tasks(tasks: list[TaskDraft], available_minutes: int, required_main_categories: set[str] | None = None) -> bool:
     if not tasks or len(tasks) > 15:
         return False
     # Ensure key main routes exist
     main_cats = {task.category for task in tasks if not task.is_sub}
-    if not {"math", "english", "computer"}.issubset(main_cats):
+    required = {"math", "english", "computer"} if required_main_categories is None else required_main_categories
+    if not required.issubset(main_cats):
         return False
     return True

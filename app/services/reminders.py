@@ -63,7 +63,7 @@ def schedule_reminder(connection, segment_id, minutes, app):
     if minutes is None: return
     status=notification_status(app)
     if not status['configured'] and not status['preview']:
-        raise HTTPException(409,'手机通知尚未配置，请先完成通知设置，或选择不提醒')
+        raise HTTPException(409,'手机通知尚未配置，请先完成通知设置，或留空提醒分钟数')
     segment=connection.execute('SELECT time_category FROM task_execution_segments WHERE id=?',(segment_id,)).fetchone()
     if segment['time_category'] not in ('rest','life'):
         raise HTTPException(422,'第一版只支持生活活动或主动休息的到点提醒')

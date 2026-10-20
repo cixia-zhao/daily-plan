@@ -67,7 +67,7 @@ class AIPlanner:
             content = response.json()["choices"][0]["message"]["content"]
             parsed = json.loads(content)
             tasks = [TaskDraft.model_validate({**item, "source": "ai"}) for item in parsed["tasks"]]
-            if not validate_ai_tasks(tasks, checkin.available_minutes):
+            if not validate_ai_tasks(tasks, checkin.available_minutes, required_main_categories={task.category for task in candidates if not task.is_sub}):
                 raise ValueError("AI task list violates local constraints")
             for candidate in candidates:
                 matching = next((task for task in tasks if task.category == candidate.category and task.is_sub == candidate.is_sub and task.title == candidate.title), None)

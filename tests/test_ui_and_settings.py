@@ -200,7 +200,7 @@ def test_settings_budget_inputs_use_fifteen_minute_steps():
     assert 'name="budget_normal" type="number" min="30" max="720" step="15"' in settings_page
     assert 'name="budget_ample" type="number" min="30" max="720" step="15"' in settings_page
     assert 'name="project_start_date" type="date" required' in settings_page
-    assert 'id="draft-main-minute-fields"' in settings_page
+    assert 'id="main-project-fields"' in settings_page
     assert 'id="execution-label-fields"' in settings_page
     assert 'id="add-execution-label"' in settings_page
     assert 'id="effective-label-category-fields"' in settings_page

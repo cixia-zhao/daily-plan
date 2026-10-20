@@ -30,6 +30,8 @@ def initialize(path: str | Path) -> None:
             cursor.execute("ALTER TABLE task_execution_segments ADD COLUMN time_category TEXT")
         if "included" not in segment_columns:
             cursor.execute("ALTER TABLE task_execution_segments ADD COLUMN included INTEGER NOT NULL DEFAULT 1")
+        if "is_estimated" not in segment_columns:
+            cursor.execute("ALTER TABLE task_execution_segments ADD COLUMN is_estimated INTEGER NOT NULL DEFAULT 0")
         cursor.execute("PRAGMA table_info(reviews)")
         review_columns = [row[1] for row in cursor.fetchall()]
         for name, ddl in [

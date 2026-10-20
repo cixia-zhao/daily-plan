@@ -27,10 +27,16 @@ if(!base || !['127.0.0.1','localhost'].includes(new URL(base).hostname))throw Er
   const choose=async(label)=>{await page.locator('#mobile-interrupt-toggle').click();await page.locator(`[data-label-id="${label}"]`).click();};
   await startStudy();const running=(await api(`daily-execution/${day}`)).active_segment.id;
   await choose('interrupt_meal');const modal=page.locator('.activity-reminder-dialog');await modal.waitFor();
-  assert.equal(await modal.locator('[name=remind]').inputValue(),'','每次必须主动选择');
+  assert.equal(await modal.locator('select').count(),0,'只保留可留空的分钟数');
+  assert.equal(await modal.locator('[name=minutes]').inputValue(),'','不填默认只记录');
   await modal.locator('.reminder-cancel').click();await modal.waitFor({state:'detached'});
   assert.equal((await api(`daily-execution/${day}`)).active_segment.id,running,'取消不切换计时');
-  await choose('interrupt_meal');await modal.locator('[name=remind]').selectOption('yes');await modal.locator('[name=minutes]').fill('1');
+  await choose('interrupt_meal');
+  for(const value of ['1','14','15.5','1441']) {
+   await modal.locator('[name=minutes]').fill(value);await modal.locator('[type=submit]').click();
+   assert(await modal.isVisible());assert.equal((await api(`daily-execution/${day}`)).active_segment.id,running);
+  }
+  await modal.locator('[name=minutes]').fill('15');
   for(const width of [360,390,768,1024]){
    await page.setViewportSize({width,height:844});const input=await modal.locator('[name=minutes]').boundingBox();
    assert(input.width>=200&&input.x>=0&&input.x+input.width<=width);assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
@@ -47,8 +53,8 @@ if(!base || !['127.0.0.1','localhost'].includes(new URL(base).hostname))throw Er
   assert.equal((await api(`daily-execution/${day}`)).active_segment.id,meal.id);
   await page.locator('#execute-stop').click();await page.waitForFunction(()=>document.querySelector('#execute-stop').disabled && document.querySelector('#execute-current-panel').getAttribute('aria-busy')==='false');
   state=await api(`daily-execution/${day}`);assert.equal(state.segments.find(s=>s.id===meal.id).reminder.status,'cancelled');
-  await choose('interrupt_pause');await modal.locator('[name=remind]').selectOption('no');
-  assert(await modal.locator('[name=minutes]').isDisabled());await modal.locator('[type=submit]').click();
+  await choose('interrupt_pause');assert.equal(await modal.locator('[name=minutes]').inputValue(),'');
+  await modal.locator('[type=submit]').click();
   await page.waitForFunction(()=>!document.querySelector('#execute-stop').disabled);state=await api(`daily-execution/${day}`);
   assert.equal(state.active_segment.time_category,'rest');assert.equal(state.active_segment.reminder,null);
   await page.locator('#execute-stop').click();await page.waitForFunction(()=>document.querySelector('#execute-stop').disabled && document.querySelector('#execute-current-panel').getAttribute('aria-busy')==='false');

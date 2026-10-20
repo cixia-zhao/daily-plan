@@ -75,7 +75,9 @@ if(!base || !['127.0.0.1','localhost'].includes(new URL(base).hostname)) throw E
   assert.match(await page.locator('#review-date-button').innerText(),/2026\/10\/12 — 2026\/10\/18/);
   assert.match(await page.locator('#review-period-status').innerText(),/本周进行中/);
   await page.locator('#review-data-tab').click();
-  assert.match(await page.locator('#weekly-comparison-range').innerText(),/2026-10-12—2026-10-17 对比 2026-10-05—2026-10-10/);
+  // 浏览器时间固定用于交互测试；比较范围以服务端的真实截止日为准，不能写死运行日期。
+  const comparison=(await api(`weekly-review?anchor_date=${day}`)).comparison;
+  assert((await page.locator('#weekly-comparison-range').innerText()).includes(`${comparison.start_date}—${comparison.through_date} 对比 ${comparison.previous_start_date}—${comparison.previous_end_date}`));
   for(const [width,height] of [[360,640],[390,844],[768,1024],[1024,680]]) {
    await page.setViewportSize({width,height});
    assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),'周页面无横向溢出');

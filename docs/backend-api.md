@@ -1,5 +1,21 @@
 # 后端接口与数据层速查文档
 
+## 本机最新接口（2026-10-20，未发布）
+
+POST /api/daily-execution/{date}/quick-corrections接受request_id（16～80字母数字／下划线／连字符）、source_segment_id、严格整数minutes（1～1440）、time_category（distraction或life）。仅当前正在进行且计入统计的有效段可补，不能超出本段；写事务内拆成前有效／估计补记／继续有效，保留任务与细分快照。request_id幂等，冲突或过时源段409且保留原数据。
+
+task_execution_segments新增is_estimated，旧记录默认0；execution_quick_corrections记录幂等键与三个片段的关联。原时间轴PUT可修改估计段起止并同步两侧有效边界，不能跨相邻有效段、写未来或覆盖已改变的边界；估计来源保留。估计段不改任务／分类，如需改类型可撤销重记。DELETE估计段表示撤销补记，恢复原有效分类和标签，保留片段ID及总经过时间。普通时间段删除语义不变。新日快照完整恢复关联，旧快照兼容缺表／缺字段。
+
+迁移校验命令deploy/verify-migration.py仅对指定新副本运行两次初始化，核对全部原表原字段／记录、完整性与外键，禁止覆盖源库；生产备份只在服务器副本验证。184项最终测试与浏览器验证、正式发布结果以HANDOFF.md为准。
+
+设置增加show_energy_selector与show_day_type_selector，默认false；main_project_categories保存1～11个有序且不重复的主项目，默认math／english／computer／rehab。名字与默认目标沿用task_titles和draft_main_minutes_by_category，移出时保留历史映射。旧客户端省略新字段不覆盖现有值，旧rehab_enabled仍兼容。
+
+类别兼容原内置值及custom_前缀的小写字母／数字／下划线ID，前缀后1～40字；其他无效类别仍拒绝。草稿按配置选取主任务，补充副活动与人工待审项，最多15项。编辑不再强制三门；自定义每日目标按有效时间达标，日周统计与历史记录保持。新设置只写app_settings JSON，无新业务表迁移。
+
+GET /api/target-suggestions?before_date=日期返回动态主项目的过去已保存目标，排除未来、carryover和副航线，各最近四个不同0～720整数值；只读，不把未保存输入当历史。显示偏好由前端在隐藏时提交normal，历史日期不重写。
+
+全套169项临时库测试与10组隔离浏览器通过；词数新表迁移与发布前要求见HANDOFF.md。以下正式及历史段落按各自时点理解。
+
 ## 当前正式接口补充（2026-10-17，已随dc7d39c发布）
 
 POST /api/daily-reviews接受可选learning_outcome字符串，最长300字，默认空。旧客户端不传时在写事务中保留已有成果，显式空字符串清空。日复盘review和周复盘days内review返回该字段，日周GPT导出包含已保存成果，不覆盖reflection_text等原内容，不隐式调用AI。
@@ -247,3 +263,16 @@ share-to-phone.ps1 → zip 打包 + 临时 HTTP 文件服务
 - 同日明确背单词计时与录入同时存在时，duplicate_choice 必须显式选 both/manual/timer；新增真实计时、导入或编辑时间段也有反向校验。只影响英语 effective_english_words 时间段和该日墨墨条目，不影响英语阅读。不计入的明细保留 included=0。
 - GET 执行台返回 segments（真实时间段）和 duration_records（只有分钟数）；聚合用内部统一记录列表，但录入不会混入时间轴。日周 english_minutes 包含 vocabulary_minutes，不能再相加；正式旧版周汇总只包含 submitted；当前正式版改为自动纳入已保存记录。
 - initialize 只补字段与表，原始字段不更新，旧 task_type 保持 NULL；旧待审项可处理，新增生成仅查询显式 todo。详见 tests/test_product_flows.py 的副本迁移验收。
+
+
+## 2026-10-19 本机预览：每日词数与提醒校验（未发布）
+
+- `ExecutionLabelStartInput.reminder_minutes`可省略或为null，表示只记录；非空必须是15～1440的严格整数，拒绝布尔、字符串、小数及越界。校验失败先于切段，保留当前活动。停止／切换取消pending或sending，发送前再次检查；已外发不能撤回。
+- `GET/PUT/DELETE /api/vocabulary-counts/{date}`独立查询、保存或清除当天累计。PUT完整接收`new_words`、`review_words`，均为0～10000的严格整数；同日覆盖，不逐次相加。返回date及vocabulary_counts（无记录为null）。无需计划或任务，不创建时间段、分钟记录，不停止计时，不重算分钟或目标状态。
+- 新表`vocabulary_daily_counts`以plan_date为唯一主键，包含new_words、review_words、updated_at。执行台和日复盘接口附带vocabulary_counts；各项分钟、有效率、原背单词来源选择均保持。没有扩展成背词工具或新增复杂比例。
+- 按日重置同时清除词数并纳入快照；词数单独存在时也能重置／恢复。旧快照缺少该表时按空记录恢复；仅有词数的历史日也可从日历访问。SQLite完整备份自然包含新表；旧库只新增空表，不重写旧记录。
+
+
+### 本机预览的目标候选接口
+
+`GET /api/target-suggestions?before_date=YYYY-MM-DD`返回date与categories。对所选日期之前、且不晚于服务端今天的已保存主任务，按计划日期由近到远，每类最多四个不同的0～720目标分钟；排除副航线与carryover。当前类别跟随既有晨间四类，不声称已实现任意项目配置。接口只读，不新建历史表、不保存每次键入、不修改目标。

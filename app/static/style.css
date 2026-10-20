@@ -50,7 +50,7 @@ main{width:min(var(--content),calc(100% - 40px));margin:0 auto;padding:44px 0 64
 .task-type-controls { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin-top: 12px; }
 .task-type-controls label { display: flex; flex-direction: column; gap: 6px; }
 .duration-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 10px 0; }
-.duration-row button, .record-form button, .vocabulary-open, #temporary-open, #vocabulary-shortcut { min-height: 44px; }
+.duration-row button, .record-form button, #temporary-open { min-height: 44px; }
 @media(max-width: 600px) { .record-form { padding: 12px; } .record-form input, .record-form select { width: 100%; min-width: 0; } .task-type-controls { align-items: stretch; } .task-type-controls label { flex: 1 1 130px; } }
 /* 精力单选框限定在标签内，防止透明输入撑大手机布局视口。 */
 .segmented label { position: relative; }
@@ -174,6 +174,21 @@ main{width:min(var(--content),calc(100% - 40px));margin:0 auto;padding:44px 0 64
 .execution-current-heading { display:flex; align-items:center; justify-content:space-between; gap:12px; }
 .execution-current-panel .execution-current-task { grid-template-columns:minmax(0,1fr); }
 .execution-current-heading button { min-height:44px; font-weight:500; }
+#quick-correction-open { flex-shrink: 0; padding: 6px 10px; font-size: 13px; }
+.quick-correction-dialog { width: min(340px, calc(100vw - 28px)); max-height: calc(100dvh - 28px); overflow: auto; padding: 16px; border: 1px solid var(--line); border-radius: 12px; background: var(--paper); color: var(--ink); }
+.quick-correction-dialog::backdrop { background: rgba(20,20,19,.2); }
+.quick-correction-dialog form { display: grid; gap: 12px; }
+.quick-correction-dialog p,.quick-correction-dialog h3 { margin: 0; }
+.quick-correction-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.quick-correction-heading button { width: 44px; min-height: 44px; padding: 0; font-size: 22px; }
+.quick-correction-categories,.quick-correction-minutes { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 8px; }
+.quick-correction-dialog button,.quick-correction-dialog input { min-height: 44px; }
+.quick-correction-categories [aria-pressed=true] { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
+.quick-correction-custom { display: grid; grid-template-columns: minmax(0,1fr) auto; gap: 10px; align-items: end; }
+.quick-correction-custom label { display: grid; gap: 4px; font-size: 13px; }
+.quick-correction-custom input { width: 100%; min-width: 0; }
+.quick-correction-note { font-size: 12px; }
+.form-error { color: var(--danger); font-size: 13px; }
 .execution-current-panel .execution-save-note { padding: 8px 0 0; }
 .execution-current-panel #execute-reminder-status { margin: 8px 0 0; font-size: 13px; }
 .execution-current-panel[aria-busy=true] .stop-current { visibility: visible; }
@@ -199,6 +214,30 @@ body[data-page=execute] input, body[data-page=execute] select, body[data-page=ex
 #execute-clock-caption { font-size: 12px; }
 #execute-clock { font-family: var(--font-sans, sans-serif); font-size: 40px; font-weight: 500; line-height: 1.15; letter-spacing: -.03em; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .execution-clock-control .stop-current { min-height: 44px; white-space: nowrap; }
+.execution-goal-progress { --goal-color: #bb7355; margin-top: 6px; }
+.execution-goal-caption { display: flex; justify-content: space-between; align-items: baseline; gap: 8px 16px; color: var(--muted); font-size: 13px; font-variant-numeric: tabular-nums; }
+#execute-goal-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#execute-goal-status { flex-shrink: 0; color: #a15538; font-size: 16px; font-weight: 600; }
+.execution-goal-track { height: 10px; margin-top: 7px; overflow: hidden; border-radius: 6px; background: #e9e1d6; }
+#execute-goal-fill { display: block; position: relative; width: 0; height: 100%; overflow: hidden; border-radius: inherit; background: var(--goal-color); transition: width .8s linear, background-color .6s ease; }
+.execution-goal-progress[data-stage=middle] { --goal-color: #ad6245; }
+.execution-goal-progress[data-stage=near] { --goal-color: #984b30; }
+.execution-goal-progress[data-stage=complete] { --goal-color: #a15538; }
+.execution-goal-progress.is-running #execute-goal-fill::after { content: ''; position: absolute; inset: 0 -28px; background: linear-gradient(45deg, rgba(255,253,248,.34) 25%, transparent 25%, transparent 50%, rgba(255,253,248,.34) 50%, rgba(255,253,248,.34) 75%, transparent 75%) 0 0 / 28px 28px; animation: goal-flow 1.4s linear infinite; }
+@keyframes goal-flow { from { transform: translateX(-28px); } to { transform: translateX(0); } }
+.execution-goal-detail { display: flex; justify-content: space-between; align-items: center; gap: 8px 16px; margin-top: 7px; color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+.execution-goal-activity { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.execution-goal-signal { display: flex; flex: 0 0 12px; gap: 2px; align-items: center; height: 12px; color: #a15538; }
+.execution-goal-signal i { display: block; width: 2px; height: 3px; border-radius: 2px; background: currentColor; }
+.execution-goal-progress.is-running .execution-goal-signal i { height: 10px; animation: goal-signal 1.2s ease-in-out infinite alternate; }
+.execution-goal-progress.is-running .execution-goal-signal i:nth-child(2) { animation-delay: -.4s; }
+.execution-goal-progress.is-running .execution-goal-signal i:nth-child(3) { animation-delay: -.8s; }
+@keyframes goal-signal { from { transform: scaleY(.3); } to { transform: scaleY(1); } }
+@media (prefers-reduced-motion: reduce) {
+  #execute-goal-fill { transition: none; }
+  .execution-goal-progress.is-running #execute-goal-fill::after { animation: none; background: none; }
+  .execution-goal-progress.is-running .execution-goal-signal i { animation: none; }
+}
 .execution-save-note { display: flex; flex-wrap: wrap; gap: 4px 16px; padding: 12px 0 16px; color: var(--muted); font-size: 12px; }
 .execution-save-note > :first-child { flex: 1 1 240px; }
 .review-save-summary { display: flex; flex-wrap: wrap; gap: 6px 24px; color: var(--muted); font-size: 13px; padding: 0 0 16px; }
@@ -273,3 +312,37 @@ body[data-page=execute] input, body[data-page=execute] select, body[data-page=ex
 .execution-label-button small{display:block;font-size:11px;font-weight:400;color:var(--muted);margin-top:3px}
 @media(max-width:760px){.time-category-list{grid-template-columns:repeat(2,minmax(0,1fr));gap:12px 18px}}
 .activity-reminder-dialog{margin:auto}
+
+/* 英语仅保留小型词数入口与原有效计时，触控仍保持44px。 */
+.execution-task-actions{display:flex;align-items:center;gap:8px;min-width:0}
+.execution-task-actions .word-count-open{flex:0 0 auto;min-height:44px;padding:6px 9px;font-size:13px;white-space:nowrap}
+.execution-task-actions .task-start-button{min-width:0;min-height:44px}
+.word-count-summary:empty{display:none}
+.word-count-dialog{width:min(320px,calc(100% - 32px));max-height:85dvh;overflow-y:auto;margin:auto;padding:18px;border:1px solid var(--line);border-radius:10px;background:var(--paper);color:var(--ink)}
+.word-count-dialog::backdrop{background:rgba(20,20,19,.18)}
+.word-count-dialog h3{margin:0;font-size:18px}
+.word-count-dialog p{margin:0;font-size:12px;line-height:1.5}
+.word-count-dialog form{display:grid;gap:12px}
+.word-count-inputs{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.word-count-inputs label{display:grid;gap:6px;min-width:0;font-size:14px}
+.word-count-inputs input{width:100%;min-width:0;min-height:44px}
+.word-count-actions{display:flex;gap:8px;align-items:center;justify-content:flex-end}
+.word-count-actions button{min-height:44px;padding:6px 12px}
+#word-count-delete{margin-right:auto;padding:6px 0;border-color:transparent;color:var(--muted)}
+@media(max-width:760px){.execution-task-actions{width:100%}.execution-task-actions .task-start-button{flex:1;width:auto}}
+
+/* 日常状态不占计时与操作之间的视觉空间；失败／请求中继续明确反馈。 */
+.execution-current-panel .execution-save-note{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
+.execution-current-panel .execution-current{border-bottom:0;padding-bottom:0}
+.execution-mobile-toolbar{gap:4px;flex-wrap:nowrap}
+.execution-mobile-toolbar>button{flex:1 1 auto;min-width:44px;padding:8px 6px;white-space:nowrap;font-size:14px}
+.execute-workspace{display:grid;grid-template-columns:minmax(0,1fr);gap:0}
+@media(min-width:1000px){.execute-workspace.timeline-reading{grid-template-columns:minmax(0,1fr) minmax(300px,.72fr);gap:24px}}
+
+/* 主项目设置以稳定身份保留记录，编辑区不挤窄手机输入。 */
+.main-project-row{display:grid;grid-template-columns:minmax(0,1fr) 92px auto;align-items:end;gap:12px;padding:12px 0;border-bottom:1px solid var(--line)}
+.main-project-row label{min-width:0}.main-project-row input{width:100%;min-width:0;min-height:44px}
+.main-project-actions{display:flex;gap:4px}.main-project-actions button{min-width:44px;min-height:44px;padding:6px 10px}
+.main-project-add-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;margin-top:12px}
+.main-project-add-row input,.main-project-add-row select{width:100%;min-width:0;min-height:44px}.main-project-add-row button{min-height:44px}
+@media(max-width:600px){.main-project-row{grid-template-columns:minmax(0,1fr) 92px}.main-project-actions{grid-column:1/-1;justify-content:flex-end}}

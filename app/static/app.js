@@ -133,9 +133,9 @@ async function refreshResetRecovery(dateValue, onRestored) {
     button.hidden = false;
     button.title = `${dateValue} · 重置于 ${snapshot.created_at.replace('T',' ')}`;
     button.onclick = async () => {
-      const {tasks,segments,durations,reviews} = snapshot.counts;
+      const {tasks,segments,durations,reviews,vocabulary_counts=0} = snapshot.counts;
       if (!await confirmAction(
-        `恢复 ${dateValue} 重置前的 ${tasks} 项任务、${segments} 段计时、${durations} 条分钟录入和 ${reviews} 份日复盘。进行中的计时恢复为重置时停止。若这天已有新数据，会拒绝覆盖；其他日期保持不变。`,
+        `恢复 ${dateValue} 重置前的 ${tasks} 项任务、${segments} 段计时、${durations} 条分钟录入和 ${reviews} 份日复盘${vocabulary_counts ? `、${vocabulary_counts} 份背单词词数` : ''}。进行中的计时恢复为重置时停止。若这天已有新数据，会拒绝覆盖；其他日期保持不变。`,
         {title:'恢复重置前的记录？',confirmLabel:'恢复这一天'})) return;
       button.disabled = true;
       try {
@@ -390,7 +390,6 @@ if ($('#calendar-modal')) {
 
 if (page === 'today') {
   const ROUTE_SLOT_COUNT = 5;
-  const CORE_MAIN_CATEGORIES = new Set(['math', 'english', 'computer']);
   const dateInput = $('#plan-date');
   const dateButton = $('#plan-date-button');
   const carryoverButton = $('#carryover-button');
@@ -559,12 +558,11 @@ if (page === 'today') {
 
   function taskControls(task, index, routeLength) {
     if (currentPlan.status !== 'draft') return '';
-    const coreLocked = CORE_MAIN_CATEGORIES.has(task.category) && !task.is_sub;
     return `<div class="task-controls">
       <button type="button" class="order-button move-up" ${index === 0 ? 'disabled' : ''} aria-label="上移">↑</button>
       <button type="button" class="order-button move-down" ${index === routeLength - 1 ? 'disabled' : ''} aria-label="下移">↓</button>
-      ${coreLocked ? '<span class="route-locked" title="核心主线不可降级">已锁定</span>' : `<button type="button" class="route-swap-button" data-id="${task.id}">调整航线</button>`}
-      ${coreLocked ? '' : '<button type="button" class="delete-task" aria-label="删除任务">×</button>'}
+      <button type="button" class="route-swap-button" data-id="${task.id}">调整航线</button>
+      <button type="button" class="delete-task" aria-label="删除任务">×</button>
     </div>`;
   }
 
@@ -572,9 +570,8 @@ if (page === 'today') {
     const approved = currentPlan.status !== 'draft';
     const isSub = Boolean(task.is_sub);
     const zeroMinuteMain = approved && !isSub && Number(task.estimated_minutes) === 0;
-    const subjectMarks = {math:'∑',english:'Aa',computer:'408',rehab:'动',vibe_coding:'⌘',algorithm:'ƒ',reading:'读',writing:'写',ai_project:'AI'};
     const lead = !approved
-      ? `<span class="subject-icon subject-${esc(task.category)}" aria-hidden="true">${subjectMarks[task.category] || '·'}</span>`
+      ? ''
       : isSub
       ? '<span class="task-bullet">•</span>'
       : zeroMinuteMain
@@ -588,7 +585,7 @@ if (page === 'today') {
     if (!approved) {
       timeBlock = isSub
         ? '<span class="execution-locked">确认后记录实际时间</span>'
-        : `<label class="minutes-label"><input class="minutes-input" aria-label="${esc(task.title)}目标分钟" type="number" min="0" max="720" value="${task.estimated_minutes}"> 分钟</label>`;
+        : `<label class="minutes-label"><input class="minutes-input" data-goal-category="${esc(task.category)}" aria-label="${esc(task.title)}目标分钟" type="number" min="0" max="720" step="15" value="${task.estimated_minutes}"> 分钟</label>`;
     } else if (isSub) {
       timeBlock = `<label class="actual-minutes-label">实际 <input class="actual-minutes-input" type="number" min="0" value="${task.actual_minutes || 0}"> 分钟</label>`;
     } else if (zeroMinuteMain) {
@@ -611,7 +608,7 @@ if (page === 'today') {
       ${criteriaBlock}
       ${taskControls(task, index, routeLength)}
     </dialog>`;
-    return `<article class="task-card task-archive-card ${isSub ? 'sub-route-task' : 'main-route-task'} ${task.completed ? 'completed' : ''}" data-task-id="${task.id}" data-category="${esc(task.category)}">
+    return `<article class="task-card task-archive-card ${!approved ? 'task-text-only' : ''} ${isSub ? 'sub-route-task' : 'main-route-task'} ${task.completed ? 'completed' : ''}" data-task-id="${task.id}" data-category="${esc(task.category)}">
       ${lead}
       <div class="task-content"><div class="task-name-group"><div class="task-title-row">${titleBlock}</div><small class="task-kind-caption">${taskTypeLabel(task.task_type)}</small></div>
         <div class="task-meta task-paper-tags">${timeBlock}</div>
@@ -698,8 +695,7 @@ if (page === 'today') {
     selectPlanRoute(sourceIsSub ? 'main' : 'sub');
     $$('.task-card[data-task-id]', sourceIsSub ? $('#main-route-list') : $('#sub-route-list')).forEach(card => {
       const target = taskById(card.dataset.taskId);
-      const targetWouldDemoteCore = sourceIsSub && CORE_MAIN_CATEGORIES.has(target.category);
-      if (!targetWouldDemoteCore) $('.route-target', card)?.classList.remove('hidden');
+      $('.route-target', card)?.classList.remove('hidden');
     });
     $$('.placeholder-target', sourceIsSub ? $('#main-route-list') : $('#sub-route-list')).forEach(button => {
       button.disabled = false;
@@ -748,6 +744,7 @@ if (page === 'today') {
   }
 
   function bindTaskEvents() {
+    bindGoalSuggestions($$('#plan-section .minutes-input'));
     $$('.task-type-input').forEach(input => input.onchange = () => { $('.task-kind-caption', input.closest('.task-card')).textContent = taskTypeLabel(input.value); });
     $$('.task-edit-open').forEach(button => button.onclick = () => $('.task-edit-dialog', button.closest('.task-card')).showModal());
     $$('.task-edit-close').forEach(button => button.onclick = () => button.closest('dialog').close());
@@ -813,10 +810,92 @@ if (page === 'today') {
     });
   }
 
+  const commonTargetMinutes={math:[90,180,240,300],english:[15,30,45,60],computer:[60,90,120,180],rehab:[15,30,45,60]};
+  let targetHistory={},targetHistorySequence=0,goalSuggestionInput=null,goalSuggestionPanel=null;
+  const boundGoalInputs=new WeakSet();
+  function closeGoalSuggestions() {
+    if(goalSuggestionInput)goalSuggestionInput.setAttribute('aria-expanded','false');
+    goalSuggestionPanel?.remove();goalSuggestionPanel=null;goalSuggestionInput=null;
+  }
+  function positionGoalSuggestions() {
+    if(!goalSuggestionInput?.isConnected || !goalSuggestionPanel){closeGoalSuggestions();return;}
+    const box=goalSuggestionInput.getBoundingClientRect(),viewport=window.visualViewport;
+    const top=viewport?.offsetTop || 0,left=viewport?.offsetLeft || 0;
+    const width=viewport?.width || innerWidth,height=viewport?.height || innerHeight;
+    goalSuggestionPanel.style.width=`${Math.min(296,width-24)}px`;
+    goalSuggestionPanel.style.maxHeight=`${Math.max(80,Math.min(260,height-24))}px`;
+    const panelHeight=goalSuggestionPanel.getBoundingClientRect().height;
+    goalSuggestionPanel.style.left=`${Math.max(left+12,Math.min(box.left,left+width-goalSuggestionPanel.offsetWidth-12))}px`;
+    const submit=$('#checkin-form [type=submit]')?.getBoundingClientRect();
+    const coversSubmit=submit && box.bottom+6<submit.bottom && box.bottom+panelHeight+6>submit.top;
+    goalSuggestionPanel.style.top=`${box.bottom+panelHeight+8<=top+height-12 && !coversSubmit ? box.bottom+6 : Math.max(top+12,box.top-panelHeight-6)}px`;
+  }
+  function showGoalSuggestions(input) {
+    if(input.disabled)return;
+    closeGoalSuggestions();goalSuggestionInput=input;
+    const category=input.dataset.targetCategory || input.dataset.goalCategory;
+    const common=commonTargetMinutes[category] || [30,60,90,120];
+    const recent=(targetHistory[category] || []).filter(value=>!common.includes(value));
+    const group=(title,values)=>values.length ? `<p>${title}</p><div class="target-suggestion-options">${values.map(value=>`<button type="button" data-goal-minutes="${value}">${value}</button>`).join('')}</div>` : '';
+    const panel=document.createElement('div');panel.id='target-suggestions';panel.className='target-suggestions';panel.setAttribute('role','dialog');
+    panel.setAttribute('aria-label',`${settings.task_titles[category] || '项目'}目标分钟候选`);
+    panel.innerHTML=group('常用分钟',common)+group('最近用过',recent);
+    goalSuggestionPanel=panel;input.setAttribute('aria-controls',panel.id);input.setAttribute('aria-expanded','true');
+    $$('button',panel).forEach(button=>button.onclick=()=>{
+      input.value=button.dataset.goalMinutes;input.dispatchEvent(new Event('input',{bubbles:true}));input.dispatchEvent(new Event('change',{bubbles:true}));
+      input.focus({preventScroll:true});closeGoalSuggestions();
+    });
+    panel.onkeydown=event=>{if(event.key==='Escape'){event.preventDefault();input.focus({preventScroll:true});closeGoalSuggestions();}};
+    document.body.appendChild(panel);positionGoalSuggestions();
+  }
+  function bindGoalSuggestions(inputs) {
+    inputs.forEach(input=>{
+      if(boundGoalInputs.has(input))return;boundGoalInputs.add(input);
+      input.step='15';input.setAttribute('aria-haspopup','dialog');input.setAttribute('aria-expanded','false');
+      input.addEventListener('focus',()=>showGoalSuggestions(input));
+      input.addEventListener('click',()=>{if(goalSuggestionInput!==input)showGoalSuggestions(input);});
+      input.addEventListener('input',()=>input.setCustomValidity(''));
+      input.addEventListener('keydown',event=>{
+        if(event.key==='Escape'){closeGoalSuggestions();return;}
+        if(event.altKey&&event.key==='ArrowDown'){event.preventDefault();goalSuggestionPanel?.querySelector('button')?.focus();return;}
+        if(['ArrowUp','ArrowDown'].includes(event.key)){
+          event.preventDefault();input.value=Math.max(0,Math.min(720,Number(input.value || 0)+(event.key==='ArrowUp'?15:-15)));
+          input.dispatchEvent(new Event('input',{bubbles:true}));input.dispatchEvent(new Event('change',{bubbles:true}));
+        }
+      });
+    });
+  }
+  async function loadTargetHistory() {
+    const target=dateInput.value,sequence=++targetHistorySequence;targetHistory={};closeGoalSuggestions();
+    try {
+      const result=await api(`/api/target-suggestions?before_date=${encodeURIComponent(target)}`);
+      if(sequence===targetHistorySequence && target===dateInput.value)targetHistory=result.categories;
+    } catch { /* 候选历史读取失败仍保留常用值与手动输入。 */ }
+  }
+  document.addEventListener('pointerdown',event=>{
+    if(goalSuggestionPanel&&!goalSuggestionPanel.contains(event.target)&&event.target!==goalSuggestionInput)closeGoalSuggestions();
+  });
+  document.addEventListener('focusin',event=>{
+    if(goalSuggestionPanel&&!goalSuggestionPanel.contains(event.target)&&event.target!==goalSuggestionInput)closeGoalSuggestions();
+  });
+  window.addEventListener('resize',positionGoalSuggestions);
+  window.addEventListener('scroll',positionGoalSuggestions,{capture:true,passive:true});
+  window.visualViewport?.addEventListener('resize',positionGoalSuggestions);
+  function validateMorningTargets() {
+    for(const input of $$('[data-target-category]')){
+      input.setCustomValidity('');
+      if(input.value==='' || !Number.isInteger(Number(input.value)) || Number(input.value)<0 || Number(input.value)>720){
+        input.setCustomValidity('请输入0～720的整数分钟。');input.reportValidity();return false;
+      }
+    }
+    return true;
+  }
+
   function renderMorningTargets() {
-    $('#morning-targets').innerHTML = ['math', 'english', 'computer', 'rehab'].filter(category => category !== 'rehab' || settings.rehab_enabled).map(category => `<label>${esc(settings.task_titles[category] || category)}目标（分钟）<input type="number" min="0" max="720" required data-target-category="${category}" value="${settings.draft_main_minutes_by_category?.[category] || 0}"></label>`).join('');
+    $('#morning-targets').innerHTML = (settings.main_project_categories || ['math', 'english', 'computer', 'rehab']).filter(category => category !== 'rehab' || settings.rehab_enabled).map(category => `<label>${esc(settings.task_titles[category] || category)}目标（分钟）<input type="number" min="0" max="720" step="15" required data-target-category="${category}" value="${settings.draft_main_minutes_by_category?.[category] || 0}"></label>`).join('');
     const update = () => { $('#morning-total').textContent = `计划合计 ${$$('[data-target-category]').reduce((sum, input) => sum + Number(input.value || 0), 0)} 分`; };
     $$('[data-target-category]').forEach(input => input.oninput = update);
+    bindGoalSuggestions($$('[data-target-category]'));
     update();
   }
 
@@ -826,6 +905,7 @@ if (page === 'today') {
   }
 
   async function loadPlanForDate() {
+    loadTargetHistory();
     cancelSwap();
     currentPlan = null;
     setTodayStage('checkin');
@@ -861,6 +941,8 @@ if (page === 'today') {
 
   $('#checkin-form').onsubmit = async event => {
     event.preventDefault();
+    if(!validateMorningTargets())return;
+    closeGoalSuggestions();
     const submit = event.submitter;
     if (currentPlan?.status === 'draft') {
       const confirmed = await confirmAction('重新生成会覆盖当前未确认草稿。', {title:'重新生成今天的草稿？', confirmLabel:'重新生成'});
@@ -871,9 +953,9 @@ if (page === 'today') {
     try {
       const plan = await api('/api/daily-plans/draft', {method:'POST', body:JSON.stringify({
         date:dateInput.value,
-        energy:$('input[name=energy]:checked').value,
+        energy:settings.show_energy_selector ? $('input[name=energy]:checked').value : 'normal',
         target_minutes:Object.fromEntries($$('[data-target-category]').map(input => [input.dataset.targetCategory, Number(input.value)])),
-        day_type:$('#day-type').value,
+        day_type:settings.show_day_type_selector ? $('#day-type').value : 'normal',
       })});
       invalidateCalendarMonth(dateInput.value);
       renderPlan(plan);
@@ -920,6 +1002,8 @@ if (page === 'today') {
   api('/api/settings').then(result => {
     settings = result;
     renderMorningTargets();
+    $('#morning-energy-field').hidden=!settings.show_energy_selector;
+    $('#morning-day-type-field').hidden=!settings.show_day_type_selector;
     bindSharedCalendarTrigger(dateButton, () => dateInput.value, async nextDate => {
       dateInput.value = nextDate;
       updateDateTrigger(dateButton, nextDate);
@@ -951,6 +1035,10 @@ if (page === 'execute') {
   let syncFailed = false;
   let timingPending = false;
   let timingAction = '';
+  let quickCorrectionBusy = false;
+  let quickCorrectionSource = null;
+  let quickCorrectionCategory = null;
+  let quickCorrectionRequestId = null;
   const receivedTimes = new WeakMap();
 
   const header = $('.site-header');
@@ -968,11 +1056,10 @@ if (page === 'execute') {
     currentPanel.setAttribute('aria-busy',String(timingPending));
     $('#execute-stop').disabled = timingPending || !active;
     $('#execute-stop').textContent = timingPending && timingAction === '停止' ? '正在停止…' : '停止计时';
+    $('#quick-correction-open').disabled = timingPending || !active || active.segment_kind !== 'effective' || active.included === false;
     $$('.task-start-button, .effective-start-option, .execution-label-button, #mobile-counted-toggle, #mobile-interrupt-toggle').forEach(button=>{button.disabled=timingPending;});
     $('#mobile-return-effective').disabled = timingPending || !(active && active.segment_kind !== 'effective' && active.task_id);
-    dateButton.disabled = timingPending;
-    $('#execute-choose-task').disabled = timingPending;
-    $('#execute-choose-task').textContent = active ? '切换任务' : '选择任务';
+    dateButton.disabled = timingPending || quickCorrectionBusy || wordCountsBusy;
   }
 
   function showExecutionError(message) {
@@ -982,11 +1069,11 @@ if (page === 'execute') {
 
   async function executionApi(path, options={}) {
     const writing = options.method && options.method !== 'GET';
-    const timing = writing && /\/(tasks\/start|labels\/start|stop)$/.test(path);
+    const timing = writing && /\/(tasks\/start|labels\/start|stop|quick-corrections)$/.test(path);
     if (timing && timingPending) throw new Error('正在处理当前计时操作，请稍候。');
     if (timing) {
       timingPending = true;
-      timingAction = path.endsWith('/stop') ? '停止' : executionState?.active_segment ? '切换' : '开始';
+      timingAction = path.endsWith('/quick-corrections') ? '补记' : path.endsWith('/stop') ? '停止' : executionState?.active_segment ? '切换' : '开始';
       $('#execute-operation-feedback').hidden = true;
       updateTimingControls();
     }
@@ -1013,7 +1100,89 @@ if (page === 'execute') {
     const seconds = clockActive ? Math.max(0, Math.floor(clockSeconds + (performance.now() - clockReceivedAt) / 1000)) : 0;
     $('#execute-clock').textContent = [Math.floor(seconds / 3600), Math.floor(seconds / 60) % 60, seconds % 60]
       .map(value => String(value).padStart(2, '0')).join(':');
+    updateGoalProgress();
   }
+
+  function updateGoalProgress() {
+    const result = clockSource;
+    const active = result?.active_segment;
+    const task = result?.tasks?.find(item => String(item.id) === String(active?.task_id ?? selectedTaskId)) || result?.tasks?.[0];
+    const root = $('#execute-goal-progress');
+    root.hidden = !task;
+    if (!task) return;
+    const board = result.task_execution_board?.find(item => item.task_id === task.id);
+    const advancing = Boolean(active && active.task_id === task.id && active.segment_kind === 'effective' && active.included !== false);
+    // 聚合已含当前段截至响应时的秒数，这里只补响应后的经过时间。
+    const elapsed = advancing ? Math.max(0, (performance.now() - clockReceivedAt) / 1000) : 0;
+    const seconds = Math.max(0, Number(board?.effective_seconds || 0) + elapsed);
+    const target = Math.max(0, Number(task.estimated_minutes || 0) * 60);
+    const ratio = target ? Math.min(1, seconds / target) : 0;
+    const minutes = seconds > 0 && seconds < 60 ? '小于1' : String(Math.floor(seconds / 60));
+    $('#execute-goal-label').textContent = `今日${task.title} · 有效 ${minutes}${target ? ` / ${task.estimated_minutes}` : ''} 分`;
+    $('#execute-goal-status').textContent = !target ? '未设目标' : ratio >= 1 ? '已达目标' : `${Math.floor(ratio * 100)}%`;
+    root.dataset.stage = ratio >= 1 ? 'complete' : ratio >= .8 ? 'near' : ratio >= .5 ? 'middle' : 'early';
+    root.classList.toggle('is-running', advancing && !syncFailed && !document.hidden);
+    $('#execute-goal-activity').textContent = syncFailed ? '等待同步' : !active ? '已停止'
+      : active.included === false ? '当前段未计入有效' : advancing ? '有效计时中'
+      : active.time_category === 'distraction' || (!active.time_category && active.segment_kind === 'counted_label') ? '分心中 · 进度保留'
+      : active.time_category === 'external' ? '外部打断中 · 进度保留'
+      : '休息／事务中 · 进度保留';
+    $('#execute-goal-remaining').textContent = !target ? '' : ratio < 1 ? `还差 ${Math.ceil((target - seconds) / 60)} 分`
+      : seconds - target >= 60 ? `超出 ${Math.floor((seconds - target) / 60)} 分` : '目标已完成';
+    const track = $('#execute-goal-track');
+    track.hidden = !target;
+    track.setAttribute('aria-valuenow', String(Math.floor(ratio * 100)));
+    track.setAttribute('aria-valuetext', `${task.title}，今日有效${minutes}分，目标${task.estimated_minutes}分${ratio >= 1 ? '，已达目标' : ''}`);
+    $('#execute-goal-fill').style.width = `${ratio * 100}%`;
+  }
+
+  const quickDialog = $('#quick-correction-dialog');
+  const quickError = $('#quick-correction-error');
+  function updateQuickCorrectionControls() {
+    $$('[data-quick-category]',quickDialog).forEach(button=>{
+      button.disabled=quickCorrectionBusy;
+      button.setAttribute('aria-pressed',String(button.dataset.quickCategory===quickCorrectionCategory));
+    });
+    $$('[data-quick-minutes], input, [type=submit]',quickDialog).forEach(control=>{control.disabled=quickCorrectionBusy || !quickCorrectionCategory;});
+    $('#quick-correction-close').disabled=quickCorrectionBusy;
+    $('#quick-correction-form [type=submit]').textContent=quickCorrectionBusy?'保存中…':'保存';
+    dateButton.disabled=timingPending || quickCorrectionBusy || wordCountsBusy;
+  }
+  $('#quick-correction-open').onclick=()=>{
+    const active=executionState?.active_segment;
+    if(timingPending || !active || active.segment_kind!=='effective' || active.included===false)return;
+    quickCorrectionSource=active.id;
+    quickCorrectionCategory=null;
+    quickCorrectionRequestId=Array.from(crypto.getRandomValues(new Uint8Array(16)),value=>value.toString(16).padStart(2,'0')).join('');
+    $('#quick-correction-context').textContent=`从${active.task_title}当前有效段划出，保存后继续。`;
+    $('#quick-correction-custom').value='';
+    quickError.hidden=true;
+    updateQuickCorrectionControls();
+    quickDialog.showModal();
+  };
+  $$('[data-quick-category]',quickDialog).forEach(button=>button.onclick=()=>{
+    quickCorrectionCategory=button.dataset.quickCategory;quickError.hidden=true;updateQuickCorrectionControls();
+  });
+  async function saveQuickCorrection(minutes) {
+    if(quickCorrectionBusy || !quickCorrectionCategory)return;
+    if(!Number.isInteger(minutes) || minutes<1 || minutes>1440){quickError.textContent='请选择或填写1～1440的整数分钟。';quickError.hidden=false;return;}
+    quickCorrectionBusy=true;quickError.hidden=true;updateQuickCorrectionControls();
+    try {
+      const result=await executionApi(`/api/daily-execution/${dateInput.value}/quick-corrections`,{method:'POST',body:JSON.stringify({request_id:quickCorrectionRequestId,source_segment_id:quickCorrectionSource,time_category:quickCorrectionCategory,minutes})});
+      renderExecutionState(result);quickDialog.close();toast('估计补记已保存，继续原学习');
+    }catch(error){quickError.textContent=error.message;quickError.hidden=false;}
+    finally{quickCorrectionBusy=false;updateQuickCorrectionControls();}
+  }
+  $$('[data-quick-minutes]',quickDialog).forEach(button=>button.onclick=()=>saveQuickCorrection(Number(button.dataset.quickMinutes)));
+  $('#quick-correction-form').onsubmit=event=>{event.preventDefault();saveQuickCorrection(Number($('#quick-correction-custom').value));};
+  $('#quick-correction-close').onclick=()=>{if(!quickCorrectionBusy)quickDialog.close();};
+  quickDialog.addEventListener('cancel',event=>{if(quickCorrectionBusy)event.preventDefault();});
+  quickDialog.addEventListener('click',event=>{
+    if(event.target!==quickDialog || quickCorrectionBusy)return;
+    const box=quickDialog.getBoundingClientRect();
+    if(event.clientX<box.left || event.clientX>box.right || event.clientY<box.top || event.clientY>box.bottom)quickDialog.close();
+  });
+  quickDialog.addEventListener('close',()=>$('#quick-correction-open').focus({preventScroll:true}));
 
   function renderLiveExecution(result) {
     const active = result?.active_segment;
@@ -1074,6 +1243,7 @@ if (page === 'execute') {
   }, 15000);
   document.addEventListener('visibilitychange', () => {
     if (!document.hidden) { updateClockDigits(); syncLiveExecution(); }
+    else updateGoalProgress();
   });
   window.addEventListener('focus', syncLiveExecution);
   window.addEventListener('pageshow', event => { if (event.persisted) syncLiveExecution(); });
@@ -1211,24 +1381,24 @@ if (page === 'execute') {
     return `
       <article class="timeline-card ${isDraft ? 'draft' : ''}" data-segment-id="${segment.id}">
         ${isDraft ? '<h3>补一段时间</h3>' : `<details class="segment-details" ${editorState?.open ? 'open' : ''}>
-        <summary class="segment-summary"><span class="segment-summary-time">${esc(segmentTimeRange(original))}</span><span class="segment-summary-task">${esc(original.task_title)}／${esc(original.label_name || (original.segment_kind === 'effective' ? '未细分' : '未命名标签'))}</span><span class="segment-summary-duration">${segmentDuration(original.seconds)}${original.included === false ? ' · 不计入' : ` · ${timeCategoryNames[segmentTimeCategory(original)]}`}</span><span class="segment-summary-action">编辑</span></summary>`}
+        <summary class="segment-summary"><span class="segment-summary-time">${esc(segmentTimeRange(original))}</span><span class="segment-summary-task">${esc(original.task_title)}／${esc(original.label_name || (original.segment_kind === 'effective' ? '未细分' : '未命名标签'))}${original.is_estimated ? ' · 补记·估计' : ''}</span><span class="segment-summary-duration">${segmentDuration(original.seconds)}${original.included === false ? ' · 不计入' : ` · ${timeCategoryNames[segmentTimeCategory(original)]}`}</span><span class="segment-summary-action">编辑</span></summary>`}
         <div class="segment-editor">
         ${!isDraft && segment.included === false ? '<p class="muted">此段保留记录，不计入统计</p>' : ''}
         <div class="timeline-form">
           <label>开始<input class="segment-start" type="datetime-local" step="1" value="${toDateTimeInputValue(segment.started_at)}"></label>
           <label>结束<input class="segment-end" type="datetime-local" step="1" value="${toDateTimeInputValue(segment.ended_at)}"></label>
-          <label>任务<select class="segment-task-id">${taskOptions}</select></label>
-          <label>归类<select class="segment-kind">
+          <label>任务<select class="segment-task-id" ${original.is_estimated?'disabled':''}>${taskOptions}</select></label>
+          <label>归类<select class="segment-kind" ${original.is_estimated?'disabled':''}>
             ${Object.entries(timeCategoryNames).filter(([key])=>!key.startsWith('legacy') || key===category).map(([key,name])=>`<option value="${key}" ${category===key ? 'selected' : ''}>${name}</option>`).join('')}
           </select></label>
           <label class="segment-label-field"><span class="segment-label-title">${labelLabel}</span>
-            <select class="segment-label-id">${labelOptionsForKind(category, segment.task_id, segment.label_id || '', isDraft ? null : original)}</select>
+            <select class="segment-label-id" ${original.is_estimated?'disabled':''}>${labelOptionsForKind(category, segment.task_id, segment.label_id || '', isDraft ? null : original)}</select>
           </label>
         </div>
         <div class="timeline-actions">
           <button class="ghost-button segment-save" type="button">${isDraft ? '补记这一段' : '保存修改'}</button>
           ${isDraft ? '' : '<button class="ghost-button segment-cancel" type="button">取消编辑</button>'}
-          <button class="ghost-button segment-delete" type="button">${isDraft ? '取消' : '删除'}</button>
+          <button class="ghost-button segment-delete" type="button">${isDraft ? '取消' : original.is_estimated ? '撤销补记' : '删除'}</button>
         </div>
         </div>${isDraft ? '' : '</details>'}
       </article>
@@ -1358,9 +1528,10 @@ if (page === 'execute') {
         return;
       }
       try {
+        const estimated=executionState.segments.find(item=>String(item.id)===row.dataset.segmentId)?.is_estimated;
         executionState = await executionApi(`/api/daily-execution/${dateInput.value}/segments/${row.dataset.segmentId}`, {method:'DELETE'});
         renderExecutionState(executionState);
-        toast('时间段已删除');
+        toast(estimated?'补记已撤销，已还原有效学习':'时间段已删除');
       } catch (error) { toast(error.message); }
     });
 
@@ -1374,6 +1545,8 @@ if (page === 'execute') {
   }
 
   function renderTimelineSection() {
+    const hasHistory=(executionState?.segments || []).some(segment=>segment.ended_at);
+    $('.execute-workspace').classList.toggle('timeline-reading',!executionUiState.collapsedTimeline && hasHistory);
     const toggle = $('#timeline-toggle');
     const content = $('#timeline-content');
     toggle.textContent = timelineToggleText();
@@ -1414,18 +1587,19 @@ if (page === 'execute') {
             <h3>${esc(task.title)}</h3>
             ${task.title !== categoryTitle ? `<p class="muted">${esc(categoryTitle)}</p>` : ''}
           </div>
-          <button class="primary task-start-button" type="button" aria-expanded="${picking}" aria-controls="effective-start-${task.id}" ${disabled}>开始有效时间${esc(startLabelSuffix)}</button>
+          <div class="execution-task-actions">${task.category === 'english' ? '<button class="ghost-button word-count-open" type="button">记词数</button>' : ''}<button class="primary task-start-button" type="button" aria-expanded="${picking}" aria-controls="effective-start-${task.id}" ${disabled}>开始有效时间${esc(startLabelSuffix)}</button></div>
           ${startPicker}
         </div>
         <div class="execution-task-meta">
           <span>计划 ${task.estimated_minutes} 分</span>
           <span>有效 ${task.actual_minutes || 0} 分</span>
           <span>总计 ${board ? formatMinutes(board.total_minutes, board.total_seconds) : '0 分'}</span>
+          ${task.category === 'english' ? `<span class="word-count-summary">${executionState.vocabulary_counts ? `新学 ${executionState.vocabulary_counts.new_words} · 复习 ${executionState.vocabulary_counts.review_words}` : ''}</span>` : ''}
         </div>
         <div id="execution-details-${task.id}" class="execution-task-details" ${expanded ? '' : 'hidden'}>
         <div class="task-type-controls"><label>事项类型<select class="execute-task-type">${taskTypeOptions(task.task_type)}</select></label>
         ${task.task_type === 'habit' ? `<label>当天状态<select class="habit-status"><option value="">未记录</option>${['done','missed','rest'].map(value => `<option value="${value}" ${task.habit_status === value ? 'selected' : ''}>${habitStatusLabel(value)}</option>`).join('')}</select></label>` : ''}
-        ${task.category === 'english' ? '<button class="ghost-button vocabulary-open" type="button">背单词 · 录入分钟</button>' : ''}</div>
+        </div>
         ${inlineLabelPicker}
         </div>
       </article>
@@ -1533,6 +1707,7 @@ if (page === 'execute') {
       card.classList.toggle('selected', expanded);
     });
     if (taskId !== null) selectedTaskId = taskId;
+    updateGoalProgress();
   }
 
   function closeEffectiveStartPicker() {
@@ -1718,7 +1893,7 @@ if (page === 'execute') {
     });
     bindExecutionTaskCardEvents(list);
     updateTimingControls();
-    $$('.vocabulary-open', list).forEach(button => button.onclick = () => openVocabulary());
+    $$('.word-count-open', list).forEach(button => button.onclick = event => {event.stopPropagation();openWordCounts();});
     $$('.execute-task-type, .habit-status', list).forEach(input => input.onchange = async () => {
       if (!input.value) return;
       const taskId = input.closest('[data-execution-task-id]').dataset.executionTaskId;
@@ -1733,15 +1908,20 @@ if (page === 'execute') {
     return new Promise(resolve => {
       const dialog=document.createElement('dialog');dialog.className='record-form activity-reminder-dialog';
       const available=notificationState?.configured || notificationState?.preview;
-      dialog.innerHTML=`<form><h3>开始记录${esc(label.name)}</h3><p class="muted">结束当前一段，开始记录${esc(label.name)}。到点只提醒，计时继续。</p><label>到点提醒<select name="remind" required><option value="">请选择</option><option value="no">只记录，不提醒</option><option value="yes" ${available ? '' : 'disabled'}>提醒我回来学习</option></select></label><label>多久后提醒（分钟）<input name="minutes" type="number" min="1" max="1440" step="1" inputmode="numeric" placeholder="由你设定" disabled></label><p class="muted">${esc(notificationState?.message || '手机通知状态暂不可用，本次可只记录时间。')}</p><div class="actions"><button class="primary" type="submit">开始记录</button><button class="ghost-button reminder-cancel" type="button">取消</button></div></form>`;
+      dialog.innerHTML=`<form><h3>开始记录${esc(label.name)}</h3><p class="muted">结束当前一段，开始记录${esc(label.name)}。到点只提醒，计时继续。</p><label>多久后提醒（分钟，可留空）<input name="minutes" type="number" min="15" max="1440" step="1" inputmode="numeric" placeholder="留空只记录；最少15分钟"></label><p class="muted">不填就只记录；填写15～1440的整数。提前停止或切换活动，会取消待发提醒。</p><p class="muted">${esc(notificationState?.message || '手机通知状态暂不可用，本次可留空只记录时间。')}</p><div class="actions"><button class="primary" type="submit">开始记录</button><button class="ghost-button reminder-cancel" type="button">取消</button></div></form>`;
       const form=$('form',dialog),minutes=form.elements.namedItem('minutes');
-      form.elements.namedItem('remind').onchange=event=>{minutes.disabled=event.target.value!=='yes';minutes.required=!minutes.disabled;if(!minutes.disabled)minutes.focus();};
+      const validate=()=>{
+        const value=minutes.value;
+        minutes.setCustomValidity(value && !available ? '手机通知尚未配置，请清空分钟数后只记录。'
+          : value && (!Number.isInteger(Number(value)) || Number(value)<15 || Number(value)>1440) ? '请输入15～1440的整数分钟，或留空只记录。' : '');
+      };
+      minutes.oninput=validate;
       let selection=null;
-      form.onsubmit=event=>{event.preventDefault();selection={reminder_minutes:form.elements.namedItem('remind').value==='yes' ? Number(minutes.value) : null};dialog.close();};
+      form.onsubmit=event=>{event.preventDefault();validate();if(!form.reportValidity())return;selection={reminder_minutes:minutes.value==='' ? null : Number(minutes.value)};dialog.close();};
       $('.reminder-cancel',dialog).onclick=()=>dialog.close();
       dialog.addEventListener('keydown',event=>event.stopPropagation());
       dialog.addEventListener('close',()=>{dialog.remove();resolve(selection);},{once:true});
-      document.body.appendChild(dialog);dialog.showModal();form.elements.namedItem('remind').focus();
+      document.body.appendChild(dialog);dialog.showModal();minutes.focus();
     });
   }
 
@@ -1850,6 +2030,7 @@ if (page === 'execute') {
     executionState = result;
     syncFailed = false;
     renderLiveExecution(result);
+    renderWordCounts();
     if (!selectedTaskId && result?.tasks?.length) selectedTaskId = result.active_segment?.task_id || result.tasks[0].id;
     updateTimingControls();
     const emptyPanel = $('#execute-empty-state');
@@ -1876,7 +2057,6 @@ if (page === 'execute') {
     renderExecutionToolbar();
     renderTimelineSection();
     renderExecutionSubmitList();
-    renderVocabulary();
   }
 
   async function loadExecution() {
@@ -1885,6 +2065,7 @@ if (page === 'execute') {
     $('#execute-load-retry').hidden = true;
     if (changingDate) {
       executionState = null; renderLiveExecution(null);
+      renderWordCounts();
       [currentPanel,$('#execute-panel'),$('#timeline-panel'),$('#execute-submit-panel')].forEach(panel=>panel.classList.add('hidden'));
       $('#execute-empty-state').classList.remove('hidden');
     }
@@ -1903,58 +2084,75 @@ if (page === 'execute') {
   }
   $('#execute-load-retry').onclick = loadExecution;
   $('#execute-sync-retry').onclick = syncLiveExecution;
-  $('#execute-choose-task').onclick = () => {
-    $('#execute-task-list').scrollIntoView({block:'start',behavior:'auto'});
-    $('.task-start-button')?.focus({preventScroll:true});
+
+  let wordCountsBusy = false;
+  let confirmingWordCountDelete = false;
+  const wordCountDialog = $('#word-count-dialog');
+  function renderWordCounts() {
+    const counts=executionState?.vocabulary_counts;
+    $$('.word-count-open').forEach(button=>{button.disabled=wordCountsBusy || !executionState || executionState.date!==dateInput.value;});
+    $$('.word-count-summary').forEach(node=>{node.textContent=counts ? `新学 ${counts.new_words} · 复习 ${counts.review_words}` : '';});
+    $('#word-count-delete').disabled=wordCountsBusy || !counts;
+  }
+  function setWordCountsBusy(value) {
+    wordCountsBusy=value;
+    $$('#word-count-form input, #word-count-form button').forEach(control=>{control.disabled=value;});
+    $('#word-count-form [type=submit]').textContent=value ? '保存中…' : '保存';
+    updateTimingControls();renderWordCounts();
+  }
+  function resetWordCountDelete() {
+    confirmingWordCountDelete=false;$('#word-count-delete').textContent='清除';
+  }
+  function openWordCounts() {
+    if(wordCountsBusy || !executionState || executionState.date!==dateInput.value || wordCountDialog.open)return;
+    closeEffectiveStartPicker();closeExecutionLabelPicker();
+    const form=$('#word-count-form'),counts=executionState.vocabulary_counts;
+    form.elements.namedItem('new_words').value=counts?.new_words ?? '';
+    form.elements.namedItem('review_words').value=counts?.review_words ?? '';
+    $('#word-count-date').textContent=`${dateInput.value} · 当天累计`;
+    $('#word-count-status').textContent='留空按0，再次保存会更新当天词数。';
+    resetWordCountDelete();renderWordCounts();
+    wordCountDialog.showModal();form.elements.namedItem('new_words').focus();
+  }
+  $('#word-count-close').onclick=()=>wordCountDialog.close();
+  wordCountDialog.addEventListener('cancel',event=>{if(wordCountsBusy)event.preventDefault();});
+  wordCountDialog.addEventListener('keydown',event=>event.stopPropagation());
+  wordCountDialog.addEventListener('click',event=>{
+    event.stopPropagation();
+    const box=wordCountDialog.getBoundingClientRect();
+    if(event.target===wordCountDialog && !wordCountsBusy && (event.clientX<box.left || event.clientX>box.right || event.clientY<box.top || event.clientY>box.bottom))wordCountDialog.close();
+  });
+  $('#word-count-form').oninput=resetWordCountDelete;
+  async function saveWordCounts(method, body) {
+    if(wordCountsBusy)return;
+    const target=dateInput.value;
+    setWordCountsBusy(true);$('#word-count-status').textContent='正在保存…';
+    try {
+      const result=await executionApi(`/api/vocabulary-counts/${target}`,{method,...(body ? {body:JSON.stringify(body)} : {})});
+      invalidateCalendarMonth(target);
+      if(target!==dateInput.value)return;
+      // 只刷新词数，避免旧计时响应覆盖并发的停止或切换结果。
+      if(executionState?.date===target)executionState.vocabulary_counts=result.vocabulary_counts;
+      renderWordCounts();renderLiveExecution(executionState);
+      $('#word-count-status').textContent=method==='DELETE' ? '当天词数已清除。' : '当天词数已保存。';
+      wordCountDialog.close();
+      toast(method==='DELETE' ? '词数已清除' : '当天词数已更新');
+    } catch(error) {
+      if(target===dateInput.value)$('#word-count-status').textContent=`保存失败，输入保留：${error.message}`;
+    } finally {setWordCountsBusy(false);resetWordCountDelete();}
+  }
+  $('#word-count-form').onsubmit=event=>{
+    event.preventDefault();const form=event.target;
+    const body=Object.fromEntries(['new_words','review_words'].map(name=>[name,form.elements.namedItem(name).value==='' ? 0 : Number(form.elements.namedItem(name).value)]));
+    if(!form.reportValidity() || Object.values(body).some(n=>!Number.isInteger(n)||n<0||n>10000))return;
+    saveWordCounts('PUT',body);
+  };
+  $('#word-count-delete').onclick=()=>{
+    if(confirmingWordCountDelete){saveWordCounts('DELETE');return;}
+    confirmingWordCountDelete=true;$('#word-count-delete').textContent='确认清除';
+    $('#word-count-status').textContent='再点一次清除当天词数，计时与已有分钟记录保留。';
   };
 
-  let editingVocabularyId = null;
-  function openVocabulary(record=null) {
-    editingVocabularyId = record?.id || null;
-    const form = $('#vocabulary-form');
-    form.minutes.value = record?.minutes || '';
-    form.duplicate_choice.value = '';
-    form.querySelector('[type=submit]').textContent = record ? '保存修改' : '保存时长';
-    $('#vocabulary-panel').classList.remove('hidden');
-    renderVocabulary();
-    form.minutes.focus();
-  }
-  function renderVocabulary() {
-    const words = (executionState?.segments || []).filter(row => row.segment_kind === 'effective' && row.label_id === 'effective_english_words');
-    $('#vocabulary-choice-label').classList.toggle('hidden', !words.length);
-    $('#vocabulary-form').duplicate_choice.required = Boolean(words.length);
-    const records = executionState?.duration_records || [];
-    const timerMinutes = words.filter(row => row.included).reduce((sum, row) => sum + row.minutes, 0);
-    const manualMinutes = records.filter(row => row.included).reduce((sum, row) => sum + row.minutes, 0);
-    $('#vocabulary-summary').textContent = `${dateInput.value} · 背单词合计 ${manualMinutes + timerMinutes} 分（墨墨 ${manualMinutes} / 计时 ${timerMinutes}）。只有分钟数，不生成时间段。`;
-    $('#vocabulary-record-list').innerHTML = records.map(row => `<div class="duration-row"><span>墨墨 ${row.minutes} 分 · ${row.included ? '计入统计' : '保留记录，不计入统计'}</span><button type="button" class="ghost-button vocabulary-edit" data-id="${row.id}">修改</button><button type="button" class="ghost-button vocabulary-delete" data-id="${row.id}">删除</button></div>`).join('');
-    $$('.vocabulary-edit').forEach(button => button.onclick = () => openVocabulary(records.find(row => String(row.id) === button.dataset.id)));
-    $$('.vocabulary-delete').forEach(button => button.onclick = async () => {
-      if (!await confirmAction('删除这条背单词时长记录？', {title:'删除时长记录', confirmLabel:'删除'})) return;
-      try {
-        renderExecutionState(await executionApi(`/api/daily-execution/${dateInput.value}/vocabulary/${button.dataset.id}`, {method:'DELETE'}));
-        editingVocabularyId = null;
-        $('#vocabulary-form').reset();
-        toast('记录已删除');
-      } catch (error) { toast(error.message); }
-    });
-  }
-  $('#vocabulary-shortcut').onclick = () => openVocabulary();
-  $('#vocabulary-form').onsubmit = async event => {
-    event.preventDefault();
-    const form = event.target;
-    const submit = form.querySelector('[type=submit]');
-    submit.disabled = true;
-    try {
-      const path = `/api/daily-execution/${dateInput.value}/vocabulary${editingVocabularyId ? '/' + editingVocabularyId : ''}`;
-      renderExecutionState(await executionApi(path, {method:editingVocabularyId ? 'PUT' : 'POST', body:JSON.stringify({minutes:Number(form.minutes.value), duplicate_choice:form.duplicate_choice.value || null})}));
-      editingVocabularyId = null;
-      form.reset();
-      submit.textContent = '保存时长';
-      toast('背单词时长已保存');
-    } catch (error) { toast(error.message); }
-    finally { submit.disabled = false; }
-  };
   $('#temporary-open').onclick = () => {
     const form = $('#temporary-form');
     form.category.innerHTML = Object.entries(settings.task_titles).map(([value, label]) => `<option value="${esc(value)}">${esc(label)}</option>`).join('');
@@ -2012,9 +2210,8 @@ if (page === 'execute') {
     bindSharedCalendarTrigger(dateButton, () => dateInput.value, async nextDate => {
       dateInput.value = nextDate;
       selectedTaskId = null;
-      editingVocabularyId = null;
-      $('#vocabulary-form').reset();
-      $('#vocabulary-panel').classList.add('hidden');
+      $('#word-count-form').reset();
+      wordCountDialog.close();
       $('#temporary-form').classList.add('hidden');
       showDraftSegment = false;
       executionUiState = defaultExecutionUiState();
@@ -2253,8 +2450,50 @@ if (page === 'gpt-workbench') {
 
 if (page === 'settings') {
   const categories = {math:'数学', english:'英语', computer:'408', ai_project:'AI 项目', sleep:'睡眠', vibe_coding:'vibe coding', algorithm:'算法', reading:'阅读', writing:'练字', rehab:'运动'};
-  const draftMainCategories = {math:'数学', english:'英语', computer:'408', rehab:'运动'};
   let settingsState = null;
+
+  function renderOtherProjectNames() {
+    const selected=new Set(settingsState.main_project_categories);
+    $('#task-title-fields').innerHTML=Object.entries({...categories,...settingsState.task_titles}).filter(([key])=>!selected.has(key)).map(([key,label])=>`<label>${esc(label)}<input data-category="${esc(key)}" value="${esc(settingsState.task_titles[key] || label)}"></label>`).join('');
+    $$('#task-title-fields input').forEach(input=>input.oninput=()=>{settingsState.task_titles[input.dataset.category]=input.value;});
+  }
+  function renderMainProjects() {
+    const selected=settingsState.main_project_categories;
+    $('#main-project-fields').innerHTML=selected.map((category,index)=>`<div class="main-project-row" data-project-category="${esc(category)}">
+      <label>项目名称<input data-main-project-name="${esc(category)}" maxlength="100" required value="${esc(settingsState.task_titles[category] || categories[category] || '')}"></label>
+      <label>默认分钟<input data-draft-main-category="${esc(category)}" type="number" min="0" max="720" step="1" required value="${settingsState.draft_main_minutes_by_category[category] ?? 0}"></label>
+      <div class="main-project-actions"><button class="ghost-button main-project-up" type="button" ${index===0?'disabled':''} aria-label="上移${esc(settingsState.task_titles[category])}">↑</button><button class="ghost-button main-project-down" type="button" ${index===selected.length-1?'disabled':''} aria-label="下移${esc(settingsState.task_titles[category])}">↓</button><button class="ghost-button main-project-remove" type="button" ${selected.length===1?'disabled':''}>移出</button></div></div>`).join('');
+    $$('#main-project-fields [data-main-project-name]').forEach(input=>input.oninput=()=>{settingsState.task_titles[input.dataset.mainProjectName]=input.value;});
+    $$('#main-project-fields [data-draft-main-category]').forEach(input=>input.oninput=()=>{settingsState.draft_main_minutes_by_category[input.dataset.draftMainCategory]=Number(input.value);});
+    $$('#main-project-fields button').forEach(button=>button.onclick=()=>{
+      const category=button.closest('[data-project-category]').dataset.projectCategory,index=selected.indexOf(category);
+      if(button.classList.contains('main-project-remove'))selected.splice(index,1);
+      else {const next=index+(button.classList.contains('main-project-up')?-1:1);[selected[index],selected[next]]=[selected[next],selected[index]];}
+      renderMainProjects();
+    });
+    $('#main-project-add').disabled=selected.length>=11;
+    const available=Object.entries({...categories,...settingsState.task_titles}).filter(([category])=>!selected.includes(category));
+    $('#main-project-existing').innerHTML='<option value="">从已有项目加入…</option>'+available.map(([category,title])=>`<option value="${esc(category)}">${esc(settingsState.task_titles[category] || title)}</option>`).join('');
+    $('#main-project-add-existing').disabled=selected.length>=11||!available.length;
+    $('#settings-form').rehab_enabled.checked=selected.includes('rehab');
+    renderOtherProjectNames();renderEffectiveLabelFields();
+  }
+  $('#main-project-add').onclick=()=>{
+    if(!settingsState || settingsState.main_project_categories.length>=11)return;
+    const input=$('#main-project-new-name'),title=input.value.trim();
+    if(!title){input.focus();toast('先填写新项目名称');return;}
+    const category=`custom_${Date.now().toString(36)}_${Math.random().toString(36).slice(2,10)}`;
+    settingsState.task_titles[category]=title;settingsState.draft_main_minutes_by_category[category]=0;
+    settingsState.main_project_categories.push(category);input.value='';renderMainProjects();
+    $(`[data-main-project-name="${category}"]`).focus();
+  };
+  $('#main-project-add-existing').onclick=()=>{
+    const category=$('#main-project-existing').value;
+    if(!category || !settingsState || settingsState.main_project_categories.length>=11)return;
+    settingsState.task_titles[category] ||= categories[category] || '项目';
+    settingsState.draft_main_minutes_by_category[category] ??= 0;
+    settingsState.main_project_categories.push(category);renderMainProjects();
+  };
 
   function renderExecutionLabelFields() {
     $('#execution-label-fields').innerHTML = (settingsState?.execution_labels || []).map(label => `
@@ -2308,7 +2547,7 @@ if (page === 'settings') {
   }
 
   function renderEffectiveLabelFields() {
-    $('#effective-label-category-fields').innerHTML = Object.entries(categories).map(([category, label]) => {
+    $('#effective-label-category-fields').innerHTML = Object.entries({...categories,...settingsState.task_titles}).map(([category, label]) => {
       const rows = effectiveLabelsForCategoryState(category).map(item => `
         <div class="effective-label-row" data-category="${esc(category)}" data-label-id="${esc(item.id)}">
           <label>名称<input class="effective-label-name" value="${esc(item.name)}"></label>
@@ -2359,10 +2598,13 @@ if (page === 'settings') {
 
   api('/api/settings').then(result => {
     settingsState = result;
+    settingsState.main_project_categories=(result.main_project_categories || ['math','english','computer','rehab']).filter(category=>category!=='rehab'||result.rehab_enabled);
     const form = $('#settings-form');
     form.current_stage.value = result.current_stage;
     form.ai_project_weekly_frequency.value = result.ai_project_weekly_frequency;
     form.rehab_enabled.checked = result.rehab_enabled;
+    form.show_energy_selector.checked = Boolean(result.show_energy_selector);
+    form.show_day_type_selector.checked = Boolean(result.show_day_type_selector);
     form.project_start_date.value = result.project_start_date || todayIso();
     form.weekly_review_mode.value = result.weekly_review_mode || 'separate';
     form.weekly_review_day.value = String(result.weekly_review_day ?? 6);
@@ -2371,10 +2613,7 @@ if (page === 'settings') {
     form.budget_minimum.value = result.budget_minimum || 90;
     form.budget_normal.value = result.budget_normal || 150;
     form.budget_ample.value = result.budget_ample || 210;
-    $('#draft-main-minute-fields').innerHTML = Object.entries(draftMainCategories)
-      .map(([key, label]) => `<label>${esc(label)}<input data-draft-main-category="${esc(key)}" type="number" min="0" max="720" step="5" value="${Number(result.draft_main_minutes_by_category?.[key] ?? 0)}"></label>`)
-      .join('');
-    $('#task-title-fields').innerHTML = Object.entries(categories).map(([key, label]) => `<label>${esc(label)}<input data-category="${esc(key)}" value="${esc(result.task_titles?.[key] || label)}"></label>`).join('');
+    renderMainProjects();
     renderExecutionLabelFields();
     renderEffectiveLabelFields();
   });
@@ -2387,13 +2626,16 @@ if (page === 'settings') {
   };
   $('#settings-form').onsubmit = async event => {
     event.preventDefault();
-    const task_titles = Object.fromEntries($$('#task-title-fields input[data-category]').map(input => [input.dataset.category, input.value]));
+    const task_titles = {...settingsState.task_titles,...Object.fromEntries($$('#main-project-fields [data-main-project-name]').map(input=>[input.dataset.mainProjectName,input.value.trim()]))};
     const draft_main_minutes_by_category = Object.fromEntries($$('[data-draft-main-category]').map(input => [input.dataset.draftMainCategory, Number(input.value || 0)]));
     try {
       settingsState = await api('/api/settings', {method:'PUT', body:JSON.stringify({
         current_stage:event.target.current_stage.value,
         ai_project_weekly_frequency:Number(event.target.ai_project_weekly_frequency.value),
-        rehab_enabled:event.target.rehab_enabled.checked,
+        rehab_enabled:settingsState.main_project_categories.includes('rehab'),
+        main_project_categories:settingsState.main_project_categories,
+        show_energy_selector:event.target.show_energy_selector.checked,
+        show_day_type_selector:event.target.show_day_type_selector.checked,
         project_start_date:event.target.project_start_date.value,
         weekly_review_mode:event.target.weekly_review_mode.value,
         weekly_review_day:Number(event.target.weekly_review_day.value),

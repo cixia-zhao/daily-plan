@@ -72,11 +72,8 @@ if (!baseUrl || !['127.0.0.1','localhost','[::1]'].includes(new URL(baseUrl).hos
       assert(await card.locator('.effective-label-button').first().isVisible(), '点击卡片应展开管理区');
       await page.locator('h1').tap();
       assert(await card.locator('.execution-task-details').isHidden(), '点击卡片外收起');
-      const styles = await page.evaluate(() => ['temporary-open','vocabulary-shortcut'].map(id => {
-        const style = getComputedStyle(document.getElementById(id));
-        return [style.backgroundColor, style.borderColor];
-      }));
-      assert.deepEqual(styles[0], styles[1], '相邻次要按钮应使用相同样式');
+      assert.equal(await page.locator('#vocabulary-shortcut,#word-count-open').count(),0,'不再有顶部背单词入口');
+      assert.equal(await page.locator('.word-count-open').count(),1,'英语卡片保留唯一词数快捷入口');
 
       await page.goto(`${baseUrl}/review`);
       await page.waitForFunction(() => document.querySelector('#daily-completed').textContent !== '—');
