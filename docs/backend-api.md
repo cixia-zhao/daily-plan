@@ -1,6 +1,6 @@
 # 后端接口与数据层速查文档
 
-## 本机最新接口（2026-10-20，未发布）
+## 本机最新接口（2026-10-20，已随fa3ae6b发布）
 
 POST /api/daily-execution/{date}/quick-corrections接受request_id（16～80字母数字／下划线／连字符）、source_segment_id、严格整数minutes（1～1440）、time_category（distraction或life）。仅当前正在进行且计入统计的有效段可补，不能超出本段；写事务内拆成前有效／估计补记／继续有效，保留任务与细分快照。request_id幂等，冲突或过时源段409且保留原数据。
 
