@@ -1,5 +1,12 @@
 # 后端接口与数据层速查文档
 
+## 本机新增：比较数据与运行段编辑（2026-10-22，未发布）
+
+- `GET /api/daily-review/{date}`新增`comparison`，包含前一天日期、可比较／进行中与两天有无执行标记、有效／分心秒数差、有效率百分点差和按稳定category合并的项目秒数。仅已确认／已提交记录参与比较，无记录差值为空；不生成AI分析或周报告。
+- `GET /api/weekly-review`原`comparison`补充完整上周七日`previous_days`（无执行有效值为空）、当前／前期有无执行、全部分类口径的有效／分心差值及主航线项目比较。同期累计仍为本周截至今天相同星期范围，历史周为完整自然周；每日趋势可展示完整上周作参照，当前未来不画。
+- `PUT /api/daily-execution/{date}/segments/{id}`的`ended_at`允许显式空值，表示保存并继续当前段；不允许恢复已结束段，也不通过此编辑操作停止正在运行的段。运行开始不能晚于当前时间，保留写事务、唯一激活和全局重叠校验。可选`expected_state`含task_id、segment_kind、label_id、time_category、started_at、ended_at；原记录已变化返回409，旧的已结束记录请求继续兼容。
+- 运行段改项目／类型／标签／起点等会取消原待发送提醒，不新建提醒；未改变内容则保留原提醒。连接补记的继续段不得破坏任务、有效归类与相邻边界，需先撤销补记。历史标签快照、被排除重复记录及补记估计来源沿用原规则。不新增表或迁移既有数据。
+
 ## 本机最新接口（2026-10-20，已随fa3ae6b发布）
 
 POST /api/daily-execution/{date}/quick-corrections接受request_id（16～80字母数字／下划线／连字符）、source_segment_id、严格整数minutes（1～1440）、time_category（distraction或life）。仅当前正在进行且计入统计的有效段可补，不能超出本段；写事务内拆成前有效／估计补记／继续有效，保留任务与细分快照。request_id幂等，冲突或过时源段409且保留原数据。

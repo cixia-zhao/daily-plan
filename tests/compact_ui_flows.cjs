@@ -7,7 +7,7 @@ if (!baseUrl || !['127.0.0.1','localhost','[::1]'].includes(new URL(baseUrl).hos
 (async () => {
   const browser = await chromium.launch({headless:true, ...(process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH ? {executablePath:process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH} : {})});
   try {
-    const date = '2026-10-13';
+    const date = new Date().toLocaleDateString('en-CA',{timeZone:'Asia/Shanghai'});
     const page = await browser.newPage({viewport:{width:390,height:844},isMobile:true,hasTouch:true});
     await page.clock.setFixedTime(new Date(`${date}T12:00:00+08:00`));
     const errors = [];
@@ -26,14 +26,19 @@ if (!baseUrl || !['127.0.0.1','localhost','[::1]'].includes(new URL(baseUrl).hos
       await page.setViewportSize(size);
       for (const path of [`/?date=${date}`,`/execute?date=${date}`,'/review','/weekly']) {
         await page.goto(`${baseUrl}${path}`);
-        const trigger = page.locator('.hero .date-trigger');
+        const executing=path.startsWith('/execute');
+        if(executing){await page.locator('#execute-panel').waitFor();assert.equal(await page.locator('#execute-date-button,.hero').count(),0);continue;}
+        const trigger = page.locator(executing?'#execute-date-button':'.hero .date-trigger');
         await trigger.waitFor({state:'visible'});
-        await page.waitForFunction(() => !!document.querySelector('.hero .date-trigger').textContent);
-        const chip = await page.locator('.hero .date-chip').boundingBox();
-        const hero = await page.locator('.hero').boundingBox();
-        assert(Math.abs(chip.x + chip.width - hero.x - hero.width) <= 1, `${path} 日期未右对齐`);
-        assert(Math.abs(chip.y - hero.y) <= 1, `${path} 日期未置于顶部`);
-        assert.equal(await page.locator('.hero .date-chip > span').count(), 0);
+        await page.waitForFunction(selector=>!!document.querySelector(selector).textContent,executing?'#execute-date-button':'.hero .date-trigger');
+        const chip = await page.locator(executing?'.execution-controls-heading .date-chip':'.hero .date-chip').boundingBox();
+        if(executing){assert.equal(await page.locator('.hero').count(),0);assert(chip.height>=44,'面板内日期仍可触控');}
+        else {
+          const hero = await page.locator('.hero').boundingBox();
+          assert(Math.abs(chip.x + chip.width - hero.x - hero.width) <= 1, `${path} 日期未右对齐`);
+          assert(Math.abs(chip.y - hero.y) <= 1, `${path} 日期未置于顶部`);
+          assert.equal(await page.locator('.hero .date-chip > span').count(), 0);
+        }
         if (size.width < 760 && path.startsWith('/?')) {
           await page.locator('#plan-section').waitFor({state:'visible'});
           const title = await page.locator('#today-page-header h1').boundingBox();
@@ -45,7 +50,7 @@ if (!baseUrl || !['127.0.0.1','localhost','[::1]'].includes(new URL(baseUrl).hos
         assert(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), `${path} 横向溢出`);
         if (await page.locator('#reset-day').count() && await page.locator('#reset-day').isVisible()) {
           assert.equal(await page.locator('.day-options').count(), 0, '直接显示重置入口');
-          assert.equal(await page.locator('#reset-day').innerText(), '重置今天');
+          assert.equal(await page.locator('#reset-day').innerText(), await page.locator('body').getAttribute('data-page')==='review' ? '重置' : '重置今天');
           await page.locator('#reset-day').tap();
           await page.locator('#confirm-modal').waitFor({state:'visible'});
           assert((await api(`daily-execution/${date}`)).plan, '点击重置后须先确认，不能立即清空');
@@ -67,10 +72,10 @@ if (!baseUrl || !['127.0.0.1','localhost','[::1]'].includes(new URL(baseUrl).hos
       await card.locator('.execute-task-type').selectOption('todo');
       await page.waitForFunction(() => document.querySelector('.execution-task-details:not([hidden]) .execute-task-type')?.value === 'todo');
       assert(await card.locator('.effective-label-button').first().isVisible(), '设置保存后展开状态丢失');
-      await page.locator('h1').tap();
+      await page.locator('#execution-complete-tab').tap();await page.locator('#execution-courses-tab').tap();
       await card.locator('h3').tap();
       assert(await card.locator('.effective-label-button').first().isVisible(), '点击卡片应展开管理区');
-      await page.locator('h1').tap();
+      await page.locator('#execution-complete-tab').tap();await page.locator('#execution-courses-tab').tap();
       assert(await card.locator('.execution-task-details').isHidden(), '点击卡片外收起');
       assert.equal(await page.locator('#vocabulary-shortcut,#word-count-open').count(),0,'不再有顶部背单词入口');
       assert.equal(await page.locator('.word-count-open').count(),1,'英语卡片保留唯一词数快捷入口');
@@ -80,7 +85,9 @@ if (!baseUrl || !['127.0.0.1','localhost','[::1]'].includes(new URL(baseUrl).hos
       assert(await page.locator('#review-data-panel').isVisible());
       assert(!(await page.locator('#review-reflection-panel').isVisible()));
       assert(await page.locator('#daily-execution-board').isVisible(), '执行结构应在数据看板中直接展示');
-      assert.match(await page.locator('#daily-execution-board').innerText(), /网课/);
+      await page.locator('.review-task-detail>summary').click();
+      assert.match(await page.locator('#daily-execution-details').innerText(), /网课/);
+      await page.locator('.review-task-detail>summary').click();
       await page.locator('#review-reflection-tab').tap();
       await page.locator('#daily-review-form [name=tomorrow_focus]').fill('开始前写下目标');
       await page.locator('#daily-review-form [name=mood]').selectOption('平稳');

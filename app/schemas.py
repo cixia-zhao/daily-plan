@@ -168,6 +168,15 @@ class ExecutionSegmentCreateInput(BaseModel):
     ended_at: datetime
 
 
+class ExecutionSegmentExpectedState(BaseModel):
+    task_id: int
+    segment_kind: ExecutionSegmentKind
+    label_id: str | None = None
+    time_category: TimeCategory | None = None
+    started_at: datetime
+    ended_at: datetime | None
+
+
 class ExecutionSegmentUpdateInput(BaseModel):
     time_category: TimeCategory | None = None
     duplicate_choice: Literal["both", "manual", "timer"] | None = None
@@ -175,7 +184,8 @@ class ExecutionSegmentUpdateInput(BaseModel):
     segment_kind: ExecutionSegmentKind
     label_id: str | None = Field(default=None, max_length=100)
     started_at: datetime
-    ended_at: datetime
+    ended_at: datetime | None
+    expected_state: ExecutionSegmentExpectedState | None = None
 
 
 class CarryoverResolution(BaseModel):

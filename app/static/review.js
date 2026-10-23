@@ -53,6 +53,7 @@ if (page === 'review') {
     const scope = loaded.scope, key = scope === 'daily' ? loaded.date : loaded.end;
     const draft = draftFor(scope,key);
     $('#daily-save-summary').hidden = scope !== 'daily';
+    $('#daily-save-summary').classList.toggle('needs-attention', storageError || saving.size > 0 || Object.hasOwn(draft,'review') || [...saveMessages.values()].some(message=>message.startsWith('保存失败')));
     if (scope === 'daily') {
       $('#daily-record-status').textContent = reviewState?.has_execution ? '学习记录已保存' : '还没有学习记录';
       const id = `daily:${key}:review`;
@@ -84,6 +85,9 @@ if (page === 'review') {
   const form = $('#daily-review-form');
   const labels = ['周一','周二','周三','周四','周五','周六','周日'];
   const reviewTabs = $$('.review-section-tab');
+  let openRequestedRecords=query.get('records')==='1';
+  $('#review-records-open').onclick=()=>window.DailyPlanRecords.open(selectedDate).catch(error=>toast(error.message));
+  document.addEventListener('execution-records-changed',event=>{if(loaded?.scope==='daily'&&loaded.date===event.detail.date)loadWorkspace(loaded.date,'daily');});
 
   function dateOffset(value, offset) {
     const day = new Date(`${value}T12:00:00`);
@@ -169,9 +173,7 @@ if (page === 'review') {
       panel.hidden = !active;
       panel.classList.remove('review-panel-enter');
       if (active) {
-        panel.style.setProperty('--review-panel-shift', `${direction * 32}px`);
-        void panel.offsetWidth;
-        panel.classList.add('review-panel-enter');
+        PlanUI.enter(panel,direction);
       }
     });
     moveTabIndicator();
@@ -196,7 +198,7 @@ if (page === 'review') {
   function renderDailyReview(result) {
     reviewState = result;
     renderDailyOutcome(result.review.learning_outcome);
-    renderTimeSummary($('#daily-time-summary'), result.time_summary);
+    PlanVisuals.daily(result);
     const counts=result.vocabulary_counts;
     $('#daily-word-count-summary').hidden=!counts;
     $('#daily-word-count-summary').textContent=counts ? `背单词：新学 ${counts.new_words} 个 · 复习 ${counts.review_words} 个（当天记录，不折算时长）` : '';
@@ -215,13 +217,19 @@ if (page === 'review') {
     const hasExecution = Boolean(result.task_execution_board.length);
     $('#daily-execution-board-empty').classList.toggle('hidden', hasExecution);
     $('#daily-execution-board').classList.toggle('hidden', !hasExecution);
-    renderTaskExecutionBoard($('#daily-execution-board'), result.task_execution_board, '');
+    renderTaskExecutionBoard($('#daily-execution-details'), result.task_execution_board, '');
     $('#sunday-weekly-guide').hidden = weekday(result.date) !== 6 || settings.weekly_review_mode === 'replace_day';
-    $('#reset-day').textContent = result.date === todayIso() ? '重置今天' : '重置这一天';
+    $('#reset-day').textContent = '重置';
+    $('#reset-day').setAttribute('aria-label',result.date === todayIso() ? '重置今天' : '重置这一天');
+    $('#reset-day').title = `重置 ${result.date}`;
   }
 
   function renderWeeklyMetrics(result) {
-    renderTimeSummary($('#weekly-time-summary'), result.time_summary);
+    PlanVisuals.summary($('#weekly-time-summary'), result.time_summary);
+    $('#weekly-all-effective-time').innerHTML=PlanVisuals.metric(result.comparison?.current_has_execution?result.time_summary.categories.learning:null);
+    $('#weekly-distraction-time').innerHTML=PlanVisuals.metric(result.comparison?.current_has_execution?result.time_summary.categories.distraction:null);
+    $('#weekly-effective-change').textContent=result.comparison?.previous_has_execution&&result.comparison?.current_has_execution?PlanVisuals.change(result.comparison.effective_difference_seconds,'比上周同期'):'暂无可比记录';
+    $('#weekly-distraction-change').textContent=result.comparison?.previous_has_execution&&result.comparison?.current_has_execution?PlanVisuals.change(result.comparison.distraction_difference_seconds,'比上周同期'):'暂无可比记录';
     let outcomes = $('#weekly-outcomes');
     if (!outcomes) {
       outcomes = document.createElement('section'); outcomes.id = 'weekly-outcomes';
@@ -246,25 +254,18 @@ if (page === 'review') {
       const difference = comparison.difference_seconds;
       const delta = compactTime(Math.floor(Math.abs(difference) / 60), Math.abs(difference));
       const percent = comparison.change_ratio === null ? '' : `（${Math.abs(comparison.change_ratio * 100).toFixed(1)}%）`;
-      summary.textContent = comparison.previous_seconds === 0
+      summary.textContent = !comparison.current_has_execution ? '本周尚无执行记录，暂不比较增减。' : comparison.previous_seconds === 0
         ? '上周同期暂无投入，先记录这一周。'
         : `较上周同期${difference === 0 ? '持平' : `${difference > 0 ? '增加' : '减少'} ${delta}${percent}`} · 上周同期 ${previous}`;
       range.textContent = `主航线投入总计 · ${comparison.start_date}—${comparison.through_date} 对比 ${comparison.previous_start_date}—${comparison.previous_end_date}${comparison.in_progress ? ' · 本周统计截至今天' : ' · 两个完整自然周'}`;
     } else { summary.textContent = '这一周尚未开始'; range.textContent = '开始记录后再与上周同期比较。'; }
-    const maximum = Math.max(1, ...result.days.filter(day => day.date <= todayIso()).map(day => day.main_total_seconds));
-    $('#weekly-day-bars').innerHTML = result.days.map((day,index) => {
-      const future = day.date > todayIso();
-      const eligible = ['approved','submitted'].includes(day.status) && !future;
-      const total = eligible ? day.main_total_seconds : 0;
-      const ratio = total ? day.main_actual_seconds / total : 0;
-      const note = future ? '未到' : !eligible || !day.task_execution_board.length ? '无记录' : formatMinutes(Math.floor(total/60),total);
-      return `<button type="button" class="weekly-day-bar" data-date="${day.date}" ${future ? 'disabled' : ''} aria-label="${labels[index]} ${day.date}，${esc(note)}，有效 ${eligible ? day.main_actual_minutes : 0} 分">
-        <span class="weekly-bar-value">${note}</span><span class="weekly-bar-track"><span class="weekly-bar-total" style="height:${total / maximum * 100}%"><span class="weekly-bar-effective" style="height:${Math.min(100,ratio * 100)}%"></span></span></span><strong>${labels[index]}</strong><small>${day.date.slice(5).replace('-','/')}</small>
-      </button>`;
-    }).join('');
-    $$('.weekly-day-bar').forEach(button => button.onclick = () => navigate(button.dataset.date,'daily'));
-    const items = result.task_distribution.filter(item => item.total_seconds > 0);
-    $('#weekly-task-distribution').innerHTML = items.length ? items.map(item => `<article class="weekly-distribution-item"><div><strong>${esc(item.title)}</strong><span>${compactTime(item.total_minutes,item.total_seconds)}</span></div><div class="weekly-distribution-track" aria-hidden="true"><span style="width:${result.total_seconds ? item.total_seconds / result.total_seconds * 100 : 0}%"></span></div><small>有效 ${compactTime(item.effective_minutes,item.effective_seconds)}</small></article>`).join('') : '<p class="muted">本周还没有主航线投入记录。</p>';
+    const drawChart = mode => {
+      PlanVisuals.weekly($('#weekly-day-bars'),result,mode,date=>navigate(date,'daily'));
+      $$('[data-week-chart]').forEach(button=>button.setAttribute('aria-pressed',String(button.dataset.weekChart===mode)));
+    };
+    $$('[data-week-chart]').forEach(button=>button.onclick=()=>drawChart(button.dataset.weekChart));
+    drawChart($('#weekly-day-bars').dataset.chartMode||'bar');
+    PlanVisuals.projects($('#weekly-task-distribution'),result.comparison?.projects||[],{previous:result.comparison?.previous_has_execution,currentHas:result.comparison?.current_has_execution,prefix:'比上周同期',previousLabel:'上周同期'});
   }
 
   function renderWeeklyAnalysis(result) {
@@ -324,14 +325,16 @@ if (page === 'review') {
     link.disabled = selectedScope === 'weekly' && result.days[replacement].date > todayIso();
     link.onclick = () => navigate(selectedScope === 'weekly' ? result.days[replacement].date : selectedDate, selectedScope === 'weekly' ? 'daily' : 'weekly');
     $('#review-week-range').textContent = `${result.start_date.replaceAll('-','/')} — ${result.end_date.replaceAll('-','/')}`;
-    $('#review-week-range').hidden = selectedScope === 'weekly';
+    $('#review-week-range').hidden = true;
+    $('#review-page-title').textContent = selectedScope === 'weekly' ? '周复盘' : '日复盘';
     const inProgress = result.start_date <= todayIso() && todayIso() <= result.end_date;
     $('#review-selected-label').textContent = selectedScope === 'weekly' ? '周复盘 · 整周' : `${labels[weekday(selectedDate)]} · ${selectedDate.replaceAll('-','/')}`;
     const periodStatus = $('#review-period-status');
     periodStatus.hidden = selectedScope !== 'weekly';
     periodStatus.textContent = inProgress ? '本周进行中 · 统计截至今天' : result.start_date > todayIso() ? '这一周尚未开始' : '整周已结束';
     if (selectedScope === 'weekly') {
-      dateButton.textContent = `${result.start_date.replaceAll('-','/')} — ${result.end_date.replaceAll('-','/')}`;
+      dateButton.textContent = `${result.start_date.slice(5).replace('-','/')} — ${result.end_date.slice(5).replace('-','/')}`;
+      dateButton.title = `${result.start_date} 至 ${result.end_date}`;
       dateButton.setAttribute('aria-label',`周复盘 ${result.start_date} 至 ${result.end_date}，选择日期定位整周`);
     }
     $('#review-next-week').disabled = dateOffset(result.start_date,7) > todayIso();
@@ -362,6 +365,9 @@ if (page === 'review') {
     if (capture) captureDraft();
     const sequence = ++loadSequence;
     let applied = false;
+    const moving=selectedDate!==dateValue||selectedScope!==scope;
+    const direction=dateValue>=selectedDate?1:-1;
+    if(moving)window.DailyPlanRecords?.close();
     selectedDate = dateValue; selectedScope = scope;
     dateInput.value = dateValue; updateDateTrigger(dateButton, dateValue);
     $('#review-loading').hidden = false;
@@ -392,6 +398,8 @@ if (page === 'review') {
       renderSaveStatus();
       applied = true;
       history.replaceState(null,'',`/review?date=${dateValue}&scope=${scope}`);
+      if(moving)PlanUI.enter($('#review-workspace-content'),direction);
+      if(openRequestedRecords&&scope==='daily'){openRequestedRecords=false;window.DailyPlanRecords.open(dateValue).catch(error=>toast(error.message));}
     } catch (error) {
       if (sequence === loadSequence) {
         toast(error.message);
@@ -407,7 +415,7 @@ if (page === 'review') {
       }
     }
   }
-  function navigate(dateValue, scope) { return loadWorkspace(dateValue,scope); }
+  function navigate(dateValue, scope) {if(window.DailyPlanRecords?.busy){toast('请先保存或取消正在编辑的时间记录。');return;}return loadWorkspace(dateValue,scope);}
   $('#review-retry').onclick = () => loadWorkspace(selectedDate,selectedScope,false);
   async function withButton(button, operation) {
     button.disabled = true;
@@ -495,7 +503,7 @@ if (page === 'review') {
 
   api('/api/settings').then(async result => {
     settings = result;
-    if (!query.has('scope') && settings.weekly_review_mode === 'replace_day' && weekday(selectedDate) === Number(settings.weekly_review_day)) selectedScope = 'weekly';
+    if (!query.has('scope') && !openRequestedRecords && settings.weekly_review_mode === 'replace_day' && weekday(selectedDate) === Number(settings.weekly_review_day)) selectedScope = 'weekly';
     await bindSharedCalendarTrigger(dateButton,()=>selectedDate,nextDate => navigate(nextDate,settings.weekly_review_mode === 'replace_day' && weekday(nextDate) === Number(settings.weekly_review_day) ? 'weekly' : 'daily'),'选择复盘日期');
     await loadWorkspace(selectedDate,selectedScope,false);
     moveTabIndicator();

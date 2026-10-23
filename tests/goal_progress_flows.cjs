@@ -7,11 +7,11 @@ if (!base || !['127.0.0.1','localhost'].includes(new URL(base).hostname)) throw 
   const browser = await chromium.launch({headless:true, executablePath:process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH});
   try {
     const page = await browser.newPage({viewport:{width:390,height:844},isMobile:true,hasTouch:true,timezoneId:'Asia/Shanghai'});
-    await page.clock.install({time:new Date('2026-10-20T12:00:00+08:00')});
+    const testDay=new Date().toLocaleDateString('en-CA',{timeZone:'Asia/Shanghai'});await page.clock.install({time:new Date(testDay+'T12:00:00+08:00')});
     const errors=[]; page.on('pageerror',e=>errors.push(e.message));
     const api=async(path,method='GET',data)=>{const r=await page.request.fetch(`${base}/api/${path}`,{method,data});assert(r.ok(),await r.text());return r.json();};
     assert((await api('system/health')).database_path.startsWith('/tmp/'));
-    const date='2026-10-20';
+    const date=testDay;
     const draft=await api('daily-plans/draft','POST',{date,energy:'normal',day_type:'normal',target_minutes:{math:60,english:30,computer:0}});
     await api(`daily-plans/${date}/approve`,'POST');
     const math=draft.tasks.find(t=>t.category==='math'), english=draft.tasks.find(t=>t.category==='english'), zero=draft.tasks.find(t=>t.category==='computer');
@@ -32,7 +32,7 @@ if (!base || !['127.0.0.1','localhost'].includes(new URL(base).hostname)) throw 
     });
     const root=page.locator('#execute-goal-progress'),track=page.locator('#execute-goal-track');
     const fill=()=>page.locator('#execute-goal-fill').evaluate(n=>parseFloat(n.style.width));
-    async function load(next){mode=next;await page.goto(`${base}/execute?date=${date}`);await root.waitFor();}
+    async function load(next){mode=next;await page.goto(`${base}/execute?date=${date}`);if(next==='idle')await page.locator('#execution-controls-fab').click();await root.waitFor();}
     async function assertVisibleMotion(name) {
       assert.equal(await page.locator('#execute-goal-fill').evaluate(n=>getComputedStyle(n,'::after').animationName),'goal-flow');
       await page.evaluate(()=>{const a=document.getAnimations().find(a=>a.animationName==='goal-flow');a.pause();a.currentTime=0;});
@@ -78,8 +78,8 @@ if (!base || !['127.0.0.1','localhost'].includes(new URL(base).hostname)) throw 
     await page.unroute(`**/api/daily-execution/${date}`);
     await page.locator('#execute-stop').click();await page.waitForFunction(()=>document.querySelector('#execute-stop').disabled&&document.querySelector('#execute-current-panel').getAttribute('aria-busy')==='false');
     assert.match(await page.locator('#execute-goal-label').innerText(),/数学.*15 \/ 60/,'停止后采用服务器真实累计');
-    await page.reload();await root.waitFor();assert.match(await page.locator('#execute-goal-label').innerText(),/数学.*15 \/ 60/);
-    await page.goto(base+'/execute?date=2026-10-19');await page.locator('#execute-empty-message').waitFor();assert(await root.isHidden(),'跨日不显示旧进度');
+    await page.reload();await page.locator('#execution-controls-fab').click();await root.waitFor();assert.match(await page.locator('#execute-goal-label').innerText(),/数学.*15 \/ 60/);
+    await page.goto(base+'/execute?date=2026-10-19');await page.locator('#review-page-title').waitFor();assert(await root.isHidden(),'跨日不显示旧进度');
     assert.deepEqual(errors,[]);console.log('PASS: 日累计口径、10px暖色轨道、运行与达标后纹理实际像素变化、休息／分心冻结、零目标、停止刷新、跨日与四视口／减少动态效果');
   } finally {await browser.close();}
 })().catch(e=>{console.error(e);process.exitCode=1;});

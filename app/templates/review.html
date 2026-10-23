@@ -3,10 +3,10 @@
 {% block page %}review{% endblock %}
 {% block content %}
 <section class="hero compact">
-  <div><h1>复盘</h1><p id="review-week-range">先看数据，再留下结论与下一步。</p><p id="review-period-status" class="review-period-status" hidden></p></div>
+  <div><h1 id="review-page-title">日复盘</h1><p id="review-week-range">先看数据，再留下结论与下一步。</p><p id="review-period-status" class="review-period-status" hidden></p></div>
   <div class="date-actions">
-    <button id="reset-day" class="danger-soft reset-day-button" type="button">重置今天</button>
-    <button id="restore-reset" class="ghost-button" type="button" hidden>恢复重置前记录</button>
+    <button id="reset-day" class="danger-soft reset-day-button" type="button" aria-label="重置今天">重置</button>
+    <button id="restore-reset" class="ghost-button" type="button" hidden aria-label="恢复重置前记录">恢复记录</button>
     <div class="date-chip date-chip-button">
       <button id="review-date-button" class="date-trigger" type="button"></button>
       <input id="review-date" type="hidden">
@@ -35,19 +35,21 @@
 <div class="review-panel-viewport">
 <div id="review-data-panel" class="review-tab-panel" role="tabpanel" aria-labelledby="review-data-tab">
 <div id="daily-data-content">
-<section class="metrics review-metrics" id="daily-review-metrics">
-  <article><span>主任务完成</span><strong id="daily-completed">—</strong><small id="daily-total">共 — 项</small></article>
-  <article><span>主任务分钟</span><strong id="daily-main-minutes">—</strong><small id="daily-main-actual">实际 —</small></article>
-  <article><span>副航线实际</span><strong id="daily-sub-minutes">—</strong><small>只统计已记录分钟</small></article>
+<p id="daily-comparison-caption" class="comparison-caption"></p>
+<section id="daily-visual-metrics" class="visual-metrics" aria-label="当天有效学习、分心与前一天比较"></section>
+<section class="review-project-section" aria-label="项目有效投入比较">
+  <div class="section-heading"><div><h2>执行结构</h2></div></div>
+  <div id="daily-execution-board-empty" class="muted">这一天还没有执行记录。</div>
+  <div id="daily-execution-board"><div id="daily-project-chart"></div><details class="review-task-detail"><summary>任务明细 · 有效细分、分心与休息</summary><div id="daily-execution-details" class="execution-board-grid"></div></details></div>
 </section>
-
+<button id="review-records-open" class="ghost-button review-records-open" type="button">查看与编辑时间记录 <span aria-hidden="true">↗</span></button>
 <section id="daily-time-summary" class="time-summary-section" aria-label="当天已记录时间去向"></section>
 <p id="daily-word-count-summary" class="learning-outcome-summary" hidden></p>
 <p id="daily-outcome-summary" class="learning-outcome-summary" hidden></p>
-<section class="panel review-support">
-  <div class="section-heading"><div><h2>执行结构</h2><p class="muted">各项任务的实际投入与时间分配。</p></div></div>
-  <div id="daily-execution-board-empty" class="muted">这一天还没有执行记录。</div>
-  <div id="daily-execution-board" class="execution-board-grid hidden"></div>
+<section class="review-secondary-stats" id="daily-review-metrics" aria-label="计划与完成情况">
+  <article><span>主任务完成</span><strong id="daily-completed">—</strong><small id="daily-total">共 — 项</small></article>
+  <article><span>目标</span><strong id="daily-main-minutes">—</strong><small id="daily-main-actual">实际 —</small></article>
+  <article><span>副航线有效</span><strong id="daily-sub-minutes">—</strong></article>
 </section>
 <div class="sunday-weekly-guide" id="sunday-weekly-guide" hidden><p>这一周的记录已经放在一起。</p><button id="open-weekly-review" class="secondary" type="button">进入周复盘</button></div>
 </div>
@@ -115,6 +117,8 @@
 </div>
 </div>
 </section>
+<div id="review-records-workspace" hidden>{% include "execution_tasks.html" %}</div>
 {% endblock %}
+{% block overlays %}{% with records_only=true %}{% include "execution_overlay.html" %}{% endwith %}{% endblock %}
 {% block page_styles %}<link rel="stylesheet" href="/static/review.css?v={{ static_version('review.css') }}">{% endblock %}
 {% block page_scripts %}<script src="/static/review.js?v={{ static_version('review.js') }}" defer></script>{% endblock %}

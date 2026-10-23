@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import asyncio
+from datetime import datetime
+from zoneinfo import ZoneInfo
 from contextlib import asynccontextmanager, suppress
 import os
 from pathlib import Path
@@ -154,7 +156,11 @@ def create_app(
 
     @app.get("/execute", response_class=HTMLResponse)
     def execute_page(request: Request):
-        return templates.TemplateResponse(request, "execute.html", {})
+        today = datetime.now(ZoneInfo("Asia/Shanghai")).date().isoformat()
+        requested = request.query_params.get("date")
+        if requested and requested != today:
+            return RedirectResponse("/review?date=" + quote(requested, safe="") + "&records=1", status_code=303)
+        return templates.TemplateResponse(request, "execute.html", {"execution_date": today})
 
     @app.get("/weekly", response_class=HTMLResponse)
     def weekly_page(request: Request):

@@ -1,0 +1,30 @@
+<section id="execute-empty-state" class="panel">
+  <div class="section-heading"><div><p class="step">01 · 执行前检查</p><h2>先确认今日清单</h2></div></div>
+  <p id="execute-empty-message" class="muted">当前日期还没有可执行的已确认清单。</p>
+  <button id="execute-load-retry" class="ghost-button load-retry" type="button" hidden>重新读取</button>
+</section>
+
+<div class="execution-section-tabs surface-tabs" role="tablist" aria-label="执行内容"><span class="surface-tab-indicator" aria-hidden="true"></span><button id="execution-courses-tab" class="surface-tab" type="button" role="tab" aria-selected="true" aria-controls="execute-panel">课程</button><button id="execution-complete-tab" class="surface-tab" type="button" role="tab" aria-selected="false" tabindex="-1" aria-controls="execute-submit-panel">完成与复盘</button></div>
+<div class="execute-workspace">
+<section id="execute-panel" class="panel hidden" role="tabpanel" aria-labelledby="execution-courses-tab">
+  <div class="execute-layout">
+    <div class="execute-main">
+      <div id="execute-task-list" class="execution-task-list"></div>
+    </div>
+  </div>
+</section>
+
+
+</div>
+
+<section id="execute-submit-panel" class="panel hidden" role="tabpanel" aria-labelledby="execution-complete-tab" hidden>
+  <div class="section-heading"><div><p class="step">今日记录</p><h2>完成情况与复盘</h2><p class="muted">勾选后自动保存；复盘可以晚点写。</p></div></div>
+  <div id="execute-submit-list" class="execution-task-list"></div>
+  <section id="execute-submit-zero-group" class="submit-zero-group hidden">
+    <button id="execute-submit-zero-toggle" class="ghost-button section-toggle-button" type="button" aria-expanded="false">展开今日原计划为 0 分的项目</button>
+    <div id="execute-submit-zero-list" class="execution-task-list hidden"></div>
+  </section>
+  <div class="actions">
+    <button id="enter-review" class="primary" type="button" disabled>进入复盘</button>
+  </div>
+</section>

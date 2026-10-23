@@ -9,7 +9,7 @@ if (!baseUrl || !['127.0.0.1','localhost','[::1]'].includes(new URL(baseUrl).hos
     const page = await browser.newPage({viewport:{width:390,height:844},isMobile:true,hasTouch:true});
     const errors=[];
     page.on('pageerror', error => errors.push(error.message));
-    const date='2026-10-12';
+    const date=new Date().toLocaleDateString('en-CA',{timeZone:'Asia/Shanghai'});
     async function api(path, method='GET', data) {
       const result=await page.request.fetch(`${baseUrl}/api/${path}`,{method,data});
       assert(result.ok(),`${method} ${path}: ${await result.text()}`);
@@ -46,6 +46,7 @@ if (!baseUrl || !['127.0.0.1','localhost','[::1]'].includes(new URL(baseUrl).hos
     const englishCard=page.locator(`[data-execution-task-id="${english.id}"]`);
     // 空闲时直接开始当前选中任务的标签时间。
     await mathCard.locator('h3').click();
+    await page.locator('#execution-controls-fab').click();
     await page.locator('#mobile-counted-toggle').click();
     await page.locator('#mobile-counted-panel').waitFor({state:'visible'});
     await page.locator('[data-label-id=counted_game]').click();
@@ -57,7 +58,7 @@ if (!baseUrl || !['127.0.0.1','localhost','[::1]'].includes(new URL(baseUrl).hos
     await page.locator('#mobile-return-effective').click();
     await waitForActive('正在做：');
     // 查看另一个任务不改变当前计时归属。
-    await englishCard.locator('h3').click();
+    await page.locator('#execution-controls-close').click();await englishCard.locator('h3').click();await page.locator('#execution-mini-open').click();
     await page.locator('#mobile-interrupt-toggle').click();
     await page.locator('[data-label-id=interrupt_meal]').click();
     await page.locator('.activity-reminder-dialog button[type=submit]').click();
@@ -68,14 +69,14 @@ if (!baseUrl || !['127.0.0.1','localhost','[::1]'].includes(new URL(baseUrl).hos
     assert.equal(result.segments.filter(segment=>!segment.ended_at).length,1);
     // 多屏尺寸均在任务前使用同一快捷入口，面板支持切换、收起与关闭。
     for(const size of [{width:360,height:640},{width:390,height:844},{width:768,height:1024},{width:1024,height:680}]) {
-      await page.setViewportSize(size);
+      await page.setViewportSize(size);await page.waitForTimeout(350);
       await page.locator('#mobile-counted-toggle').click();
       await page.locator('#mobile-counted-panel').waitFor({state:'visible'});
       const toggle=await page.locator('#mobile-counted-toggle').boundingBox();
       const task=await mathCard.boundingBox();
       const picker=await page.locator('#mobile-counted-panel').boundingBox();
-      assert(toggle.y<task.y&&toggle.height>=44,'快捷按钮应在任务前且易于触控');
-      assert(picker.y>=toggle.y+toggle.height&&picker.y-toggle.y-toggle.height<=12,'标签在原位按钮下展开');
+      assert(toggle.height>=44&&toggle.y>=0&&toggle.y+toggle.height<=size.height,'快捷按钮位于可访问面板内且易于触控');
+      assert(picker.y+picker.height<=toggle.y+2,'标签从靠近底部的按钮上方展开');
       await noOverflow();
       await page.locator('#mobile-interrupt-toggle').click();
       assert(!(await page.locator('#mobile-counted-panel').isVisible()));
@@ -86,11 +87,11 @@ if (!baseUrl || !['127.0.0.1','localhost','[::1]'].includes(new URL(baseUrl).hos
       await page.keyboard.press('Escape');
       assert(!(await page.locator('#mobile-counted-panel').isVisible()));
       await page.locator('#mobile-counted-toggle').click();
-      await page.locator('h1').click();
+      await page.locator('.execution-controls-heading').click();
       assert(!(await page.locator('#mobile-counted-panel').isVisible()));
       const left=await page.locator('#execute-panel').boundingBox();
-      const timeline=await page.locator('#timeline-panel').boundingBox();
-      assert(timeline.y>=left.y+left.height,'折叠时间轴在任务下方，不预留空侧栏');
+      const timeline=await page.locator('#execute-chronology').boundingBox();
+      const sheet=await page.locator('#execution-controls').boundingBox();assert(timeline.x>=sheet.x&&timeline.x+timeline.width<=sheet.x+sheet.width,'时间轴归入独立面板');
     }
     await page.locator('#execute-stop').click();
     await waitForActive('当前空闲');
@@ -104,7 +105,7 @@ if (!baseUrl || !['127.0.0.1','localhost','[::1]'].includes(new URL(baseUrl).hos
     await page.locator('#execute-stop').click();
     await waitForActive('当前空闲');
     // 时间轴补记与修改仍可使用。
-    await page.locator('#timeline-toggle').click();
+    await page.locator('#execution-controls-fab').click();await page.locator('.chronology-browse').click();
     await page.locator('#add-segment').click();
     const editor=page.locator('.timeline-card.draft');
     await editor.locator('.segment-start').fill(`${date}T08:00`);
@@ -118,7 +119,7 @@ if (!baseUrl || !['127.0.0.1','localhost','[::1]'].includes(new URL(baseUrl).hos
     const historical=result.segments.find(segment=>segment.started_at.startsWith(`${date}T08:00`));
     assert(historical,'补记记录已写入');
     const row=page.locator(`.timeline-card[data-segment-id="${historical.id}"]`);
-    await row.locator('summary').click();
+    await page.locator(`.chronology-record[data-segment-id="${historical.id}"]`).click();await page.locator(`.chronology-record[data-segment-id="${historical.id}"]`).click();
     await row.locator('.segment-end').fill(`${date}T08:12`);
     await row.locator('.segment-save').click();
     await page.waitForFunction(()=>document.querySelector('#toast')?.textContent.includes('更新'));
@@ -153,9 +154,9 @@ if (!baseUrl || !['127.0.0.1','localhost','[::1]'].includes(new URL(baseUrl).hos
     assert.equal(result.task_execution_board.find(board=>board.task_id===math.id).interrupt_labels.find(label=>label.label_id==='counted_toilet').minutes>=12,true);
     await page.goto(`${baseUrl}/execute?date=${date}`);
     await page.waitForSelector('#execute-panel:visible');
-    await page.locator('#timeline-toggle').click();
+    await page.locator('#execution-controls-fab').click();await page.locator('.chronology-browse').click();
     const oldRow=page.locator(`.timeline-card[data-segment-id="${historical.id}"]`);
-    await oldRow.locator('summary').click();
+    await page.locator(`.chronology-record[data-segment-id="${historical.id}"]`).click();await page.locator(`.chronology-record[data-segment-id="${historical.id}"]`).click();
     assert.equal(await oldRow.locator('.segment-label-id').inputValue(),'counted_toilet');
     await oldRow.locator('.segment-end').fill(`${date}T08:13`);
     await oldRow.locator('.segment-save').click();

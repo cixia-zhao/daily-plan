@@ -7,13 +7,13 @@ if(!base || !['127.0.0.1','localhost'].includes(new URL(base).hostname)) throw E
  const browser=await chromium.launch({headless:true,executablePath:process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH});
  try {
   const page=await browser.newPage({viewport:{width:390,height:844},isMobile:true,hasTouch:true});
-  await page.clock.install({time:new Date('2026-10-15T12:00:00+08:00')});
+  const testDay=new Date().toLocaleDateString('en-CA',{timeZone:'Asia/Shanghai'});await page.clock.install({time:new Date(testDay+'T12:00:00+08:00')});
   const errors=[];page.on('pageerror',e=>errors.push(e.message));
   const api=async(path,method='GET',data)=>{const r=await page.request.fetch(`${base}/api/${path}`,{method,data});assert(r.ok(),await r.text());return r.json();};
   const health=await api('system/health');
   assert(health.database_path.startsWith('/tmp/') && !health.ai_enabled,'必须使用临时库且关闭 AI');
   const settings=await api('settings');await api('settings','PUT',{...settings,project_start_date:'2026-10-01'});
-  const day='2026-10-13';
+  const day=testDay;
   await page.goto(`${base}/?date=${day}`);
   await page.locator('[data-target-category=math]').waitFor();
   await page.locator('#plan-date-button').click();
@@ -46,13 +46,13 @@ if(!base || !['127.0.0.1','localhost'].includes(new URL(base).hostname)) throw E
   const plan=await api(`daily-plans/${day}`), math=plan.tasks.find(t=>t.category==='math'&&!t.is_sub);
   assert.equal(math.estimated_minutes,75,'确认时保存最新修改');
   const card=()=>page.locator(`[data-execution-task-id="${math.id}"]`);
-  const start=async()=>{if(!(await card().locator('.effective-start-panel').isVisible())) await card().locator('.task-start-button').click();await card().locator('[data-start-label-id=""]').click();};
+  const start=async()=>{if(await page.locator('#execution-controls').isVisible()){if(!await page.locator('#execution-controls').evaluate(e=>e.classList.contains('is-closing')))await page.locator('#execution-controls-close').click();await page.locator('#execution-controls').waitFor({state:'hidden'});}if(!(await card().locator('.effective-start-panel').isVisible())) await card().locator('.task-start-button').click();await card().locator('[data-start-label-id=""]').click();};
   const clock=()=>page.locator('#execute-clock').innerText();
   const seconds=text=>text.split(':').reduce((n,x)=>n*60+Number(x),0);
   await start();await page.waitForFunction(()=>document.querySelector('#execute-active-badge').textContent.includes('数学'));
   const initial=seconds(await clock());await page.clock.runFor(3100);
   assert(seconds(await clock())>=initial+2,'时钟每秒前进');
-  await card().locator('h3').click();
+  await page.locator('#execution-controls-close').click();await card().locator('h3').click();
   assert(seconds(await clock())>=initial+2,'选择卡片不重置时钟');
   await card().locator('.task-start-button').click();
   await card().locator('[data-start-label-id=effective_math_course]').click();
@@ -68,7 +68,7 @@ if(!base || !['127.0.0.1','localhost'].includes(new URL(base).hostname)) throw E
   await page.unroute('**/api/daily-execution/*/tasks/start');
   await start();await page.waitForFunction(()=>!document.querySelector('#execute-stop').disabled);
   // 被动同步不覆盖时间轴中的未保存修改。
-  await page.locator('#timeline-toggle').click();await page.locator('#add-segment').click();
+  await page.locator('.chronology-browse').click();await page.locator('#add-segment').click();
   const editor=page.locator('.timeline-card.draft');await editor.locator('.segment-start').fill(`${day}T08:00:12`);
   await page.clock.runFor(15000);
   assert.equal(await editor.locator('.segment-start').inputValue(),`${day}T08:00:12`);
@@ -116,7 +116,7 @@ if(!base || !['127.0.0.1','localhost'].includes(new URL(base).hostname)) throw E
   assert.equal(await clock(),'00:00:00');assert(await page.locator('#execute-stop').isDisabled());
   // 记录无需提交，复盘可以另外保存。
   assert.equal((await api(`daily-execution/${day}`)).plan.status,'approved');
-  await page.locator('#enter-review').click();
+  await page.locator('#execution-complete-tab').click();await page.locator('#enter-review').click();
   const ready=()=>page.waitForFunction(()=>document.querySelector('#review-workspace-content')?.getAttribute('aria-busy')==='false');
   await ready();assert.equal(await page.locator('#daily-record-status').innerText(),'学习记录已保存');
   assert.equal(await page.locator('#daily-review-state').innerText(),'复盘待填写');

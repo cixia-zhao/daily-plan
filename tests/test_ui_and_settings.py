@@ -12,7 +12,7 @@ def make_client(tmp_path):
 
 def test_pages_are_available(tmp_path):
     client = make_client(tmp_path)
-    for path, marker in [("/", "生成今天的草稿"), ("/execute", "执行台"), ("/review", "本周复盘导航"), ("/weekly", "本周复盘导航"), ("/gpt-workbench", "GPT 协作工作台"), ("/settings", "任务设置")]:
+    for path, marker in [("/", "生成今天的草稿"), ("/execute", "完成与复盘"), ("/review", "本周复盘导航"), ("/weekly", "本周复盘导航"), ("/gpt-workbench", "GPT 协作工作台"), ("/settings", "任务设置")]:
         response = client.get(path)
         assert response.status_code == 200
         assert marker in response.text
@@ -114,13 +114,13 @@ def test_review_page_assets_exist():
 
 def test_execute_page_assets_exist():
     script = Path("app/static/app.js").read_text(encoding="utf-8")
-    execute = Path("app/templates/execute.html").read_text(encoding="utf-8")
+    execute = "\n".join(Path(path).read_text(encoding="utf-8") for path in ["app/templates/execute.html", "app/templates/execution_tasks.html", "app/templates/execution_overlay.html"])
     styles = Path("app/static/style.css").read_text(encoding="utf-8")
 
-    assert "if (page === 'execute')" in script
+    assert "if (page === 'execute' || $('#review-records-workspace'))" in script
     assert "/api/daily-execution/" in script
     assert "Array.isArray(rawDetail)" in script
-    assert 'id="execute-date-button"' in execute
+    assert 'id="execute-date-button"' not in execute
     assert 'id="execute-task-list"' in execute
     assert 'id="execute-mobile-toolbar"' in execute
     assert 'id="mobile-counted-toggle"' in execute
@@ -128,9 +128,9 @@ def test_execute_page_assets_exist():
     assert 'id="mobile-return-effective"' in execute
     assert 'id="mobile-counted-label-list"' in execute
     assert 'id="mobile-interrupt-label-list"' in execute
-    assert 'id="timeline-list"' in execute
-    assert 'id="timeline-toggle"' in execute
-    assert 'id="timeline-content"' in execute
+    assert 'id="timeline-list"' not in execute
+    assert 'id="timeline-toggle"' not in execute
+    assert 'id="timeline-content"' not in execute
     assert 'id="execute-submit-zero-toggle"' in execute
     assert 'id="enter-review"' in execute
     assert 'id="execute-submit"' not in execute
@@ -139,7 +139,7 @@ def test_execute_page_assets_exist():
     assert "effective_labels_by_category" in script
     assert "effective-label-button" in script
     assert "有效细分" in script
-    assert "collapsedTimeline" in script
+    assert "window.DailyPlanRecords" in script
     assert "collapsedZeroMinuteSubmit" in script
     assert "今日原计划为 0 分的项目" in script
     assert ".execute-layout" in styles

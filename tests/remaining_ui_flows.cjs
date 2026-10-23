@@ -11,7 +11,7 @@ if(!base || !['127.0.0.1','localhost'].includes(new URL(base).hostname)) throw E
   const api=async(path,method='GET',data)=>{const r=await page.request.fetch(`${base}/api/${path}`,{method,data});assert(r.ok(),await r.text());return r.json();};
   const health=await api('system/health');assert(health.database_path.startsWith('/tmp/')&&!health.ai_enabled);
   const settings=await api('settings');await api('settings','PUT',{...settings,project_start_date:'2026-10-01'});
-  const day='2026-10-14',other='2026-10-13';
+  const day=new Date().toLocaleDateString('en-CA',{timeZone:'Asia/Shanghai'}),other='2026-10-13';
   const plan=await api('daily-plans/draft','POST',{date:day,energy:'normal',day_type:'normal',target_minutes:{math:60,english:20,computer:0,rehab:0}});
   await api(`daily-plans/${day}/approve`,'POST');
   const math=plan.tasks.find(task=>task.category==='math'&&!task.is_sub);
@@ -19,23 +19,23 @@ if(!base || !['127.0.0.1','localhost'].includes(new URL(base).hostname)) throw E
   await page.goto(`${base}/execute?date=${day}`);
   await page.locator('#execute-panel').waitFor({state:'visible'});
   const card=page.locator(`[data-execution-task-id="${math.id}"]`);
-  const start=async()=>{await card.locator('.task-start-button').click();await card.locator('[data-start-label-id=""]').click();};
+  const start=async()=>{if(await page.locator('#execution-controls').isVisible()){if(!await page.locator('#execution-controls').evaluate(e=>e.classList.contains('is-closing')))await page.locator('#execution-controls-close').click();await page.locator('#execution-controls').waitFor({state:'hidden'});}await card.locator('.task-start-button').click();await card.locator('[data-start-label-id=""]').click();};
   await start();await page.waitForFunction(()=>document.querySelector('#execute-active-badge').textContent.includes('数学'));
-  await page.locator('#timeline-toggle').click();
-  const last=page.locator('.timeline-card').last();await last.scrollIntoViewIfNeeded();
+  await page.locator('.chronology-browse').click();
+  const last=page.locator('.chronology-record').last();await page.locator('.execution-sheet-body').evaluate(e=>e.scrollTop=e.scrollHeight);
   for(const [width,height] of [[360,640],[390,844],[768,1024],[1024,680]]) {
-   await page.setViewportSize({width,height});await last.scrollIntoViewIfNeeded();
+   await page.setViewportSize({width,height});await page.waitForTimeout(350);await page.locator('.execution-sheet-body').evaluate(e=>e.scrollTop=e.scrollHeight);
    const header=await page.locator('.site-header').boundingBox(),current=await page.locator('#execute-current-panel').boundingBox(),stop=await page.locator('#execute-stop').boundingBox();
-   assert(current.y>=header.y+header.height-1&&current.y<header.height+2,'滚到时间轴时当前执行区贴住导航下沿');
+   const body=await page.locator('.execution-sheet-body').boundingBox();assert(current.y>=body.y-1&&current.y<body.y+20,'记录列表滚动时计时卡仍固定在面板内');
    assert(stop.y>=0&&stop.y+stop.height<=height&&stop.height>=44,'滚动后仍可停止');
    assert(await page.evaluate(width=>document.documentElement.scrollWidth<=width,width),'无横向溢出');
    if(width===390||width===768) await page.screenshot({path:`/tmp/daily-plan-sticky-${width}.png`});
   }
   await page.setViewportSize({width:390,height:844});
   assert.equal(await page.locator('#execute-choose-task').count(),0);
-  await card.scrollIntoViewIfNeeded();
+  await page.locator('#execution-controls-close').click();await card.scrollIntoViewIfNeeded();await page.locator('#execution-mini-open').click();
   const taskBox=await card.boundingBox(),currentBox=await page.locator('#execute-current-panel').boundingBox();
-  assert(taskBox.y>=currentBox.y+currentBox.height-1,'切换任务入口把清单带到当前执行区下方');
+  assert(await page.locator('#execution-controls').isVisible(),'切课后可重新唤出同一计时面板');
   let release,entered;const gate=new Promise(r=>release=r),arrived=new Promise(r=>entered=r);
   let stopWrites=0;
   await page.route(`**/api/daily-execution/${day}/stop`,async route=>{stopWrites++;entered();await gate;await route.continue();});
@@ -65,17 +65,15 @@ if(!base || !['127.0.0.1','localhost'].includes(new URL(base).hostname)) throw E
   assert(labelBox.x>=0&&labelBox.x+labelBox.width<=390&&labelBox.height>0);
   assert((await page.locator('#execute-stop').boundingBox()).y+44<=844);
   assert(await page.evaluate(()=>document.documentElement.scrollWidth<=390&&innerWidth===390),'长标题不能撑宽手机布局视口');
-  await page.locator('.timeline-card').last().scrollIntoViewIfNeeded();
+  await page.locator('.execution-sheet-body').evaluate(e=>e.scrollTop=e.scrollHeight);
   const longHeader=await page.locator('.site-header').boundingBox(),longCurrent=await page.locator('#execute-current-panel').boundingBox();
-  assert(longHeader.y>=0&&longCurrent.y>=longHeader.height-1&&longCurrent.y<longHeader.height+2);
+  assert(longHeader.y>=0&&longCurrent.y>=0&&longCurrent.y+longCurrent.height<=844);
   await page.screenshot({path:'/tmp/daily-plan-current-long-name.png'});
   await page.unroute(`**/api/daily-execution/${day}`);
-  // 选择新日期读取失败不能把旧日期的计时挂在新日期下。
+  // 历史执行地址转到复盘，读取失败显示错误，不残留今天的时钟。
   await page.route(`**/api/daily-execution/${other}`,route=>route.fulfill({status:503,contentType:'application/json',body:'{"detail":"测试读取失败"}'}));
-  await page.locator('#execute-date-button').click();await page.locator(`.calendar-day[data-date="${other}"]`).click();
-  await page.locator('#execute-load-retry').waitFor({state:'visible'});assert(!(await page.locator('#execute-current-panel').isVisible()));
-  await page.unroute(`**/api/daily-execution/${other}`);await page.locator('#execute-load-retry').click();
-  await page.waitForFunction(()=>document.querySelector('#execute-empty-message').textContent.includes('还没有计划'));
+  await page.goto(`${base}/execute?date=${other}`);await page.locator('#execution-controls').waitFor();assert(await page.locator('#execute-current-panel').isHidden());assert.match(await page.locator('#execution-records-empty').innerText(),/读取失败/);
+  await page.unroute(`**/api/daily-execution/${other}`);await page.locator('#execution-controls-close').click();await page.locator('#review-records-open').click();await page.waitForFunction(()=>document.querySelector('#execution-records-empty').textContent.includes('没有计划'));
   await api(`daily-execution/${day}/stop`,'POST');
   await api('daily-reviews','POST',{date:day,effective_method:'旧方法',tomorrow_focus:'',reflection_text:'保留原有复盘正文'});
   const ready=()=>page.waitForFunction(()=>document.querySelector('#review-workspace-content')?.getAttribute('aria-busy')==='false'&&!document.querySelector('#review-workspace-content').classList.contains('is-loading'));
@@ -102,7 +100,7 @@ if(!base || !['127.0.0.1','localhost'].includes(new URL(base).hostname)) throw E
   }
   // 复盘错误有持久重试入口；重试成功后恢复草稿。
   await page.route(`**/api/daily-review/${other}`,route=>route.fulfill({status:503,contentType:'application/json',body:'{"detail":"测试读取失败"}'}));
-  await page.locator(`.review-week-step[data-date="${other}"][data-scope=daily]`).click();await page.locator('#review-retry').waitFor({state:'visible'});
+  await page.locator('#review-date-button').click();await page.locator(`.calendar-day[data-date="${other}"]`).click();await page.locator('#review-retry').waitFor({state:'visible'});
   await page.unroute(`**/api/daily-review/${other}`);await page.locator('#review-retry').click();await ready();
   await page.locator('#review-reflection-tab').click();assert.equal(await outcome.inputValue(),'','不同日期不串成果');
   await page.goto(`${base}/review?date=${day}&scope=weekly`);await ready();

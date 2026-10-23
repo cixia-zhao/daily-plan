@@ -1,0 +1,146 @@
+/* 全站共用暖纸表面、导航、控件与动效。 */
+:root{--paper:#f4f1e9;--surface:#fffdf8;--soft:#e9e2d5;--line:#d8d0c3;--ink:#29251f;--muted:#736b60;--accent:#ac624a;--accent-soft:#f0e2d8;--shadow:0 12px 36px #30271919;--surface-speed:240ms;--surface-ease:cubic-bezier(.2,.75,.2,1)}
+body{background:var(--paper);color:var(--ink)}
+body[data-page] .site-header{min-height:64px;padding-inline:max(24px,calc((100vw - 1160px)/2));background:var(--surface);border-bottom:1px solid var(--line);backdrop-filter:none;gap:18px}
+body[data-page] .site-header .brand{display:inline-flex;font-size:16px;font-weight:600}
+body[data-page] .site-nav,body[data-page] .primary-nav{display:flex;align-items:center;gap:8px}
+body[data-page] .primary-nav{position:relative;align-self:stretch}
+body[data-page] .primary-nav>a,body[data-page] .nav-more summary{min-width:60px;min-height:44px;padding:10px 14px;border:0;border-radius:0;background:transparent!important;color:var(--muted);font-size:14px;font-weight:500;justify-content:center}
+body[data-page] .primary-nav>a[aria-current=page]{color:var(--accent);border:0}
+body[data-page=execute] .primary-nav>a[data-nav=execute],body[data-page=review] .primary-nav>a[data-nav=review]{border:0}
+.primary-nav-indicator{position:absolute;bottom:0;left:0;height:2px;background:var(--accent);transition:transform var(--surface-speed) var(--surface-ease),width var(--surface-speed) var(--surface-ease);pointer-events:none}
+body:is([data-page=settings],[data-page=gpt-workbench]) .nav-more summary{color:var(--accent);box-shadow:inset 0 -2px var(--accent)}
+body[data-page] .nav-more-panel{background:var(--surface);border-color:var(--line);border-radius:10px;box-shadow:var(--shadow)}
+body main{padding-top:24px;max-width:1100px}
+body[data-page] .hero h1{font-size:28px;line-height:1.35;font-weight:500;letter-spacing:-.5px}
+body[data-page] :is(button,.primary,.secondary,.ghost-button){min-height:44px;font-size:14px;border-radius:8px}
+body[data-page] :is(.primary,button.primary){background:var(--ink);border-color:var(--ink);color:var(--surface)}
+body[data-page] :is(.ghost-button,.secondary){background:var(--surface);border-color:var(--line);color:var(--ink)}
+body[data-page] :is(input:not([type=checkbox]):not([type=radio]):not([type=hidden]),select,textarea){font-size:16px;min-height:44px;border-color:var(--line);border-radius:7px;background:var(--surface);color:var(--ink)}
+body[data-page] :is(.panel,.archive-card,.calendar-dialog,.confirm-dialog,.record-form,.task-edit-dialog){background:var(--surface);border-color:var(--line);border-radius:12px}
+body[data-page] :is(.calendar-backdrop,.confirm-backdrop){background:#29231c40}
+body[data-page] .settings-group{background:transparent;border-width:0 0 1px;border-radius:0;border-color:var(--line)}
+body[data-page] .config-note{background:var(--paper)}
+body[data-page] .settings-form{gap:0}
+body[data-page] .settings-group>summary{min-height:52px;padding-inline:0}
+body[data-page] .settings-save{padding-top:18px}
+body[data-page] .calendar-day{border-radius:6px}
+body[data-page] .calendar-day.selected{background:var(--accent);color:var(--surface)}
+body[data-page] .preview-banner{background:var(--soft);color:var(--muted)}
+body[data-page] .section-heading h2{font-size:21px}
+.surface-tabs,.plan-route-tabs,.review-section-tabs{position:relative;display:flex;align-items:center;gap:26px;border-bottom:1px solid var(--line);margin:0 0 18px;padding:0}
+body[data-page] :is(.surface-tab,.plan-route-tab,.review-section-tab){position:relative;min-height:44px;padding:8px 0;border:0;border-radius:0;background:transparent;color:var(--muted);font-size:14px;font-weight:400}
+body[data-page] :is(.surface-tab[aria-selected=true],.plan-route-tab.active,.review-section-tab[aria-selected=true]){color:var(--ink);font-weight:600}
+.surface-tab-indicator,.plan-tab-indicator,.review-tab-indicator{position:absolute;left:0;bottom:-1px;height:2px;background:var(--accent);transition:transform var(--surface-speed) var(--surface-ease),width var(--surface-speed) var(--surface-ease);pointer-events:none}
+body[data-page] .plan-route-tab.active:after{display:none}
+.surface-enter{animation:surface-enter var(--surface-speed) var(--surface-ease) both}
+@keyframes surface-enter{from{opacity:.25;transform:translateX(var(--surface-shift,18px))}to{opacity:1;transform:translateX(0)}}
+@keyframes sheet-up{from{transform:translateY(100%)}to{transform:translateY(0)}}
+@keyframes sheet-side{from{transform:translateX(36px);opacity:.3}to{transform:translateX(0);opacity:1}}
+/* 课程与完成各自占一页，执行面板浮在独立层。 */
+body[data-page=execute] main{padding-top:16px;padding-bottom:110px}
+body[data-page=execute] #execute-panel{padding:0 18px;background:var(--surface);border:1px solid var(--line);border-radius:12px;margin-top:0}
+body[data-page=execute] #execute-task-list .execution-task-card{padding:16px 0;border-radius:0}
+body[data-page=execute] .execution-task-head h3{font-size:16px;font-weight:500}
+body[data-page=execute] .execution-task-meta{margin:7px 0 0 30px}
+body[data-page=execute] #execute-submit-panel{margin-top:0}
+body[data-page=execute] #execute-panel .execute-layout{display:block}
+.execution-controls-fab{z-index:25;bottom:calc(22px + env(safe-area-inset-bottom));background:var(--ink);border-color:var(--ink);color:var(--surface);border-radius:28px;box-shadow:0 5px 16px #30271922}
+.execution-controls-backdrop{position:fixed;inset:0;z-index:30;border:0;border-radius:0;background:#29231c40;padding:0;animation:surface-scrim 200ms ease both}
+@keyframes surface-scrim{from{opacity:0}to{opacity:1}}
+.execution-controls{display:flex;flex-direction:column;position:fixed;z-index:31;left:0;right:0;bottom:0;max-height:calc(100dvh - 64px);width:min(100%,640px);margin-inline:auto;border:1px solid var(--line);border-radius:22px 22px 0 0;background:var(--surface);box-shadow:0 -8px 36px #30271920;animation:sheet-up 300ms var(--surface-ease) both;overflow:hidden}
+.execution-sheet-handle{display:flex;align-items:center;justify-content:center;min-height:24px!important;height:24px;flex-shrink:0;width:100%;border:0;background:transparent;padding:0}
+.execution-sheet-handle>span{width:36px;height:4px;border-radius:4px;background:var(--line)}
+.execution-controls-heading{display:flex;align-items:center;justify-content:space-between;min-height:44px;margin:0;padding:0 20px;gap:12px;flex-shrink:0}
+.execution-controls-heading h2{margin:0;font-family:var(--font-serif,Georgia,serif);font-size:21px;font-weight:500;line-height:1.4;overflow-wrap:anywhere}
+.execution-controls-heading>button{padding:8px;min-width:44px;min-height:44px;color:var(--muted);background:transparent;border:0}
+.execution-controls-heading svg{width:20px;height:20px}
+.execution-sheet-body{min-height:0;overflow:auto;overscroll-behavior:contain;padding:12px 20px calc(20px + env(safe-area-inset-bottom));scrollbar-width:thin;max-height:calc(100dvh - 140px)}
+.execution-sheet-body #execute-current-panel{position:sticky;top:0;z-index:2;border:0;border-left:3px solid var(--accent);border-radius:12px;background:var(--soft);padding:16px;margin:0 0 18px}
+#execution-controls .execution-sheet-body .execution-current{display:block;padding:0;border:0}
+#execution-controls .execution-sheet-body .execution-current-heading{display:none}
+.execution-sheet-body #execute-active-badge{display:flex!important;align-items:baseline;flex-wrap:nowrap!important;gap:6px;min-width:0;font-size:14px}
+#execution-controls .execution-sheet-body .execution-current-title{display:block!important;flex:0 1 auto;min-width:0;width:auto!important;max-width:60%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#execution-controls .execution-sheet-body .execution-current-label{display:block!important;flex:1 1 auto;min-width:0;width:auto!important;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--muted);font-size:14px}
+#execution-controls .execution-sheet-body .execution-clock-control{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:10px}
+.execution-sheet-body #execute-clock-caption{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%)}
+.execution-sheet-body #execute-clock{font-size:40px;line-height:1.15;letter-spacing:-1.4px}
+.execution-sheet-body #execute-stop{min-width:64px;background:var(--ink);color:var(--surface);border:0;min-height:44px}
+.execution-sheet-body #execute-current-panel[aria-busy=false] #execute-stop:disabled{display:none}
+#execution-controls .execution-sheet-body .execution-goal-progress{margin:0 0 18px;padding:0;border:0}
+#execution-controls .execution-sheet-body .execution-goal-caption{font-size:12px}
+#execution-controls .execution-sheet-body .execution-goal-detail{font-size:12px;margin-top:7px}
+#execution-controls .execution-sheet-body .execution-goal-track{border-radius:3px;background:var(--soft)}
+#execution-controls .execution-sheet-body .execution-support #execute-reminder-status{font-size:12px;margin:10px 0}
+#execution-controls .execution-sheet-body .execution-save-note{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);margin:-1px;padding:0}
+#execution-controls .execution-sheet-body .execution-chronology{margin:0;padding:0 0 14px;border:0;background:transparent}
+#execution-controls .execution-sheet-body .chronology-heading{flex-wrap:nowrap;margin-bottom:4px;gap:4px}
+#execution-controls .execution-sheet-body .chronology-heading h2{font-family:inherit;font-size:12px;font-weight:400;color:var(--muted)}
+#execution-controls .execution-sheet-body .chronology-heading button{padding:5px;min-width:40px;min-height:44px;background:transparent;border:0}
+.execution-sheet-body #execute-mobile-toolbar{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin:0;padding:14px 0 0;border-top:1px solid var(--line);position:relative}
+.execution-sheet-body #execute-mobile-toolbar>button{flex:1 0 auto;padding:8px 6px;font-size:12px;background:var(--paper)}
+.execution-sheet-body #quick-correction-open:disabled{display:none}
+.execution-quick-open{flex-basis:100%!important}
+#execution-controls .execution-sheet-body .execution-mobile-label-panel{top:auto!important;bottom:100%;max-height:240px;overflow:auto;background:var(--surface);box-shadow:var(--shadow)}
+.execution-sheet-body #temporary-form{padding:14px;margin-top:12px}
+.execution-mini{position:fixed;z-index:25;left:12px;right:12px;bottom:calc(14px + env(safe-area-inset-bottom));display:flex;align-items:center;gap:8px;max-width:620px;margin:auto;padding:8px;background:var(--surface);border:1px solid var(--line);border-radius:14px;box-shadow:0 5px 22px #30271920}
+.execution-mini #execution-mini-open{display:flex;flex:1;min-width:0;align-items:center;justify-content:space-between;gap:10px;padding:8px;border:0;background:transparent;color:var(--ink)}
+#execution-mini-title{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:left;font-size:13px}
+#execution-mini-clock{font-variant-numeric:tabular-nums;font-size:15px;white-space:nowrap}
+#execution-mini-stop{min-width:60px;flex-shrink:0}
+.execution-sheet-open{overflow:hidden}
+.records-only .execution-controls-fab,.records-only #execution-mini,.records-only #execute-mobile-toolbar,.records-only #temporary-form{display:none!important}
+.records-only:not(.has-running) #execute-current-panel,.records-only #execute-goal-progress,.records-only #execute-reminder-status{display:none!important}
+.review-records-open{margin:16px 0;display:flex;align-items:center;gap:12px}
+.execution-overlay dialog{max-height:calc(100dvh - 32px)}
+@media(min-width:1000px){
+ .execution-controls{left:auto;right:max(24px,calc((100vw - 1160px)/2));top:calc(var(--execution-header-height,64px) + 20px);bottom:auto;width:380px;max-height:calc(100dvh - var(--execution-header-height,64px) - 42px);margin:0;border-radius:20px;box-shadow:var(--shadow);animation:sheet-side 260ms var(--surface-ease) both}
+ .execution-sheet-body{max-height:calc(100dvh - var(--execution-header-height,64px) - 110px)}
+ .execution-sheet-handle{display:none}
+ .execution-controls-heading{padding-top:12px}
+ .execution-controls-backdrop{display:none}
+ .execution-mini{left:auto;right:24px;width:380px}
+ .execution-sheet-open{overflow:auto}
+ body[data-page=execute].execution-panel-open main{width:calc(100% - 468px);max-width:740px;margin-left:max(24px,calc((100vw - 1160px)/2));margin-right:424px}
+ body[data-page=review].execution-panel-open main{width:calc(100% - 468px);max-width:740px;margin-left:max(24px,calc((100vw - 1160px)/2));margin-right:424px}
+}
+@media(max-width:760px){
+ body[data-page] .site-header{min-height:56px;padding:0 12px;gap:0}
+ body[data-page] .site-header .brand{display:none}
+ body[data-page] .site-nav{width:100%;gap:0;justify-content:space-between}
+ body[data-page] .primary-nav{flex:1;gap:0;justify-content:space-around;align-self:stretch}
+ body[data-page] .primary-nav>a,body[data-page] .nav-more summary{min-height:56px;min-width:0;flex:1;padding:8px 10px;font-size:14px}
+ body[data-page] .nav-more{flex:0 0 25%}
+ body[data-page] .nav-more summary{width:100%}
+ body main{width:calc(100% - 32px);padding-top:20px}
+ body[data-page] .hero h1{font-size:28px}
+ body[data-page=execute] main{padding-top:12px}
+ body[data-page=execute] .execution-task-head{flex-direction:row}
+ body[data-page=execute] #execute-panel{padding-inline:16px}
+ body[data-page=execute] .execution-task-actions{width:auto}
+ body[data-page] .hero.compact{margin-bottom:14px}
+ .execution-sheet-body{padding-inline:18px}
+}
+@media(prefers-reduced-motion:reduce){.surface-enter,.execution-controls,.execution-controls-backdrop{animation:none!important}.surface-tab-indicator,.plan-tab-indicator,.review-tab-indicator,.primary-nav-indicator{transition:none!important}::view-transition-group(*),::view-transition-old(*),::view-transition-new(*){animation:none!important}}
+
+/* 今天页保留原来的一屏清单预算；行内名称沿用紧凑编辑，主要操作仍44px。 */
+body[data-page=today] .plan-route-tabs{margin-bottom:0}
+body[data-page=today] #plan-section input.task-archive-title{min-height:24px;padding:0;background:transparent;border:0;font-size:17px}
+@media(max-width:759px){body[data-page=today] main{padding-top:12px;padding-bottom:8px}}
+@media(max-width:759px) and (max-height:680px){body[data-page=today] main{padding-top:8px;padding-bottom:4px}body[data-page=today] .plan-route-tab{min-height:44px}}
+
+body[data-page=execute] .execution-task-actions .task-start-button{background:var(--surface);color:var(--ink);border:1px solid var(--line)}
+.execution-sheet-handle{touch-action:none}
+.prompt-manager-switch{gap:26px}
+#prompt-editor-panel>.prompt-manager-row{margin-bottom:14px}
+
+.execution-controls.is-closing{animation:sheet-down 180ms ease-in both}
+.execution-controls-backdrop.is-closing{animation:sheet-scrim-out 160ms ease-in both}
+@keyframes sheet-down{to{transform:translateY(100%);opacity:.5}}
+@keyframes sheet-scrim-out{to{opacity:0}}
+@media(min-width:1000px){.execution-controls.is-closing{animation:sheet-side-out 180ms ease-in both}}
+@keyframes sheet-side-out{to{transform:translateX(36px);opacity:0}}
+
+.execution-label-row :is(input,select){height:44px;min-height:44px;padding:8px 10px}
+#execution-controls-fab{border-radius:28px}
+#execution-controls-backdrop{border-radius:0}

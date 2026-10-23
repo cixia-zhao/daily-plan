@@ -658,13 +658,18 @@ if (page === 'today') {
   }
 
   function selectPlanRoute(route) {
+    const previous=$('#plan-section').dataset.route;
     $('#plan-section').dataset.route = route;
     $$('.plan-route-tab').forEach(button => {
       const selected = button.dataset.route === route;
       button.classList.toggle('active', selected);
       button.setAttribute('aria-pressed', String(selected));
     });
+    PlanUI.indicator($('.plan-route-tabs'),'[aria-pressed=true]','.plan-tab-indicator');
+    if(previous&&previous!==route)PlanUI.enter($('#plan-section .columns-layout'),route==='sub'?1:-1);
   }
+  const planTabs=$('.plan-route-tabs');
+  if(planTabs){const line=document.createElement('span');line.className='plan-tab-indicator surface-tab-indicator';planTabs.append(line);new ResizeObserver(()=>PlanUI.indicator(planTabs,'[aria-pressed=true]','.plan-tab-indicator')).observe(planTabs);}
   $$('.plan-route-tab').forEach(button => button.onclick = () => selectPlanRoute(button.dataset.route));
 
   function markPlanDirtyAfterSubmission() {
@@ -1013,16 +1018,19 @@ if (page === 'today') {
   }).catch(error => toast(error.message));
 }
 
-if (page === 'execute') {
+if (page === 'execute' || $('#review-records-workspace')) {
+  const recordsOnly = page !== 'execute';
+  let executionTab = 'courses';
+  let controlsFocus = null;
+  let controlsClosing=false, controlsCloseTimer=null;
   const dateInput = $('#execute-date');
-  const dateButton = $('#execute-date-button');
   const selectedFromQuery = new URLSearchParams(window.location.search).get('date');
   let executionState = null;
   let notificationState = null;
   let selectedTaskId = null;
-  let showDraftSegment = false;
-  let resetTimelineEditorId = null;
-  let timelineEditorDate = null;
+  let controlsExpanded = false;
+  let controlsHadActive = false;
+  let controlsDate = null;
   let switchingEffectiveLabel = false;
   let executionRevision = 0;
   let executionWrites = 0;
@@ -1040,13 +1048,101 @@ if (page === 'execute') {
   let quickCorrectionCategory = null;
   let quickCorrectionRequestId = null;
   const receivedTimes = new WeakMap();
+  let segmentDialogDate = null;
+  let segmentEditBusy = false;
+  const segmentDialog = $('#segment-edit-dialog');
+  const chronology = new ExecutionTimeline($('#execute-chronology'), openSegmentEditor, openNewSegmentEditor);
+  $('#segment-edit-close').onclick=()=>{if(!segmentEditBusy)segmentDialog.close();};
+  segmentDialog.addEventListener('close',()=>{if(segmentDialogDate===dateInput.value)$('#execute-chronology .chronology-surface')?.focus({preventScroll:true});});
+  segmentDialog.addEventListener('cancel',event=>{if(segmentEditBusy)event.preventDefault();});
+  segmentDialog.addEventListener('click',event=>{if(!segmentEditBusy&&event.target===segmentDialog&&event.clientX!==0){const box=segmentDialog.getBoundingClientRect();if(event.clientX<box.left||event.clientX>box.right||event.clientY<box.top||event.clientY>box.bottom)segmentDialog.close();}});
+  function openSegmentEditor(id) {
+    const segment=executionState?.segments.find(item=>item.id===id);
+    if(!segment||timingPending||segmentEditBusy)return;
+    segmentDialogDate=dateInput.value;
+    $('#segment-edit-title').textContent=segment.ended_at?'编辑时间段':'编辑运行中记录';
+    $('#segment-edit-context').textContent=`${segment.task_title} · ${timeCategoryNames[segmentTimeCategory(segment)]}${segment.is_estimated?' · 补记·估计':''}`;
+    $('#segment-edit-error').hidden=true;
+    $('#segment-edit-content').innerHTML=segmentEditorHtml(segment,false,{open:true});
+    wireSegmentEditors($('#segment-edit-content'));
+    segmentDialog.showModal();
+  }
 
   const header = $('.site-header');
   const currentPanel = $('#execute-current-panel');
+  const controlsRoot = $('#execution-controls');
+  const controlsFab = $('#execution-controls-fab');
+  const backdrop = $('#execution-controls-backdrop');
+  const mini = $('#execution-mini');
+  const phoneSheet = matchMedia('(max-width:999px)');
+  function controlsBusy() { return timingPending||segmentEditBusy||quickCorrectionBusy||wordCountsBusy; }
+  function beginControlsClose() {
+    if(controlsClosing)return;
+    controlsClosing=true;controlsRoot.classList.add('is-closing');backdrop.classList.add('is-closing');
+    controlsCloseTimer=setTimeout(()=>{
+      controlsClosing=false;controlsCloseTimer=null;controlsRoot.classList.remove('is-closing');backdrop.classList.remove('is-closing');updateExecutionControls();
+      const fallback=executionState?.active_segment?$('#execution-mini-open'):recordsOnly?$('#review-records-open'):controlsFab;
+      const restore=controlsFocus?.isConnected&&controlsFocus.matches('button,a[href],input,select,textarea,[tabindex]')&&controlsFocus.getClientRects().length?controlsFocus:fallback;
+      restore?.focus({preventScroll:true});
+    },matchMedia('(prefers-reduced-motion: reduce)').matches?0:180);
+  }
+  function updateExecutionControls() {
+    const active=Boolean(executionState?.active_segment);
+    if(controlsDate!==dateInput.value){controlsDate=dateInput.value;controlsExpanded=false;controlsHadActive=false;}
+    if(active&&!controlsHadActive||timingPending||!$('#execute-operation-feedback').hidden)controlsExpanded=true;
+    else if(controlsHadActive&&!active&&!segmentDialog.open&&!$('#quick-correction-dialog').open&&!$('#word-count-dialog').open){controlsExpanded=false;beginControlsClose();}
+    controlsHadActive=active;
+    const shown=controlsExpanded||controlsClosing;
+    controlsRoot.hidden=!shown;
+    controlsFab.hidden=recordsOnly||shown||active;
+    mini.hidden=recordsOnly||shown||!active;
+    controlsFab.setAttribute('aria-expanded',String(controlsExpanded));
+    controlsFab.disabled=controlsBusy();
+    $('#execution-controls-close').disabled=controlsBusy();
+    $('#execution-sheet-handle').disabled=controlsBusy();
+    $('#execution-mini-stop').disabled=timingPending;
+    backdrop.hidden=!shown||!phoneSheet.matches;
+    const modal=shown&&phoneSheet.matches;
+    controlsRoot.setAttribute('aria-modal',String(modal));
+    document.querySelector('main').inert=modal;
+    header.inert=modal;
+    document.body.classList.toggle('execution-sheet-open',modal);
+    document.body.classList.toggle('execution-panel-open',shown);
+    document.body.classList.toggle('execution-is-running',active);
+    $('#execution-overlay').classList.toggle('has-running',active);
+    $('#execution-controls-title').textContent=recordsOnly?`${dateInput.value} · 时间记录`:'计时与记录';
+    $('#execution-mini-title').textContent=active?`${active.task_title}${active.label_name?'／'+active.label_name:''}`:'';
+    if(!shown) {document.querySelector('main').inert=false;header.inert=false;}
+  }
+  function openExecutionControls() {
+    if(controlsCloseTimer){clearTimeout(controlsCloseTimer);controlsCloseTimer=null;controlsClosing=false;controlsRoot.classList.remove('is-closing');backdrop.classList.remove('is-closing');}
+    if(!controlsExpanded)controlsFocus=document.activeElement;
+    controlsDate=dateInput.value;controlsExpanded=true;updateExecutionControls();
+    requestAnimationFrame(()=>{if(phoneSheet.matches&&!segmentDialog.open&&!$('#quick-correction-dialog').open&&!$('#word-count-dialog').open)$('#execution-controls-close').focus({preventScroll:true});chronology.render();});
+  }
+  function closeExecutionControls() {
+    if(controlsBusy()||segmentDialog.open||$('#quick-correction-dialog').open||$('#word-count-dialog').open)return false;
+    controlsExpanded=false;$('#execute-operation-feedback').hidden=true;beginControlsClose();updateExecutionControls();return true;
+  }
+  controlsFab.onclick=openExecutionControls;
+  $('#execution-mini-open').onclick=openExecutionControls;
+  $('#execution-controls-close').onclick=closeExecutionControls;
+  $('#execution-sheet-handle').onclick=closeExecutionControls;
+  backdrop.onclick=closeExecutionControls;
+  phoneSheet.addEventListener('change',updateExecutionControls);
+  let sheetGesture=null;
+  $('#execution-sheet-handle').addEventListener('pointerdown',event=>{sheetGesture={id:event.pointerId,y:event.clientY};event.currentTarget.setPointerCapture(event.pointerId);});
+  $('#execution-sheet-handle').addEventListener('pointerup',event=>{if(sheetGesture?.id===event.pointerId&&event.clientY-sheetGesture.y>45)closeExecutionControls();sheetGesture=null;});
+  document.addEventListener('keydown',event=>{
+    if(!controlsExpanded||document.querySelector('dialog[open]'))return;
+    if(event.key==='Escape'){if(executionUiState.expandedLabelBucket||executionUiState.effectivePickerTaskId!==null)return;event.preventDefault();event.stopImmediatePropagation();closeExecutionControls();return;}
+    if(event.key==='Tab'&&phoneSheet.matches){const focusable=[...controlsRoot.querySelectorAll('button:not(:disabled),input:not(:disabled),select:not(:disabled),textarea:not(:disabled),[tabindex="0"]')].filter(node=>node.getClientRects().length);const first=focusable[0],last=focusable.at(-1);if(event.shiftKey&&document.activeElement===first){event.preventDefault();last?.focus();}else if(!event.shiftKey&&document.activeElement===last){event.preventDefault();first?.focus();}}
+  });
+
   function updateExecutionOffsets() {
     const headerHeight = header.getBoundingClientRect().height;
     document.documentElement.style.setProperty('--execution-header-height',`${headerHeight}px`);
-    document.body.style.setProperty('--execution-scroll-offset',`${headerHeight + currentPanel.getBoundingClientRect().height + 12}px`);
+    document.body.style.setProperty('--execution-scroll-offset',`${headerHeight + 12}px`);
   }
   const executionResize = new ResizeObserver(updateExecutionOffsets);
   executionResize.observe(header); executionResize.observe(currentPanel);
@@ -1055,25 +1151,28 @@ if (page === 'execute') {
     const active = executionState?.active_segment;
     currentPanel.setAttribute('aria-busy',String(timingPending));
     $('#execute-stop').disabled = timingPending || !active;
-    $('#execute-stop').textContent = timingPending && timingAction === '停止' ? '正在停止…' : '停止计时';
+    $('#execute-stop').textContent = timingPending && timingAction === '停止' ? '正在停止…' : '停止';
     $('#quick-correction-open').disabled = timingPending || !active || active.segment_kind !== 'effective' || active.included === false;
     $$('.task-start-button, .effective-start-option, .execution-label-button, #mobile-counted-toggle, #mobile-interrupt-toggle').forEach(button=>{button.disabled=timingPending;});
     $('#mobile-return-effective').disabled = timingPending || !(active && active.segment_kind !== 'effective' && active.task_id);
-    dateButton.disabled = timingPending || quickCorrectionBusy || wordCountsBusy;
+    updateExecutionControls();
   }
 
   function showExecutionError(message) {
     $('#execute-operation-message').textContent = message;
     $('#execute-operation-feedback').hidden = false;
+    openExecutionControls();
+    requestAnimationFrame(()=>$('#execute-operation-feedback').scrollIntoView({block:'nearest'}));
   }
 
   async function executionApi(path, options={}) {
+    const requestDate=dateInput.value;
     const writing = options.method && options.method !== 'GET';
-    const timing = writing && /\/(tasks\/start|labels\/start|stop|quick-corrections)$/.test(path);
+    const timing = writing && (/\/(tasks\/start|labels\/start|stop|quick-corrections)$/.test(path) || (options.method==='PUT' && path.endsWith(`/segments/${executionState?.active_segment?.id}`)));
     if (timing && timingPending) throw new Error('正在处理当前计时操作，请稍候。');
     if (timing) {
       timingPending = true;
-      timingAction = path.endsWith('/quick-corrections') ? '补记' : path.endsWith('/stop') ? '停止' : executionState?.active_segment ? '切换' : '开始';
+      timingAction = options.method==='PUT' ? '保存修改' : path.endsWith('/quick-corrections') ? '补记' : path.endsWith('/stop') ? '停止' : executionState?.active_segment ? '切换' : '开始';
       $('#execute-operation-feedback').hidden = true;
       updateTimingControls();
     }
@@ -1084,6 +1183,7 @@ if (page === 'execute') {
     try {
       const result = await api(path, options);
       if (result && typeof result === 'object') receivedTimes.set(result, performance.now());
+      if(writing&&recordsOnly)setTimeout(()=>document.dispatchEvent(new CustomEvent('execution-records-changed',{detail:{date:requestDate}})),0);
       return result;
     } catch (error) {
       if (writing) $('#execute-record-status').textContent = '这次操作未确认保存，请重试；原有记录保留。';
@@ -1100,7 +1200,9 @@ if (page === 'execute') {
     const seconds = clockActive ? Math.max(0, Math.floor(clockSeconds + (performance.now() - clockReceivedAt) / 1000)) : 0;
     $('#execute-clock').textContent = [Math.floor(seconds / 3600), Math.floor(seconds / 60) % 60, seconds % 60]
       .map(value => String(value).padStart(2, '0')).join(':');
+    $('#execution-mini-clock').textContent=$('#execute-clock').textContent;
     updateGoalProgress();
+    chronology.tick();
   }
 
   function updateGoalProgress() {
@@ -1146,7 +1248,6 @@ if (page === 'execute') {
     $$('[data-quick-minutes], input, [type=submit]',quickDialog).forEach(control=>{control.disabled=quickCorrectionBusy || !quickCorrectionCategory;});
     $('#quick-correction-close').disabled=quickCorrectionBusy;
     $('#quick-correction-form [type=submit]').textContent=quickCorrectionBusy?'保存中…':'保存';
-    dateButton.disabled=timingPending || quickCorrectionBusy || wordCountsBusy;
   }
   $('#quick-correction-open').onclick=()=>{
     const active=executionState?.active_segment;
@@ -1228,8 +1329,10 @@ if (page === 'execute') {
       $('#execute-operation-feedback').hidden = true;
       executionState = result;
       renderLiveExecution(result);
+      chronology.update(result,receivedTimes.get(result));
       const runnable = result.plan && ['approved', 'submitted'].includes(result.plan.status);
-      $('#execute-submit-panel').classList.toggle('hidden', !runnable || Boolean(result.active_segment));
+      $('#execute-submit-panel').classList.toggle('hidden', !runnable);
+      $('#execute-submit-panel').hidden=executionTab!=='complete';
     } catch {
       if (target === dateInput.value && revision === executionRevision && sequence === executionLoadSequence) {
         syncFailed = true; renderLiveExecution(executionState);
@@ -1256,7 +1359,6 @@ if (page === 'execute') {
       collapsedZeroMain: true,
       collapsedSub: true,
       expandedLabelBucket: null,
-      collapsedTimeline: true,
       collapsedZeroMinuteSubmit: true,
       effectiveLabelSelections: {},
       expandedTaskDetails: {},
@@ -1264,8 +1366,7 @@ if (page === 'execute') {
     };
   }
   let executionUiState = defaultExecutionUiState();
-  dateInput.value = selectedFromQuery || todayIso();
-  updateDateTrigger(dateButton, dateInput.value);
+  dateInput.value = recordsOnly ? (selectedFromQuery || todayIso()) : (dateInput.value || todayIso());
 
   function selectedExecutionTask() {
     if (!executionState?.tasks?.length) return null;
@@ -1330,12 +1431,6 @@ if (page === 'execute') {
     return executionState?.task_execution_board?.find(item => String(item.task_id) === String(taskId)) || null;
   }
 
-  function timelineToggleText() {
-    const segmentCount = (executionState?.segments?.length || 0) + (showDraftSegment ? 1 : 0);
-    const countText = segmentCount ? `（${segmentCount} 段）` : '';
-    return executionUiState.collapsedTimeline ? `展开时间轴${countText}` : `收起时间轴${countText}`;
-  }
-
   function visibleExecutionSubmitTasks(tasks) {
     return tasks.filter(task => Number(task.estimated_minutes) > 0 || Number(task.actual_minutes || 0) > 0);
   }
@@ -1367,6 +1462,7 @@ if (page === 'execute') {
     executionState = await executionApi(`/api/daily-execution/${dateInput.value}/tasks/start`, {method:'POST', body:JSON.stringify({task_id:taskId, label_id:labelId || null, duplicate_choice:duplicateChoice})});
     executionUiState.effectivePickerTaskId = null;
     renderExecutionState(executionState);
+    openExecutionControls();
     toast(successMessage);
   }
 
@@ -1379,14 +1475,14 @@ if (page === 'execute') {
     const category = segmentTimeCategory(segment);
     const labelLabel = category === 'learning' ? '细分' : '标签';
     return `
-      <article class="timeline-card ${isDraft ? 'draft' : ''}" data-segment-id="${segment.id}">
-        ${isDraft ? '<h3>补一段时间</h3>' : `<details class="segment-details" ${editorState?.open ? 'open' : ''}>
+      <article class="timeline-card ${isDraft ? 'draft' : ''}" data-segment-id="${segment.id}" data-original-segment="${esc(JSON.stringify(editorState?.original || original))}">
+        ${isDraft ? '' : `<details class="segment-details" ${editorState?.open ? 'open' : ''}>
         <summary class="segment-summary"><span class="segment-summary-time">${esc(segmentTimeRange(original))}</span><span class="segment-summary-task">${esc(original.task_title)}／${esc(original.label_name || (original.segment_kind === 'effective' ? '未细分' : '未命名标签'))}${original.is_estimated ? ' · 补记·估计' : ''}</span><span class="segment-summary-duration">${segmentDuration(original.seconds)}${original.included === false ? ' · 不计入' : ` · ${timeCategoryNames[segmentTimeCategory(original)]}`}</span><span class="segment-summary-action">编辑</span></summary>`}
         <div class="segment-editor">
         ${!isDraft && segment.included === false ? '<p class="muted">此段保留记录，不计入统计</p>' : ''}
         <div class="timeline-form">
           <label>开始<input class="segment-start" type="datetime-local" step="1" value="${toDateTimeInputValue(segment.started_at)}"></label>
-          <label>结束<input class="segment-end" type="datetime-local" step="1" value="${toDateTimeInputValue(segment.ended_at)}"></label>
+          <label>结束${!isDraft&&!original.ended_at?'<input class="segment-end" value="" placeholder="仍在计时" disabled><small>保存后继续计时；结束请点停止。</small>':`<input class="segment-end" type="datetime-local" step="1" value="${toDateTimeInputValue(segment.ended_at)}">`}</label>
           <label>任务<select class="segment-task-id" ${original.is_estimated?'disabled':''}>${taskOptions}</select></label>
           <label>归类<select class="segment-kind" ${original.is_estimated?'disabled':''}>
             ${Object.entries(timeCategoryNames).filter(([key])=>!key.startsWith('legacy') || key===category).map(([key,name])=>`<option value="${key}" ${category===key ? 'selected' : ''}>${name}</option>`).join('')}
@@ -1396,7 +1492,7 @@ if (page === 'execute') {
           </label>
         </div>
         <div class="timeline-actions">
-          <button class="ghost-button segment-save" type="button">${isDraft ? '补记这一段' : '保存修改'}</button>
+          <button class="ghost-button segment-save" type="button">${isDraft ? '补记这一段' : !original.ended_at?'保存并继续计时':'保存修改'}</button>
           ${isDraft ? '' : '<button class="ghost-button segment-cancel" type="button">取消编辑</button>'}
           <button class="ghost-button segment-delete" type="button">${isDraft ? '取消' : original.is_estimated ? '撤销补记' : '删除'}</button>
         </div>
@@ -1406,6 +1502,7 @@ if (page === 'execute') {
   }
 
   function segmentTimeRange(segment) {
+    if(!segment.ended_at)return `${toDateTimeInputValue(segment.started_at).replace('T',' ')}—正在计时`;
     const start = toDateTimeInputValue(segment.started_at), end = toDateTimeInputValue(segment.ended_at);
     const crossDate = start.slice(0,10) !== end.slice(0,10);
     const seconds = start.slice(17,19) !== '00' || end.slice(17,19) !== '00';
@@ -1418,49 +1515,21 @@ if (page === 'execute') {
     return `${Math.floor(value / 60)} 分${value % 60 ? ` ${value % 60} 秒` : ''}`;
   }
 
-  function renderTimelineList() {
-    const list = $('#timeline-list');
-    const editors = new Map();
-    if (timelineEditorDate === dateInput.value) $$('.timeline-card',list).forEach(row => {
-      if (!$('.segment-start',row) || row.dataset.segmentId === resetTimelineEditorId) return;
-      editors.set(row.dataset.segmentId, {open:$('.segment-details',row)?.open, values:{
-        started_at:$('.segment-start',row).value, ended_at:$('.segment-end',row).value,
-        task_id:Number($('.segment-task-id',row).value), time_category:$('.segment-kind',row).value.startsWith('legacy') ? null : $('.segment-kind',row).value,
-        label_id:$('.segment-label-id',row).value || null,
-      }});
-    });
-    timelineEditorDate = dateInput.value;
-    resetTimelineEditorId = null;
-    const rows = [];
-    if (showDraftSegment) {
-      const end = new Date();
-      const start = new Date(end.getTime() - (30 * 60 * 1000));
-      rows.push(segmentEditorHtml({
-        id: 'draft',
-        task_id: selectedExecutionTask()?.id,
-        segment_kind: 'effective',
-        label_id: null,
-        started_at: dateToLocalDateTimeValue(start),
-        ended_at: dateToLocalDateTimeValue(end),
-      }, true, editors.get('draft')));
-    }
-    rows.push(...(executionState?.segments || []).map(segment => {
-      if (!segment.ended_at) {
-        return `
-          <article class="timeline-card active" data-segment-id="${segment.id}">
-            <div>
-              <strong>${esc(segment.task_title)}</strong>
-              <p class="muted">${segment.segment_kind === 'effective' ? esc(segment.label_name ? `有效时间 / ${segment.label_name}` : '有效时间') : esc(segment.label_name || '标签')} · 已累计 ${formatMinutes(segment.minutes, segment.seconds)}</p>
-              <p class="muted">${segment.included ? '计入统计' : '保留记录，不计入统计'} · ${segment.started_at.replace('T', ' ')}</p>
-            </div>
-            <div class="timeline-actions"><button class="ghost-button active-segment-stop" type="button">停止</button></div>
-          </article>
-        `;
-      }
-      return segmentEditorHtml(segment, false, editors.get(String(segment.id)));
-    }));
-    list.innerHTML = rows.length ? rows.join('') : '<p class="muted">还没有任何执行记录，先开始一段任务有效时间。</p>';
+  function openNewSegmentEditor() {
+    if(timingPending||segmentEditBusy||!selectedExecutionTask())return;
+    const end=new Date(),parts=dateInput.value.split('-').map(Number);
+    end.setFullYear(parts[0],parts[1]-1,parts[2]);
+    const start=new Date(end.getTime()-30*60000);
+    segmentDialogDate=dateInput.value;
+    $('#segment-edit-title').textContent='补一段时间';
+    $('#segment-edit-context').textContent='补记已经发生的一段时间。';
+    $('#segment-edit-error').hidden=true;
+    $('#segment-edit-content').innerHTML=segmentEditorHtml({id:'draft',task_id:selectedExecutionTask().id,segment_kind:'effective',label_id:null,started_at:dateToLocalDateTimeValue(start),ended_at:dateToLocalDateTimeValue(end)},true);
+    wireSegmentEditors($('#segment-edit-content'));
+    segmentDialog.showModal();
+  }
 
+  function wireSegmentEditors(list) {
     const syncSegmentLabelField = row => {
       const kind = $('.segment-kind', row).value;
       const taskId = Number($('.segment-task-id', row).value);
@@ -1479,10 +1548,10 @@ if (page === 'execute') {
     });
 
     $$('.segment-save', list).forEach(button => button.onclick = async () => {
-      if (button.disabled) return;
+      if (button.disabled || segmentEditBusy) return;
       const row = button.closest('.timeline-card');
       const category = $('.segment-kind', row).value;
-      const original = executionState.segments.find(item=>String(item.id)===row.dataset.segmentId);
+      const original = row.dataset.segmentId==='draft'?null:JSON.parse(row.dataset.originalSegment);
       const label = executionState.labels.find(item=>item.id===$('.segment-label-id',row).value);
       const keepSnapshot = original && segmentTimeCategory(original)===category && original.label_id===$('.segment-label-id',row).value;
       const segmentKind = keepSnapshot ? original.segment_kind : category === 'learning' ? 'effective' : category.startsWith('legacy') ? original.segment_kind : label?.bucket === 'counted' ? 'counted_label' : 'interrupt_label';
@@ -1492,67 +1561,60 @@ if (page === 'execute') {
         ...(category.startsWith('legacy') ? {} : {time_category:category}),
         label_id: $('.segment-label-id', row).value || null,
         started_at: fromDateTimeInputValue($('.segment-start', row).value),
-        ended_at: fromDateTimeInputValue($('.segment-end', row).value),
+        ended_at: original && !original.ended_at ? null : fromDateTimeInputValue($('.segment-end', row).value),
+        ...(original?{expected_state:Object.fromEntries(['task_id','segment_kind','label_id','time_category','started_at','ended_at'].map(key=>[key,original[key]]))}:{}),
       };
       if (segmentKind === 'effective') rememberEffectiveLabelSelection(body.task_id, body.label_id || '');
       if (body.label_id === 'effective_english_words' && executionState.duration_records?.length) {
         body.duplicate_choice = await chooseVocabularySource();
         if (!body.duplicate_choice) return;
       }
+      const saveDate=dateInput.value;
       try {
+        if(segmentDialog.open&&segmentDialogDate!==saveDate)throw new Error('查看日期已变化，请重新打开记录。');
         button.disabled = true;
-        executionState = row.dataset.segmentId === 'draft'
+        segmentEditBusy=true;$('#segment-edit-close').disabled=true;updateTimingControls();
+        const updated = row.dataset.segmentId === 'draft'
           ? await executionApi(`/api/daily-execution/${dateInput.value}/segments`, {method:'POST', body:JSON.stringify(body)})
           : await executionApi(`/api/daily-execution/${dateInput.value}/segments/${row.dataset.segmentId}`, {method:'PUT', body:JSON.stringify(body)});
-        showDraftSegment = false;
-        resetTimelineEditorId = row.dataset.segmentId;
-        executionUiState.collapsedTimeline = false;
+        if(dateInput.value!==saveDate)return;
+        executionState=updated;
+        segmentDialog.close();
         renderExecutionState(executionState);
         toast(row.dataset.segmentId === 'draft' ? '补记已保存' : '时间段已更新');
-      } catch (error) { toast(error.message); }
-      finally { button.disabled = false; }
+      } catch (error) {
+        toast(error.message);
+        if(segmentDialog.open){$('#segment-edit-error').textContent=error.message;$('#segment-edit-error').hidden=false;}
+      }
+      finally { button.disabled = false;segmentEditBusy=false;$('#segment-edit-close').disabled=false;updateTimingControls(); }
     });
 
-    $$('.segment-cancel',list).forEach(button => button.onclick = () => {
-      const id = button.closest('.timeline-card').dataset.segmentId;
-      resetTimelineEditorId = id;
-      renderTimelineList();
-      $(`.timeline-card[data-segment-id="${id}"] summary`,list)?.focus({preventScroll:true});
-    });
+    $$('.segment-cancel',list).forEach(button=>button.onclick=()=>{if(!segmentEditBusy)segmentDialog.close();});
 
     $$('.segment-delete', list).forEach(button => button.onclick = async () => {
+      if(segmentEditBusy)return;
       const row = button.closest('.timeline-card');
       if (row.dataset.segmentId === 'draft') {
-        showDraftSegment = false;
-        renderTimelineSection();
+        if(!segmentEditBusy)segmentDialog.close();
         return;
       }
       try {
+        if(segmentDialog.contains(button)){
+          if(button.dataset.confirmDelete!=='yes'){
+            button.dataset.confirmDelete='yes';button.textContent='确认'+button.textContent;
+            $('#segment-edit-error').textContent='再点一次确认；取消编辑可保留原记录。';$('#segment-edit-error').hidden=false;return;
+          }
+        }
         const estimated=executionState.segments.find(item=>String(item.id)===row.dataset.segmentId)?.is_estimated;
+        segmentEditBusy=true;button.disabled=true;$('#segment-edit-close').disabled=true;updateTimingControls();
         executionState = await executionApi(`/api/daily-execution/${dateInput.value}/segments/${row.dataset.segmentId}`, {method:'DELETE'});
+        segmentDialog.close();
         renderExecutionState(executionState);
         toast(estimated?'补记已撤销，已还原有效学习':'时间段已删除');
-      } catch (error) { toast(error.message); }
+      } catch (error) { toast(error.message);$('#segment-edit-error').textContent=error.message;$('#segment-edit-error').hidden=false; }
+      finally {segmentEditBusy=false;button.disabled=false;$('#segment-edit-close').disabled=false;updateTimingControls();}
     });
 
-    $$('.active-segment-stop', list).forEach(button => button.onclick = async () => {
-      try {
-        executionState = await executionApi(`/api/daily-execution/${dateInput.value}/stop`, {method:'POST'});
-        renderExecutionState(executionState);
-        toast('已停止当前计时');
-      } catch (error) { toast(error.message); }
-    });
-  }
-
-  function renderTimelineSection() {
-    const hasHistory=(executionState?.segments || []).some(segment=>segment.ended_at);
-    $('.execute-workspace').classList.toggle('timeline-reading',!executionUiState.collapsedTimeline && hasHistory);
-    const toggle = $('#timeline-toggle');
-    const content = $('#timeline-content');
-    toggle.textContent = timelineToggleText();
-    toggle.setAttribute('aria-expanded', String(!executionUiState.collapsedTimeline));
-    content.classList.toggle('hidden', executionUiState.collapsedTimeline);
-    renderTimelineList();
   }
 
   function executionTaskCardHtml(task) {
@@ -1581,13 +1643,13 @@ if (page === 'execute') {
       <button class="ghost-button effective-start-option effective-start-unlabelled" type="button" data-start-label-id="">暂不细分，直接开始</button>
     </div>`;
     return `
-      <article class="execution-task-card ${selectedClass} ${active ? 'active' : ''}" data-execution-task-id="${task.id}" tabindex="0" aria-expanded="${expanded}" aria-controls="execution-details-${task.id}">
+      <article style="--project-color:${PlanVisuals.color(task.category)}" class="execution-task-card ${selectedClass} ${active ? 'active' : ''}" data-execution-task-id="${task.id}" tabindex="0" aria-expanded="${expanded}" aria-controls="execution-details-${task.id}">
         <div class="execution-task-head">
           <div>
-            <h3>${esc(task.title)}</h3>
+            <h3>${PlanVisuals.symbol(task.category)}<span>${esc(task.title)}</span></h3>
             ${task.title !== categoryTitle ? `<p class="muted">${esc(categoryTitle)}</p>` : ''}
           </div>
-          <div class="execution-task-actions">${task.category === 'english' ? '<button class="ghost-button word-count-open" type="button">记词数</button>' : ''}<button class="primary task-start-button" type="button" aria-expanded="${picking}" aria-controls="effective-start-${task.id}" ${disabled}>开始有效时间${esc(startLabelSuffix)}</button></div>
+          <div class="execution-task-actions">${task.category === 'english' ? '<button class="ghost-button word-count-open" type="button">记词数</button>' : ''}<button class="primary task-start-button" type="button" aria-expanded="${picking}" aria-controls="effective-start-${task.id}" ${disabled} aria-label="开始有效时间${esc(startLabelSuffix)}">开始<span class="task-start-detail">${esc(startLabelSuffix)}</span></button></div>
           ${startPicker}
         </div>
         <div class="execution-task-meta">
@@ -1772,7 +1834,7 @@ if (page === 'execute') {
       const labelId = button.dataset.startLabelId || null;
       const active = executionState?.active_segment;
       if (active?.task_id === taskId && active.segment_kind === 'effective' && (active.label_id || null) === labelId) {
-        closeEffectiveStartPicker(); return;
+        closeEffectiveStartPicker();openExecutionControls();return;
       }
       switchingEffectiveLabel = true;
       $$('.effective-start-option, .task-start-button').forEach(item => item.disabled = true);
@@ -1975,7 +2037,7 @@ if (page === 'execute') {
     } else if (!event.target.closest('.execution-task-head')) closeEffectiveStartPicker();
   });
   document.addEventListener('keydown', event => {
-    if (event.key !== 'Escape') return;
+    if (event.key !== 'Escape' || document.querySelector('dialog[open]')) return;
     if (executionUiState.effectivePickerTaskId !== null) {
       const id = executionUiState.effectivePickerTaskId;
       closeEffectiveStartPicker();
@@ -2036,11 +2098,19 @@ if (page === 'execute') {
     const emptyPanel = $('#execute-empty-state');
     const emptyMessage = $('#execute-empty-message');
     const runnable = result?.plan && ['approved', 'submitted'].includes(result.plan.status);
-    const readyToClose = runnable && !result?.active_segment;
+    const readyToClose = runnable;
+    $('#execute-panel').hidden=executionTab!=='courses';
+    $('#execution-records-empty').hidden=runnable;
+    $('#execution-records-empty').textContent=result?.plan?'这一天的清单尚未确认。':'这一天还没有计划或时间记录。';
     $('#execute-panel').classList.toggle('hidden', !runnable);
     currentPanel.classList.toggle('hidden', !runnable);
-    $('#timeline-panel').classList.toggle('hidden', !runnable);
+    $('#execution-support').classList.toggle('hidden', !runnable);
+    $('#execute-chronology').classList.toggle('hidden', !runnable);
+    $('#execute-mobile-toolbar').classList.toggle('hidden',!runnable);
+    if(segmentDialog.open&&segmentDialogDate!==result.date)segmentDialog.close();
+    if(runnable)chronology.update(result,receivedTimes.get(result));
     $('#execute-submit-panel').classList.toggle('hidden', !readyToClose);
+    $('#execute-submit-panel').hidden=executionTab!=='complete';
     $('#enter-review').disabled = !runnable;
     emptyPanel.classList.toggle('hidden', runnable);
     if (!result?.plan) {
@@ -2055,7 +2125,6 @@ if (page === 'execute') {
     if (active?.segment_kind === 'effective') rememberEffectiveLabelSelection(active.task_id, active.label_id || '');
     renderExecutionTasks();
     renderExecutionToolbar();
-    renderTimelineSection();
     renderExecutionSubmitList();
   }
 
@@ -2066,7 +2135,7 @@ if (page === 'execute') {
     if (changingDate) {
       executionState = null; renderLiveExecution(null);
       renderWordCounts();
-      [currentPanel,$('#execute-panel'),$('#timeline-panel'),$('#execute-submit-panel')].forEach(panel=>panel.classList.add('hidden'));
+      [currentPanel,$('#execution-support'),$('#execute-panel'),$('#execute-chronology'),$('#execute-submit-panel'),$('#execute-mobile-toolbar')].forEach(panel=>panel.classList.add('hidden'));
       $('#execute-empty-state').classList.remove('hidden');
     }
     $('#execute-empty-message').textContent = '正在读取这一天的记录…';
@@ -2077,6 +2146,7 @@ if (page === 'execute') {
       if (sequence === executionLoadSequence) {
         $('#execute-empty-state').classList.remove('hidden');
         $('#execute-empty-message').textContent = '读取失败，原有记录保留。请检查网络后重新读取。';
+        $('#execution-records-empty').hidden=false;$('#execution-records-empty').textContent='读取失败，原有记录保留。请关闭后重新打开记录。';
         $('#execute-load-retry').hidden = false;
         toast(error.message);
       }
@@ -2184,17 +2254,6 @@ if (page === 'execute') {
     } catch (error) { toast(error.message); }
   };
 
-  $('#add-segment').onclick = () => {
-    showDraftSegment = true;
-    executionUiState.collapsedTimeline = false;
-    renderTimelineSection();
-  };
-
-  $('#timeline-toggle').onclick = () => {
-    executionUiState.collapsedTimeline = !executionUiState.collapsedTimeline;
-    renderTimelineSection();
-  };
-
   $('#execute-submit-zero-toggle').onclick = () => {
     executionUiState.collapsedZeroMinuteSubmit = !executionUiState.collapsedZeroMinuteSubmit;
     renderExecutionSubmitList();
@@ -2205,22 +2264,27 @@ if (page === 'execute') {
     window.location.href = `/review?date=${encodeURIComponent(dateInput.value)}`;
   };
 
-  Promise.all([api('/api/settings'),api('/api/notifications/status').catch(()=>null)]).then(([result,notification]) => {
-    settings = result; notificationState = notification;
-    bindSharedCalendarTrigger(dateButton, () => dateInput.value, async nextDate => {
-      dateInput.value = nextDate;
-      selectedTaskId = null;
-      $('#word-count-form').reset();
-      wordCountDialog.close();
-      $('#temporary-form').classList.add('hidden');
-      showDraftSegment = false;
-      executionUiState = defaultExecutionUiState();
-      updateDateTrigger(dateButton, nextDate);
+  $('#execution-mini-stop').onclick=()=>$('#execute-stop').click();
+  PlanUI.tabs($('.execution-section-tabs'),tab=>{executionTab=tab.id==='execution-complete-tab'?'complete':'courses';});
+  const executionReady=Promise.all([api('/api/settings'),api('/api/notifications/status').catch(()=>null)]).then(([result,notification])=>{
+    settings=result;notificationState=notification;
+    if(!recordsOnly)return loadExecution();
+  }).catch(error=>{toast(error.message);return false;});
+  if(recordsOnly)window.DailyPlanRecords={
+    async open(date){
+      if(controlsBusy()||segmentDialog.open)return false;
+      if(await executionReady===false)return false;
+      if(dateInput.value!==date){selectedTaskId=null;executionUiState=defaultExecutionUiState();}
+      dateInput.value=date;
       await loadExecution();
-    }, '选择执行日期');
-    return loadExecution();
-  }).catch(error => toast(error.message));
-
+      openExecutionControls();
+      return true;
+    },
+    close:closeExecutionControls,
+    get busy(){return controlsBusy()||segmentDialog.open||$('#quick-correction-dialog').open||$('#word-count-dialog').open;},
+    get date(){return dateInput.value;},
+    get isOpen(){return controlsExpanded;},
+  };
 }
 
 const DAILY_GPT_SYSTEM_PROMPT = `你现在是我的单日复盘搭子，不要急着给大道理。
@@ -2320,6 +2384,9 @@ if (page === 'gpt-workbench') {
     if (!state) return;
     $('#daily-template-tab').classList.toggle('active', promptScope === 'daily_gpt');
     $('#weekly-template-tab').classList.toggle('active', promptScope === 'weekly_gpt');
+    $$('.prompt-scope-tab').forEach(button=>{const active=button.id===(promptScope==='daily_gpt'?'daily-template-tab':'weekly-template-tab');button.setAttribute('aria-selected',String(active));button.tabIndex=active?0:-1;});
+    $('#prompt-editor-panel').setAttribute('aria-labelledby',promptScope==='daily_gpt'?'daily-template-tab':'weekly-template-tab');
+    PlanUI.indicator($('.prompt-manager-switch'));
     $('#prompt-list').innerHTML = state.prompts.map(prompt => `
       <button type="button" class="prompt-chip ${prompt.id === state.activeId ? 'active' : ''}" data-id="${prompt.id}">
         ${esc(prompt.name)}
@@ -2378,15 +2445,19 @@ if (page === 'gpt-workbench') {
     } catch (error) { toast(error.message); }
   }
 
-  $('#daily-template-tab').onclick = () => {
-    promptScope = 'daily_gpt';
-    renderWorkbenchPrompts();
-  };
-
-  $('#weekly-template-tab').onclick = () => {
-    promptScope = 'weekly_gpt';
-    renderWorkbenchPrompts();
-  };
+  function selectPromptScope(next) {
+    if(promptScope===next)return;
+    const direction=next==='weekly_gpt'?1:-1;
+    promptScope=next;renderWorkbenchPrompts();PlanUI.enter($('#prompt-editor-panel'),direction);
+  }
+  $('#daily-template-tab').onclick=()=>selectPromptScope('daily_gpt');
+  $('#weekly-template-tab').onclick=()=>selectPromptScope('weekly_gpt');
+  $$('.prompt-scope-tab').forEach(button=>button.onkeydown=event=>{
+    if(!['ArrowLeft','ArrowRight','Home','End'].includes(event.key))return;
+    event.preventDefault();const weekly=event.key==='End'||event.key!=='Home'&&promptScope==='daily_gpt';
+    selectPromptScope(weekly?'weekly_gpt':'daily_gpt');$(weekly?'#weekly-template-tab':'#daily-template-tab').focus();
+  });
+  new ResizeObserver(()=>PlanUI.indicator($('.prompt-manager-switch'))).observe($('.prompt-manager-switch'));
 
   $('#add-prompt').onclick = async () => {
     const nextSettings = deepClone(workbenchState.prompt_settings);

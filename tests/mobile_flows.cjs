@@ -1,4 +1,4 @@
-// 本脚本会清空隔离数据库的 2026-10-11；禁止使用真实数据。
+// 本脚本会清空隔离数据库的 ${day}；禁止使用真实数据。
 const {chromium} = require('playwright');
 const assert = require('node:assert/strict');
 const baseUrl = process.env.DAILY_PLAN_TEST_URL;
@@ -6,12 +6,12 @@ if (!baseUrl || !['127.0.0.1','localhost','[::1]'].includes(new URL(baseUrl).hos
 (async () => {
   const browser = await chromium.launch({headless:true, ...(process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH ? {executablePath:process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH} : {})});
   const page = await browser.newPage({viewport:{width:390,height:844},isMobile:true,hasTouch:true});
-  await page.clock.setFixedTime(new Date('2026-10-11T12:00:00+08:00'));
+  const day=new Date().toLocaleDateString('en-CA',{timeZone:'Asia/Shanghai'});await page.clock.setFixedTime(new Date(day+'T12:00:00+08:00'));
   const errors=[];page.on('pageerror',error=>{errors.push(error.message); console.log('JS error:',error.message)});
   async function stable() { await page.waitForTimeout(180); }
   async function noOverflow() { assert(await page.evaluate(()=>document.documentElement.scrollWidth <= 390 && innerWidth <= 390), 'horizontal overflow'); }
-  await page.request.delete(`${baseUrl}/api/daily-data/2026-10-11`);
-  await page.goto(`${baseUrl}/?date=2026-10-11`);
+  await page.request.delete(`${baseUrl}/api/daily-data/${day}`);
+  await page.goto(`${baseUrl}/?date=${day}`);
   await page.waitForSelector('[data-target-category=math]');
   assert.equal(await page.locator('#available-minutes').count(),0);
   for(const size of [{width:360,height:640},{width:768,height:1024},{width:1024,height:680}]) {
@@ -39,7 +39,7 @@ if (!baseUrl || !['127.0.0.1','localhost','[::1]'].includes(new URL(baseUrl).hos
     await page.locator('.plan-route-tab[data-route=main]').click();
     await page.evaluate(()=>scrollTo(0,0));
     const confirm=await page.locator('#approve-plan').boundingBox();
-    assert(await page.evaluate(()=>document.documentElement.scrollHeight<=innerHeight),'默认清单应完整处于一屏');
+    const dimensions=await page.evaluate(()=>({height:document.documentElement.scrollHeight,viewport:innerHeight}));if(dimensions.height>dimensions.viewport)await page.screenshot({path:'/tmp/daily-plan-mobile-budget-failure.png',fullPage:true});assert(dimensions.height<=dimensions.viewport,'默认清单应完整处于一屏 '+JSON.stringify({size,dimensions}));
     assert(confirm.y+confirm.height<=size.height,`确认按钮不在首屏: ${JSON.stringify(size)} / ${confirm.y+confirm.height}`);
     assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),'清单横向溢出');
     await page.locator('.plan-route-tab[data-route=sub]').click();
@@ -93,6 +93,7 @@ if (!baseUrl || !['127.0.0.1','localhost','[::1]'].includes(new URL(baseUrl).hos
   await page.locator('#temporary-form button[type=submit]').click();
   await page.locator('#temporary-form').waitFor({state:'hidden'});
   const temporary=page.locator('.execution-task-card').filter({has:page.locator('h3',{hasText:'提交报名表'})});
+  await page.locator('#execution-controls-close').click();
   await temporary.locator('.task-start-button').click();
   await temporary.locator('[data-start-label-id=""]').click();await stable();
   assert.match(await page.locator('#execute-active-badge').innerText(),/提交报名表/);
@@ -107,7 +108,7 @@ if (!baseUrl || !['127.0.0.1','localhost','[::1]'].includes(new URL(baseUrl).hos
   await wordForm.locator('[name=new_words]').fill('30');await wordForm.locator('[type=submit]').click();
   await page.locator('#word-count-dialog').waitFor({state:'hidden'});
   assert.equal(await page.locator('#vocabulary-shortcut,.vocabulary-open').count(),0);
-  const counts=await (await page.request.get(`${baseUrl}/api/vocabulary-counts/2026-10-11`)).json();
+  const counts=await (await page.request.get(`${baseUrl}/api/vocabulary-counts/${day}`)).json();
   assert.equal(counts.vocabulary_counts.new_words,30);assert.equal(counts.vocabulary_counts.review_words,100);
   await noOverflow();
   if (process.env.MOBILE_SCREENSHOT_PATH) await page.screenshot({path:process.env.MOBILE_SCREENSHOT_PATH,fullPage:true});
@@ -115,15 +116,15 @@ if (!baseUrl || !['127.0.0.1','localhost','[::1]'].includes(new URL(baseUrl).hos
   await exercise.locator('h3').click();
   await exercise.locator('.habit-status').selectOption('rest');await stable();
   assert.match(await page.locator('#execute-record-status').innerText(), /学习记录已保存/);
-  await page.locator('#enter-review').click();await page.waitForSelector('#daily-review-metrics');await stable();
-  const dayResult=await (await page.request.get(`${baseUrl}/api/daily-review/2026-10-11`)).json();
+  await page.locator('#execution-complete-tab').click();await page.locator('#enter-review').click();await page.waitForSelector('#daily-review-metrics');await stable();
+  const dayResult=await (await page.request.get(`${baseUrl}/api/daily-review/${day}`)).json();
   assert.equal(dayResult.english_minutes,0);assert.equal(dayResult.vocabulary_minutes,0);
   await page.waitForFunction(()=>document.querySelector('#daily-execution-board')?.textContent.includes('休息'));
   assert.match(await page.locator('#daily-execution-board').innerText(),/休息/);
   await noOverflow();
-  await page.goto(`${baseUrl}/weekly?date=2026-10-11`);
+  await page.goto(`${baseUrl}/weekly?date=${day}`);
   await page.waitForFunction(()=>document.querySelector('#weekly-total-time')?.textContent.includes('分'));
-  const weekResult=await (await page.request.get(`${baseUrl}/api/weekly-review?anchor_date=2026-10-11`)).json();
+  const weekResult=await (await page.request.get(`${baseUrl}/api/weekly-review?anchor_date=${day}`)).json();
   assert.equal(weekResult.english_minutes,0);assert.equal(weekResult.vocabulary_minutes,0);
   await noOverflow();
   await page.goto(`${baseUrl}/settings`);await stable();await noOverflow();

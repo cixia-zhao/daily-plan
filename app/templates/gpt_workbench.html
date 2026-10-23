@@ -9,10 +9,11 @@
   <section class="panel">
     <div class="section-heading"><div><p class="step">01 · 模板</p><h2>单日与单周分开管理</h2></div></div>
     <div class="prompt-manager">
-      <div class="prompt-manager-switch">
-        <button id="daily-template-tab" class="ghost-button prompt-scope-tab active" type="button">单日模板</button>
-        <button id="weekly-template-tab" class="ghost-button prompt-scope-tab" type="button">单周模板</button>
+      <div class="prompt-manager-switch surface-tabs" role="tablist" aria-label="模板范围"><span class="surface-tab-indicator" aria-hidden="true"></span>
+        <button id="daily-template-tab" class="surface-tab prompt-scope-tab active" type="button" role="tab" aria-selected="true" aria-controls="prompt-editor-panel">单日模板</button>
+        <button id="weekly-template-tab" class="surface-tab prompt-scope-tab" type="button" role="tab" aria-selected="false" tabindex="-1" aria-controls="prompt-editor-panel">单周模板</button>
       </div>
+      <div id="prompt-editor-panel" role="tabpanel" aria-labelledby="daily-template-tab">
       <div class="prompt-manager-row">
         <div id="prompt-list" class="prompt-chip-list"></div>
         <div class="action-buttons">
@@ -24,6 +25,7 @@
       <input id="prompt-name-input" class="input-like" type="text" placeholder="模板名称">
       <textarea id="prompt-content-input" rows="12" placeholder="在这里编辑当前模板文本"></textarea>
       <p class="muted">系统默认模板会随代码更新；你自己的模板会保留原样。</p>
+      </div>
     </div>
   </section>
   <section class="panel">

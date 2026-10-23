@@ -19,14 +19,13 @@ if(!base||!['127.0.0.1','localhost'].includes(new URL(base).hostname))throw Erro
  await fixture();await open();assert(await dialog.locator('[data-quick-minutes="2"]').isDisabled());await page.keyboard.press('Escape');assert(await dialog.isHidden());
  await open('distraction');await dialog.locator('[data-quick-minutes="2"]').click();await dialog.waitFor({state:'hidden'});
  let state=await api(path),estimate=state.segments.find(s=>s.is_estimated);assert.equal(estimate.seconds,120);assert.equal(state.active_segment.label_id,'effective_math_course');
- assert.equal(state.segments.length,3);assert.equal(await page.locator('.execution-mobile-toolbar>button').count(),4,'不挤入单行快捷栏');
- await page.locator('#timeline-toggle').click();let row=page.locator(`[data-segment-id="${estimate.id}"]`);assert.match(await row.locator('summary').innerText(),/补记·估计/);
- await row.locator('summary').click();assert(await row.locator('.segment-task-id').isDisabled());
+ assert.equal(state.segments.length,3);assert.equal(await page.locator('.execution-mobile-toolbar>button').count(),5,'补记与其他快捷操作同属统一面板');
+ await page.locator('.chronology-browse').click();const record=()=>page.locator(`.chronology-record[data-segment-id="${estimate.id}"]`);assert.match(await record().innerText(),/补记·估计/);await record().click();await record().click();let row=page.locator('#segment-edit-dialog .timeline-card');assert(await row.locator('.segment-task-id').isDisabled());
  const earlier=new Date(new Date(estimate.started_at+'+08:00').getTime()-30000);
  const value=await page.evaluate(ms=>{const d=new Date(ms);return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}T${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}:${String(d.getSeconds()).padStart(2,'0')}`;},earlier.getTime());
  await row.locator('.segment-start').fill(value);await row.locator('.segment-save').click();await page.waitForFunction(()=>document.querySelector('#toast').textContent==='时间段已更新');
  state=await api(path);assert.equal(state.segments.find(s=>s.is_estimated).seconds,150);
- row=page.locator(`[data-segment-id="${estimate.id}"]`);await row.locator('summary').click();await row.locator('.segment-delete').click();await page.waitForFunction(()=>document.querySelector('#toast').textContent.includes('已还原有效学习'));
+ await record().click();row=page.locator('#segment-edit-dialog .timeline-card');await row.locator('.segment-delete').click();assert((await api(path)).segments.some(s=>s.is_estimated),'撤销前必须二次确认');await row.locator('.segment-delete').click();await page.waitForFunction(()=>document.querySelector('#toast').textContent.includes('已还原有效学习'));
  assert(!(await api(path)).segments.some(s=>s.is_estimated));
  await fixture();await open('life');
  for(const width of [360,390,768,1024]){await page.setViewportSize({width,height:844});assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));const box=await dialog.boundingBox();assert(box.x>=0&&box.x+box.width<=width);for(const control of await dialog.locator('button,input').all())assert((await control.boundingBox()).height>=44);if([390,768].includes(width))await page.screenshot({path:`/tmp/daily-plan-quick-correction-${width}.png`,fullPage:true});}
@@ -35,7 +34,7 @@ if(!base||!['127.0.0.1','localhost'].includes(new URL(base).hostname))throw Erro
  await page.route(`**/api/${path}/quick-corrections`,async route=>{await route.fetch();await route.abort();},{times:1});
  await dialog.locator('[data-quick-minutes="5"]').click();await page.waitForFunction(()=>!document.querySelector('#quick-correction-close').disabled);assert(await dialog.isVisible());assert.equal((await api(path)).segments.length,3,'响应丢失时服务器已提交一次');
  await dialog.locator('[data-quick-minutes="5"]').click();await dialog.waitFor({state:'hidden'});assert.equal((await api(path)).segments.length,3,'相同请求重试不重复扣减');
- await page.reload();await page.locator('#execute-panel').waitFor();await page.locator('#timeline-toggle').click();assert.match(await page.locator('#timeline-list').innerText(),/补记·估计/);
+ await page.reload();await page.locator('#execute-panel').waitFor();await page.locator('.chronology-browse').click();assert.match(await page.locator('.chronology-nearby').innerText(),/补记·估计/);
  await page.locator('#execute-stop').click();await page.waitForFunction(()=>document.querySelector('#execute-stop').disabled&&document.querySelector('#execute-current-panel').getAttribute('aria-busy')==='false');assert(await page.locator('#quick-correction-open').isDisabled());
  assert.deepEqual(errors,[]);console.log('PASS: 轻量补记／自动继续、估计标记、秒级编辑与撤销、生活口径、四视口44px、超量保留、响应丢失重试不重复、刷新与停止');
 }finally{await browser.close();}})().catch(e=>{console.error(e);process.exitCode=1;});

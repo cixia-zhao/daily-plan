@@ -1092,7 +1092,9 @@ def _weekly_comparison(connection, snapshot: dict) -> dict:
     if through < start:
         return {"available": False, "in_progress": False}
     previous_start, previous_end = start - timedelta(days=7), through - timedelta(days=7)
-    previous = _compute_weekly_metrics(connection, previous_start, previous_end)
+    previous_days = [_serialize_daily_review(connection, str(previous_start + timedelta(days=i))) for i in range(7)]
+    previous = _compute_weekly_metrics(connection, previous_start, previous_end,
+                                     [day for day in previous_days if day['date'] <= str(previous_end)])
     current_seconds, previous_seconds = snapshot["total_seconds"], previous["total_seconds"]
     return {
         "available": True, "in_progress": start <= date.today() <= end,
@@ -1101,7 +1103,50 @@ def _weekly_comparison(connection, snapshot: dict) -> dict:
         "current_seconds": current_seconds, "previous_seconds": previous_seconds,
         "difference_seconds": current_seconds - previous_seconds,
         "change_ratio": round((current_seconds - previous_seconds) / previous_seconds, 4) if previous_seconds else None,
+        "previous_days": [{"date": day['date'], "effective_seconds": day['main_actual_seconds']
+                           if day['has_execution'] and day['status'] in ('approved', 'submitted') else None}
+                          for day in previous_days],
+        "effective_difference_seconds": snapshot['time_summary']['categories']['learning'] - previous['time_summary']['categories']['learning'],
+        "distraction_difference_seconds": snapshot['time_summary']['categories']['distraction'] - previous['time_summary']['categories']['distraction'],
+        "current_has_execution": any(day['has_execution'] and day['status'] in ('approved', 'submitted')
+                                     for day in snapshot['days'] if day['date'] <= str(through)),
+        "previous_has_execution": any(day['has_execution'] and day['status'] in ('approved', 'submitted')
+                                      for day in previous_days if day['date'] <= str(previous_end)),
+        "projects": _compare_projects(snapshot['task_distribution'], previous['task_distribution']),
     }
+
+
+def _compare_projects(current, previous):
+    """使用稳定类别身份合并，改名或同类多任务不拆成不同项目。"""
+    projects = {}
+    for source, key in ((previous, 'previous_seconds'), (current, 'current_seconds')):
+        for item in source:
+            category = item['category']
+            project = projects.setdefault(category, {'category': category, 'title': '',
+                'current_seconds': 0, 'previous_seconds': 0})
+            project['title'] = item.get('task_title', item.get('title', category))
+            project[key] += item['effective_seconds']
+    return sorted(projects.values(), key=lambda item: max(item['current_seconds'], item['previous_seconds']), reverse=True)
+
+
+def _daily_comparison(connection, daily):
+    previous_date = date.fromisoformat(daily['date']) - timedelta(days=1)
+    previous = _serialize_daily_review(connection, str(previous_date))
+    available = daily['date'] <= str(date.today())
+    current_has = available and daily['has_execution'] and daily['status'] in ('approved', 'submitted')
+    previous_has = previous['has_execution'] and previous['status'] in ('approved', 'submitted')
+    current_summary, previous_summary = daily['time_summary'], previous['time_summary']
+    comparable = current_has and previous_has
+    ratio, previous_ratio = current_summary['effective_ratio'], previous_summary['effective_ratio']
+    return {'available': available, 'previous_date': str(previous_date),
+            'in_progress': daily['date'] == str(date.today()),
+            'current_has_execution': bool(current_has), 'previous_has_execution': bool(previous_has),
+            'effective_difference_seconds': current_summary['categories']['learning'] - previous_summary['categories']['learning'] if comparable else None,
+            'distraction_difference_seconds': current_summary['categories']['distraction'] - previous_summary['categories']['distraction'] if comparable else None,
+            'efficiency_difference_points': round((ratio - previous_ratio)*100, 2)
+                if comparable and ratio is not None and previous_ratio is not None else None,
+            'projects': _compare_projects(daily['task_execution_board'] if current_has else [],
+                                          previous['task_execution_board'] if previous_has else [])}
 
 
 def _calendar_day_state(day: date, project_start: date, today: date, plan_status: str | None, has_review: bool, has_history: bool = False) -> dict:
@@ -1802,7 +1847,8 @@ def create_execution_segment(plan_date: date, payload: ExecutionSegmentCreateInp
 
 @router.put("/daily-execution/{plan_date}/segments/{segment_id}")
 def update_execution_segment(plan_date: date, segment_id: int, payload: ExecutionSegmentUpdateInput, request: Request):
-    _assert_segment_time_window(payload.started_at, payload.ended_at)
+    if payload.ended_at is not None:
+        _assert_segment_time_window(payload.started_at, payload.ended_at)
     with _db(request) as connection:
         connection.execute("BEGIN IMMEDIATE")
         existing = connection.execute(
@@ -1814,8 +1860,26 @@ def update_execution_segment(plan_date: date, segment_id: int, payload: Executio
         ).fetchone()
         if not existing:
             raise HTTPException(404, "时间段不存在")
-        if existing["ended_at"] is None:
-            raise HTTPException(409, "请先停止当前正在计时的记录，再编辑它")
+        running = existing['ended_at'] is None
+        if payload.expected_state is not None:
+            for key, value in payload.expected_state.model_dump().items():
+                expected = _local_iso(value) if isinstance(value, datetime) else value
+                actual = existing[key]
+                if key in ('started_at', 'ended_at') and actual is not None:
+                    actual = _local_iso(_parse_iso_datetime(actual))
+                if expected != actual:
+                    raise HTTPException(409, '这段记录已变化，请重新打开后编辑；当前输入未保存')
+        if payload.ended_at is None and not running:
+            raise HTTPException(409, '这段计时已停止或切换，请重新打开后编辑，不会恢复旧计时')
+        if running:
+            if _parse_iso_datetime(_local_iso(payload.started_at)) > _parse_iso_datetime(_now_iso()):
+                raise HTTPException(422, '正在计时的开始时间不能晚于当前时间')
+            if payload.ended_at is not None:
+                raise HTTPException(409, '运行段保存后继续计时；如需结束，请使用停止按钮')
+            linked = connection.execute('SELECT 1 FROM execution_quick_corrections WHERE continuation_segment_id=?', (segment_id,)).fetchone()
+            if linked and (payload.task_id != existing['task_id'] or payload.segment_kind != 'effective'
+                           or _local_iso(payload.started_at) != existing['started_at']):
+                raise HTTPException(409, '这段连接着补记，请先撤销补记，再改任务、归类或开始时间')
         task = _get_task_row_for_execution(connection, plan_date.isoformat(), payload.task_id)
         _prepare_execution_task(connection, task)
         settings = _get_settings(connection)
@@ -1840,7 +1904,7 @@ def update_execution_segment(plan_date: date, segment_id: int, payload: Executio
             plan_date.isoformat(),
             task["id"],
             _local_iso(payload.started_at),
-            _local_iso(payload.ended_at),
+            _local_iso(payload.ended_at) if payload.ended_at is not None else None,
             skip_segment_id=segment_id,
         )
         connection.execute(
@@ -1853,7 +1917,7 @@ def update_execution_segment(plan_date: date, segment_id: int, payload: Executio
                 label_id,
                 label_name,
                 _local_iso(payload.started_at),
-                _local_iso(payload.ended_at),
+                _local_iso(payload.ended_at) if payload.ended_at is not None else None,
                 existing["time_category"] if keep_label_snapshot and payload.time_category is None else _segment_category(settings,payload.segment_kind,label_id,payload.time_category),
                 segment_id,
             ),
@@ -1862,6 +1926,10 @@ def update_execution_segment(plan_date: date, segment_id: int, payload: Executio
         if payload.duplicate_choice == "manual" and label_id == "effective_english_words" and task["category"] == "english":
             included = 0
         connection.execute("UPDATE task_execution_segments SET included=? WHERE id=?", (included, segment_id))
+        if running and (payload.task_id != existing['task_id'] or payload.segment_kind != existing['segment_kind']
+                        or label_id != existing['label_id'] or _local_iso(payload.started_at) != existing['started_at']
+                        or payload.time_category not in (None, existing['time_category'])):
+            cancel_reminders(connection, segment_id)
         connection.execute("UPDATE plans SET status='approved' WHERE id=? AND status='submitted'", (existing["plan_id"],))
         _sync_plan_actual_minutes_from_execution(connection, existing["plan_id"])
         if existing["plan_id"] != task["plan_id"]:
@@ -2106,6 +2174,7 @@ def daily_review(plan_date: date, request: Request):
         )
         daily = _serialize_daily_review(connection, plan_date.isoformat())
         return daily | {
+            "comparison": _daily_comparison(connection, daily),
             "gpt_prompt_text": prompt_text,
             "gpt_record": _get_gpt_record(connection, "daily", plan_date.isoformat(), plan_date.isoformat(), prompt_text),
             "prompt_settings": _daily_prompt_settings(settings),

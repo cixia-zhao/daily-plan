@@ -1,0 +1,200 @@
+/* 执行与复盘的内容排布：标题、操作与图表共用紧凑的阅读节奏。 */
+body:is([data-page=execute],[data-page=review]) main{padding-top:24px;max-width:1100px}
+body:is([data-page=execute],[data-page=review]) .hero.compact{display:flex;align-items:center;gap:12px;margin-bottom:14px}
+body:is([data-page=execute],[data-page=review]) .hero>div:first-child{display:block;flex-shrink:0}
+body:is([data-page=execute],[data-page=review]) .hero h1{font-size:32px;line-height:1.3;margin:0;letter-spacing:-1px}
+body:is([data-page=execute],[data-page=review]) .hero>.date-actions{display:flex;align-items:center;gap:4px;max-width:none;margin-left:auto;flex-wrap:wrap}
+body:is([data-page=execute],[data-page=review]) .date-chip{padding:0 4px;border:0;background:transparent;border-radius:0;order:-1}
+body:is([data-page=execute],[data-page=review]) .date-trigger{font-size:14px;min-height:44px;padding:8px 4px;font-weight:500}
+body[data-page=review] .hero #review-week-range{display:none}
+body[data-page=review] .hero .review-period-status{font-size:12px!important;margin:3px 0 0!important}
+body[data-page=review] .hero .date-actions>button{min-height:44px;padding:6px 8px;font-size:12px;border:0;background:transparent}
+body[data-page=review] .review-week-heading{margin:0;min-height:44px;flex-wrap:nowrap;font-size:12px}
+body[data-page=review] .review-week-actions button{padding:6px 10px;min-width:44px;border:0;background:transparent}
+body[data-page=review] .review-week-scroll-hint{position:absolute;width:1px;height:1px;margin:-1px;overflow:hidden;clip-path:inset(50%)}
+body[data-page=review] .review-week-step-slot{flex:1 0 74px;padding-bottom:5px}
+body[data-page=review] .review-week-step{min-height:50px;padding:6px 16px;gap:3px}
+body[data-page=review] .review-week-step strong{font-size:14px}
+body[data-page=review] .review-week-step-slot.is-active:after{height:6px}
+body[data-page=review] .review-date-page{padding-top:4px;background:transparent}
+body[data-page=review] .review-section-tabs{margin-bottom:18px;gap:26px}
+body[data-page=review] .review-section-tab{min-height:44px;padding:9px 0;font-size:14px}
+body[data-page=review] .review-save-summary:not(.needs-attention){position:absolute;width:1px;height:1px;margin:-1px;padding:0;overflow:hidden;clip-path:inset(50%)}
+body[data-page=review] .review-save-summary.needs-attention{padding:8px 0;font-size:12px;color:var(--accent)}
+body[data-page=review] .comparison-caption{margin:0 0 12px;line-height:1.6}
+body[data-page=review] .visual-metrics{gap:18px;padding:0 0 20px;margin:0 0 20px}
+body[data-page=review] .visual-metrics article{gap:8px;padding-left:18px}
+body[data-page=review] .visual-metrics article:first-child{padding-left:0}
+body[data-page=review] .visual-metrics strong{font-size:36px;line-height:1.15;letter-spacing:-1px}
+body[data-page=review] .visual-metrics small{line-height:1.6;font-size:12px}
+body[data-page=review] .section-heading{margin-bottom:12px}
+body[data-page=review] .review-project-section h2,body[data-page=review] .weekly-detail-grid h2{font-size:21px;margin:0;font-family:var(--font-serif,Georgia,serif);font-weight:600}
+body[data-page=review] .project-legend{margin-bottom:14px;gap:14px}
+body[data-page=review] .project-legend>span:last-child{margin-left:auto}
+body[data-page=review] .project-comparison{display:grid;grid-template-columns:84px minmax(0,1fr) 185px;grid-template-rows:auto auto;column-gap:14px;row-gap:4px;margin:0;padding:10px 0;border-bottom:1px solid #e8e6dc88}
+body[data-page=review] .project-comparison-heading{display:contents}
+body[data-page=review] .project-comparison-heading strong{grid-column:1;grid-row:1/3;align-self:center;font-size:15px}
+body[data-page=review] .project-comparison-heading>span{grid-column:3;grid-row:1;font-size:16px;color:var(--project-color)}
+body[data-page=review] .project-comparison-track{grid-column:2;grid-row:1/3;align-self:center;height:24px;margin:0;background:repeating-linear-gradient(90deg,var(--line) 0 1px,transparent 1px 25%);border:0}
+body[data-page=review] .project-current{border-radius:1px;opacity:.88}
+body[data-page=review] .project-comparison-note{grid-column:3;grid-row:2;line-height:1.5;font-size:12px;overflow-wrap:anywhere}
+body[data-page=review] .project-scale{margin:7px 199px 0 98px}
+body[data-page=review] .review-project-section{padding-bottom:16px}
+body[data-page=review] .review-task-detail{margin-top:12px;padding-top:0}
+body[data-page=review] .time-summary-section{padding-top:20px}
+body[data-page=review] .time-summary-heading{align-items:baseline;gap:10px}
+body[data-page=review] .time-summary-heading h2{font-family:var(--font-serif,Georgia,serif);font-size:21px}
+body[data-page=review] .composition-strip{height:22px;margin:12px 0}
+body[data-page=review] .composition-labels{gap:12px 22px}
+body[data-page=review] .composition-labels dd{margin-top:5px}
+body[data-page=review] .weekly-visual-metrics{margin-bottom:20px}
+body[data-page=review] .weekly-detail-grid{gap:28px}
+body[data-page=review] .weekly-detail-grid .section-heading p{margin:4px 0 0}
+body[data-page=review] .chart-mode-switch{margin:0 0 12px;display:inline-flex;gap:0;background:var(--soft);border-radius:5px;padding:2px}
+body[data-page=review] .chart-mode-switch button{min-height:44px;padding:7px 15px;border:0;border-radius:4px}
+body[data-page=review] .chart-mode-switch button[aria-pressed=true]{background:#80624e;color:#fffdf8;font-weight:500}
+body[data-page=review] .weekly-chart-legend{gap:12px;margin-bottom:12px}
+body[data-page=review] .weekly-chart-legend>span:last-child{margin-left:auto}
+body[data-page=review] .weekly-plot-scroll{overflow-x:auto;overflow-y:hidden;padding-bottom:8px}
+body[data-page=review] .weekly-plot{min-width:348px;padding-bottom:60px}
+body[data-page=review] .weekly-plot svg{height:216px;width:100%}
+body[data-page=review] .weekly-plot-targets{left:36px;right:4px;top:0;bottom:0}
+body[data-page=review] .weekly-plot-targets .weekly-day-bar{gap:4px;padding-bottom:3px}
+body[data-page=review] .weekly-plot-targets .weekly-bar-value{top:0;font-size:11px}
+body[data-page=review] .weekly-plot-targets .weekly-day-bar small{font-size:11px}
+body[data-page=review] .weekly-plot-targets em{bottom:-7px}
+body[data-page=review] .weekly-day-bars .chart-footnote{margin-top:10px}
+body[data-page=review] .weekly-distribution .project-comparison{grid-template-columns:65px minmax(0,1fr) 110px;column-gap:10px}
+body[data-page=review] .weekly-distribution .project-scale{margin-left:75px;margin-right:120px}
+body[data-page=execute] .execution-current-panel{margin-top:0;padding:12px 0 10px;border-top:1px solid var(--line)}
+body[data-page=execute] .execution-current{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:16px;align-items:center}
+body[data-page=execute] .execution-current-task{display:flex;flex-direction:column-reverse;align-items:flex-start;gap:0}
+body[data-page=execute] .execution-current-heading{gap:8px}
+body[data-page=execute] .execution-current-heading .step{display:none}
+body[data-page=execute] .execution-current-heading button{padding:4px 0;border:0;background:transparent;font-size:12px;color:var(--muted);font-weight:400}
+body[data-page=execute] #execute-active-badge{font-weight:500;font-size:15px;line-height:1.6;gap:0}
+body[data-page=execute] .execution-current-label{font-size:13px;color:var(--muted)}
+body[data-page=execute] .execution-clock-control{width:auto;gap:14px}
+body[data-page=execute] #execute-clock{font-size:38px;font-family:ui-monospace,'DejaVu Sans Mono',monospace;letter-spacing:-1.5px}
+body[data-page=execute] #execute-clock-caption{font-size:11px}
+body[data-page=execute] .stop-current{background:var(--ink);color:var(--paper);min-width:60px;padding:8px 12px;border-radius:6px}
+body[data-page=execute] .execution-goal-progress{margin-top:8px;padding-top:10px;border-top:1px solid var(--line)}
+body[data-page=execute] .execution-goal-caption{font-size:12px}
+body[data-page=execute] #execute-goal-status{font-size:14px}
+body[data-page=execute] .execution-goal-track{margin-top:6px;border-radius:3px}
+body[data-page=execute] .execution-goal-detail{margin-top:5px;font-size:11px}
+body[data-page=execute] .execution-chronology{padding-top:14px;padding-bottom:14px}
+body[data-page=execute] .chronology-heading{margin-bottom:8px;gap:4px}
+body[data-page=execute] .chronology-heading h2{font-family:var(--font-serif,Georgia,serif);font-size:19px;font-weight:600}
+body[data-page=execute] .chronology-heading button{border:0;background:transparent;padding:6px 8px;font-size:12px}
+body[data-page=execute] .chronology-track{border-radius:3px;background-color:#f0eee699}
+body[data-page=execute] #execute-panel{margin-top:12px;padding:0;border:0;background:transparent;border-radius:0}
+body[data-page=execute] .execution-mobile-toolbar{margin-bottom:4px;padding-bottom:10px;border-bottom:1px solid var(--line);gap:4px}
+body[data-page=execute] .execution-mobile-toolbar>button{font-size:13px;padding:6px 8px;border-radius:5px}
+body[data-page=execute] .execution-task-list{gap:0}
+body[data-page=execute] .execution-task-card{padding:12px 0 12px 12px;border:0;border-bottom:1px solid var(--line);border-radius:0;background:transparent;box-shadow:none;position:relative}
+body[data-page=execute] .execution-task-card:before{content:'';position:absolute;left:0;top:20px;width:5px;height:16px;border-radius:2px;background:var(--project-color,#a59172);opacity:.85}
+body[data-page=execute] .execution-task-card.active{background:#f0eee655}
+body[data-page=execute] .execution-task-card.active:before{height:calc(100% - 32px)}
+body[data-page=execute] .execution-task-head{display:flex;flex-direction:row;align-items:center;gap:8px;flex-wrap:wrap}
+body[data-page=execute] .execution-task-head>div:first-child{min-width:0;flex:1}
+body[data-page=execute] .execution-task-head h3{font-size:16px;font-weight:500}
+body[data-page=execute] .execution-task-head>div:first-child>p{font-size:12px;margin:3px 0 0}
+body[data-page=execute] .execution-task-actions{flex:0 0 auto;display:flex;gap:5px}
+body[data-page=execute] .task-start-button{width:auto;min-width:64px;min-height:44px;padding:8px 14px;font-size:13px;background:transparent;color:var(--ink);border:1px solid #c9c3b8;border-radius:5px}
+body[data-page=execute] .task-start-detail{display:none}
+body[data-page=execute] .word-count-open{padding:6px;font-size:12px;border:0;background:transparent}
+body[data-page=execute] .execution-task-meta{margin-top:2px;gap:5px 12px;font-size:12px}
+body[data-page=execute] .execution-task-section{border:0;border-radius:0;margin-top:8px}
+body[data-page=execute] .execution-section-toggle{padding:8px 0;min-height:44px;border-bottom:1px solid var(--line)}
+body[data-page=execute] .execution-task-section-body{padding:0}
+body[data-page=execute] .effective-start-panel{flex-basis:100%}
+@media(max-width:760px){
+ body:is([data-page=execute],[data-page=review]) main{width:calc(100% - 32px);padding-top:16px}
+ body:is([data-page=execute],[data-page=review]) .hero h1{font-size:28px}
+ body:is([data-page=execute],[data-page=review]) .hero.compact{margin-bottom:10px;gap:8px}
+ body[data-page=review] .hero{flex-wrap:wrap}
+ body[data-page=review] .hero>.date-actions{gap:0;flex:1;justify-content:flex-end}
+ body[data-page=review] .hero .date-trigger{font-size:13px;padding:6px 2px;white-space:nowrap}
+ body[data-page=review] .hero .date-actions>button{padding:6px;font-size:12px}
+ body[data-page=review] .review-week-step-slot{flex:0 0 72px}
+ body[data-page=review] .visual-metrics{gap:10px;padding-bottom:16px;margin-bottom:16px}
+ body[data-page=review] .visual-metrics article{gap:7px;padding-left:10px}
+ body[data-page=review] .visual-metrics article>span{font-size:13px}
+ body[data-page=review] .visual-metrics strong{font-size:28px;letter-spacing:-.7px}
+ body[data-page=review] .visual-metrics small{font-size:12px;line-height:1.5}
+ body[data-page=review] .weekly-visual-metrics strong{font-size:32px}
+ body[data-page=review] .project-legend{font-size:11px;gap:10px;margin-bottom:5px}
+ body[data-page=review] .project-legend>span:last-child{display:none}
+ body[data-page=review] .project-comparison,body[data-page=review] .weekly-distribution .project-comparison{grid-template-columns:48px minmax(0,1fr) 112px;column-gap:10px;padding:10px 0;row-gap:3px}
+ body[data-page=review] .project-comparison-heading strong{font-size:14px}
+ body[data-page=review] .project-comparison-heading>span{font-size:15px}
+ body[data-page=review] .project-comparison-track{height:22px}
+ body[data-page=review] .project-comparison-note{font-size:11px}
+ body[data-page=review] .project-scale,body[data-page=review] .weekly-distribution .project-scale{margin:6px 122px 0 58px}
+ body[data-page=review] .weekly-detail-grid{gap:24px}
+ body[data-page=review] .weekly-chart-legend{font-size:11px;gap:10px}
+ body[data-page=execute] .execution-current{gap:10px}
+ body[data-page=execute] .execution-clock-control{gap:8px}
+ body[data-page=execute] #execute-clock{font-size:36px;letter-spacing:-2px}
+ body[data-page=execute] .stop-current{min-width:52px;padding:8px}
+ body[data-page=execute] #execute-active-badge{font-size:14px}
+ body[data-page=execute] .execution-current-label{font-size:12px}
+ body[data-page=execute] .execution-current-panel{padding-top:9px}
+ body[data-page=execute] .chronology-heading>div{gap:0}
+ body[data-page=execute] .chronology-heading button{padding:6px;font-size:11px}
+}
+/* 日期靠最右；长任务名和旧版按钮宽度不能挤开紧凑行。 */
+body:is([data-page=execute],[data-page=review]) .date-chip{order:2}
+body[data-page=execute] .execution-task-actions{width:auto;max-width:100%}
+body[data-page=execute] .execution-task-actions .task-start-button{flex:0 0 auto;max-width:100%}
+body[data-page=execute] #execute-active-badge{display:grid;width:100%;min-width:0;grid-template-columns:minmax(0,1fr)}
+body[data-page=execute] .execution-current-title,body[data-page=execute] .execution-current-label{display:block;width:100%;min-width:0}
+body[data-page=review] .weekly-chart-heading{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap}
+body[data-page=review] .weekly-chart-heading .chart-mode-switch{margin:0}
+body[data-page=execute] #quick-correction-open:disabled{display:none}
+body:is([data-page=execute],[data-page=review]) .primary-nav>a{border-radius:0;background:transparent}
+body[data-page=execute] .primary-nav>a[data-nav=execute],body[data-page=review] .primary-nav>a[data-nav=review]{background:transparent;border-bottom:2px solid var(--accent)}
+@media(max-width:760px){
+ body:is([data-page=execute],[data-page=review]) .site-header{min-height:50px}
+ body:is([data-page=execute],[data-page=review]) .site-header>.brand{display:none}
+ body:is([data-page=execute],[data-page=review]) .site-nav{width:100%;justify-content:space-between}
+ body:is([data-page=execute],[data-page=review]) .primary-nav{flex:1;justify-content:space-around}
+ body:is([data-page=execute],[data-page=review]) .primary-nav>a,body:is([data-page=execute],[data-page=review]) .nav-more summary{font-size:14px;min-height:44px;justify-content:center;padding:8px 14px;font-weight:500}
+ body:is([data-page=execute],[data-page=review]) .nav-more{flex:0 0 25%}
+ body:is([data-page=execute],[data-page=review]) .nav-more summary{width:100%}
+ body[data-page=review] .weekly-chart-heading h2{font-size:20px}
+ body[data-page=review] .weekly-chart-heading .chart-mode-switch button{padding:7px 10px;font-size:12px}
+}
+body:is([data-page=execute],[data-page=review]) .hero.compact{align-items:flex-start}
+body[data-page=execute] .execution-mobile-toolbar>.execution-mobile-label-panel{top:100%}
+
+/* 科目图标在卡片与时间轴保持一致，名称继续常显。 */
+body[data-page=execute] #execute-task-list .execution-task-card{padding-left:0}
+body[data-page=execute] #execute-task-list .execution-task-card:before{display:none}
+body[data-page=execute] #execute-task-list .execution-task-head h3{display:flex;align-items:center;gap:8px;min-width:0}
+body[data-page=execute] #execute-task-list .execution-task-head h3>.project-symbol{color:var(--project-color);flex-shrink:0}
+body[data-page=execute] #execute-task-list .execution-task-head h3>span{min-width:0;overflow-wrap:anywhere}
+/* 空闲优先展示课程；完整执行面板按需就地展开。 */
+body[data-page=execute] main{padding-top:8px;padding-bottom:110px}
+.execution-controls{display:contents}
+.execution-controls-heading{display:flex;align-items:center;justify-content:space-between;gap:12px;min-height:44px;margin-bottom:5px;scroll-margin-top:calc(var(--execution-header-height,50px) + 8px)}
+.execution-controls-heading .date-chip{margin:0;padding:0;border:0;background:transparent;order:0!important}
+.execution-controls-heading .date-trigger{font-size:13px;min-height:44px;padding:8px 0}
+.execution-controls-heading>button{border:0;background:transparent;min-height:44px;padding:6px 0 6px 10px;font-size:12px;color:var(--muted)}
+body[data-page=execute]:not(.execution-is-running) .execution-current-panel{position:static}
+.execution-controls-fab{position:fixed;right:max(16px,env(safe-area-inset-right));bottom:calc(20px + env(safe-area-inset-bottom));z-index:17;display:flex;align-items:center;justify-content:center;gap:8px;min-height:50px;padding:12px 18px;border:1px solid #73604e;border-radius:28px;background:#554739;color:#fffdf8;font-size:14px;box-shadow:0 3px 12px #55473924}
+.execution-controls-fab>svg{width:22px;height:22px;flex:0 0 22px}
+.execution-controls-fab:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
+.execution-date-note{display:flex;align-items:center;gap:6px;min-height:44px;margin-bottom:6px;font-size:12px;color:var(--muted)}
+.execution-date-note>span{flex:1;min-width:0;overflow-wrap:anywhere}
+.execution-date-note>button{min-height:44px;font-size:12px;padding:6px;border:0;background:transparent;white-space:nowrap}
+body[data-page=execute] #execute-mobile-toolbar{margin:12px 0 0;padding:0 0 10px;min-width:0}
+.chronology-nearby-heading>div{display:flex;align-items:center;gap:8px}
+.chronology-nearby-heading .chronology-add{color:var(--ink)}
+@media(min-width:1000px){body[data-page=execute] .execute-workspace{display:block}}
+
+/* 目标与提醒随页面滚动，运行时仅紧凑计时行吸顶。 */
+.execution-support .execution-save-note{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
+.execution-support #execute-reminder-status{margin:8px 0;font-size:13px}
+body[data-page=execute] .execution-support .execution-goal-progress{margin-top:0}

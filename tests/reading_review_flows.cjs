@@ -23,22 +23,21 @@ if(!base || !['127.0.0.1','localhost'].includes(new URL(base).hostname)) throw E
   const segment=(await api(`daily-execution/${day}/segments`,'POST',{task_id:math.id,segment_kind:'effective',label_id:'effective_math_course',started_at:`${day}T09:35:12`,ended_at:`${day}T09:45:22`})).segments[0];
   const prior=(await api('daily-plans/2026-10-13')).tasks[0];
   await api('daily-execution/2026-10-13/segments','POST',{task_id:prior.id,segment_kind:'effective',started_at:'2026-10-13T23:50:00',ended_at:`${day}T00:00:12`});
-  await page.goto(`${base}/execute?date=${day}`);await page.locator('#execute-panel').waitFor({state:'visible'});
-  assert(await page.locator('#add-segment').isVisible(),'时间轴折叠时也能补记');
-  await page.locator('#timeline-toggle').click();
-  const row=page.locator(`.timeline-card[data-segment-id="${segment.id}"]`);
+  await page.goto(`${base}/execute?date=${day}`);await page.locator('.chronology-surface').waitFor();
+  await page.locator('.chronology-browse').click();
+  assert(await page.locator('#add-segment').isVisible(),'全部记录保留补录入口');
+  const record=()=>page.locator(`.chronology-record[data-segment-id="${segment.id}"]`);
+  const edit=async()=>{if(await page.locator('#segment-edit-dialog').isVisible())return;await record().click();if(await page.locator('#segment-edit-dialog').isHidden())await record().click();await page.locator('#segment-edit-dialog').waitFor();};
+  const row=page.locator(`#segment-edit-dialog .timeline-card[data-segment-id="${segment.id}"]`);
+  await record().focus();await page.keyboard.press('Enter');assert(await page.locator('#segment-edit-dialog').isHidden(),'键盘第一次仅选中');
+  await record().focus();await page.keyboard.press('Enter');await row.waitFor();
   assert.match(await row.locator('summary').innerText(),/09:35:12—09:45:22/);
   assert.match(await row.locator('summary').innerText(),/10 分 10 秒/);
-  assert(!(await row.locator('.segment-start').isVisible()),'默认只读摘要');
-  await row.locator('summary').focus();await page.keyboard.press('Enter');
-  assert(await row.locator('.segment-start').isVisible(),'键盘可展开');
   assert.equal(await row.locator('.segment-start').inputValue(),`${day}T09:35:12`);
   await row.locator('.segment-end').fill(`${day}T09:46:23`);
-  await row.locator('summary').click();await row.locator('summary').click();
-  assert.equal(await row.locator('.segment-end').inputValue(),`${day}T09:46:23`,'收起保留草稿');
-  await page.locator('#timeline-toggle').click();await page.locator('#timeline-toggle').click();
-  assert.equal(await row.locator('.segment-end').inputValue(),`${day}T09:46:23`,'整区折叠保留草稿');
-  await row.locator('.segment-cancel').click();await row.locator('summary').click();
+  await page.evaluate(()=>window.dispatchEvent(new Event('focus')));await page.clock.runFor(16000);
+  assert.equal(await row.locator('.segment-end').inputValue(),`${day}T09:46:23`,'被动同步保留编辑输入');
+  await row.locator('.segment-cancel').click();await edit();
   assert.equal(await row.locator('.segment-end').inputValue(),`${day}T09:45:22`,'取消恢复原值');
   const path=`**/api/daily-execution/${day}/segments/${segment.id}`;
   await page.route(path,route=>route.fulfill({status:503,contentType:'application/json',body:'{"detail":"测试失败"}'}));
@@ -47,17 +46,16 @@ if(!base || !['127.0.0.1','localhost'].includes(new URL(base).hostname)) throw E
   assert.equal(await row.locator('.segment-end').inputValue(),`${day}T09:46:23`);
   await page.unroute(path);await row.locator('.segment-save').click();
   await page.waitForFunction(()=>document.querySelector('#toast').textContent==='时间段已更新');
-  assert(!(await row.locator('.segment-start').isVisible()),'保存后回到摘要');
+  assert(await page.locator('#segment-edit-dialog').isHidden(),'保存后关闭编辑窗');
   assert((await api(`daily-execution/${day}`)).segments.find(s=>s.id===segment.id).ended_at.endsWith('09:46:23'));
-  await page.goto(`${base}/execute?date=2026-10-13`);await page.locator('#execute-panel').waitFor({state:'visible'});await page.locator('#timeline-toggle').click();
-  assert.match(await page.locator('.segment-summary').innerText(),/2026-10-13 23:50:00—2026-10-14 00:00:12/);
-  await page.goto(`${base}/execute?date=${day}`);await page.locator('#execute-panel').waitFor({state:'visible'});
-  await page.locator('#add-segment').click();const draft=page.locator('.timeline-card.draft');
+  await page.goto(`${base}/execute?date=2026-10-13`);await page.locator('.chronology-surface').waitFor();await page.locator('.chronology-browse').click();
+  const cross=page.locator('.chronology-record').first();await cross.click();await cross.click();assert.match(await page.locator('.segment-summary').innerText(),/2026-10-13 23:50:00—2026-10-14 00:00:12/);
+  await page.goto(`${base}/execute?date=${day}`);await page.locator('.chronology-surface').waitFor();
+  await page.locator('.chronology-browse').click();await page.locator('#add-segment').click();const draft=page.locator('.timeline-card.draft');
   await draft.locator('.segment-start').fill(`${day}T10:00:11`);await draft.locator('.segment-end').fill(`${day}T10:01:21`);
-  await draft.locator('.segment-save').click();await draft.waitFor({state:'detached'});
+  await draft.locator('.segment-save').click();await page.locator('#segment-edit-dialog').waitFor({state:'hidden'});
   const recent=(await api(`daily-execution/${day}`)).segments.find(s=>s.started_at.endsWith('10:00:11'));
-  const added=page.locator(`[data-segment-id="${recent.id}"]`);await added.locator('summary').click();await added.locator('.segment-delete').click();
-  await added.waitFor({state:'detached'});
+  const addedRecord=page.locator(`.chronology-record[data-segment-id="${recent.id}"]`);await addedRecord.click();await addedRecord.click();const added=page.locator('#segment-edit-dialog .timeline-card');await added.locator('.segment-delete').click();assert((await api(`daily-execution/${day}`)).segments.some(s=>s.id===recent.id),'删除需要再次确认');await added.locator('.segment-delete').click();await page.locator('#segment-edit-dialog').waitFor({state:'hidden'});assert(!(await api(`daily-execution/${day}`)).segments.some(s=>s.id===recent.id));
   const ready=()=>page.waitForFunction(()=>document.querySelector('#review-workspace-content')?.getAttribute('aria-busy')==='false'&&document.querySelectorAll('.review-week-step').length>=7);
   await page.goto(`${base}/review?date=${day}`);await ready();await page.locator('#review-reflection-tab').click();
   const field=page.locator('[name=tomorrow_focus]'),status=page.locator('#daily-review-save-status');
@@ -72,7 +70,8 @@ if(!base || !['127.0.0.1','localhost'].includes(new URL(base).hostname)) throw E
   assert.match(await status.innerText(),/复盘已保存到服务器 · 核对于/,'读取时间与保存时间分开');
   await page.locator('.review-week-step[data-scope=weekly]').click();await ready();
   assert.equal(await page.locator('#review-date').inputValue(),day,'周视图保留日期锚点');
-  assert.match(await page.locator('#review-date-button').innerText(),/2026\/10\/12 — 2026\/10\/18/);
+  assert.equal(await page.locator('#review-date-button').innerText(),'10/12 — 10/18','紧凑显示周范围');
+  assert.match(await page.locator('#review-date-button').getAttribute('aria-label'),/2026-10-12 至 2026-10-18/,'完整年份和日期仍供辅助读取');
   assert.match(await page.locator('#review-period-status').innerText(),/本周进行中/);
   await page.locator('#review-data-tab').click();
   // 浏览器时间固定用于交互测试；比较范围以服务端的真实截止日为准，不能写死运行日期。
@@ -91,12 +90,12 @@ if(!base || !['127.0.0.1','localhost'].includes(new URL(base).hostname)) throw E
    if(width===390||width===768)await page.screenshot({path:`/tmp/daily-plan-week-range-${width}.png`,fullPage:true});
   }
   await page.locator('#review-prev-week').click();await ready();assert.match(await page.locator('#review-period-status').innerText(),/整周已结束/);
-  await page.goto(`${base}/execute?date=${day}`);await page.locator('#execute-panel').waitFor({state:'visible'});await page.locator('#timeline-toggle').click();
+  await page.goto(`${base}/execute?date=${day}`);await page.locator('.chronology-surface').waitFor();await page.locator('.chronology-browse').click();
   for(const [width,height] of [[360,640],[390,844],[768,1024],[1024,680]]) {
-   await page.setViewportSize({width,height});await row.locator('summary').click();
+   await page.setViewportSize({width,height});await edit();
    const field=await row.locator('.segment-start').boundingBox();assert(field.width>180&&field.x>=0&&field.x+field.width<=width);
    assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
-   await row.locator('summary').click();
+   await page.locator('#segment-edit-close').click();
    if(width===390||width===768){await page.evaluate(()=>scrollTo(0,0));await page.screenshot({path:`/tmp/daily-plan-timeline-${width}.png`,fullPage:true});}
   }
   assert.deepEqual(errors,[]);console.log('紧凑时间轴、秒级编辑、失败保留、保存时间、周范围与44px导航通过');
