@@ -1,6 +1,6 @@
 # 今天页设计参考与实现
 
-## 当前：今天页留白与目标修改闭环（2026-10-25，独立预览）
+## 当前：今天页留白与目标修改闭环（2026-10-25，已发布）
 
 对照用户平板横屏及手机截图，发现surfaces.css为.panel统一加浅色表面，而.today-plan-shell仍为零内边距，导致标题、页签及操作贴边；日期包装和内部按钮叠加内边距，调整目标又被通用ghost样式涂白。已去除外层.panel身份，为清单增加独立.plan-list-surface，标题置于内容面外；手机14px、平板24px水平留白，页签／行／底部操作对齐。平板概览独立于清单，手机继续紧凑汇总。
 
@@ -14,7 +14,7 @@
 
 七组隔离浏览器最终通过：today_refinement、mobile、compact_ui、target_quick、main_projects、morning_preferences、responsive_workspace。覆盖360／390／768／1024／1280、默认清单首屏、主副详情、整数校验／候选、保存／取消／失败重试／刷新／属性保留、忙时及切日保护、其他页计时与导航。专项先复现旧版255分钟读回0的失败；JS语法与差异检查通过。仅前端改动，未重跑后端全套。
 
-真实截图：[平板清单](design-previews/2026-10-25-today-list-1024.png)、[手机清单](design-previews/2026-10-25-today-list-390.png)、[批量修改](design-previews/2026-10-25-target-edit-390.png)来自临时库；[实际预览目标页](design-previews/2026-10-25-today-preview-1024.png)仅GET读取预览。全部已实读；实体手机键盘与平板触控仍待用户评价。正式站点未更新，本轮未提交／推送／部署。
+真实截图：[平板清单](design-previews/2026-10-25-today-list-1024.png)、[手机清单](design-previews/2026-10-25-today-list-390.png)、[批量修改](design-previews/2026-10-25-target-edit-390.png)来自临时库；[实际预览目标页](design-previews/2026-10-25-today-preview-1024.png)仅GET读取预览。全部已实读；实体手机键盘与平板触控仍待用户评价。应用dacabf9已推送并于2026-10-25 22:16:43正式发布，详见releases/2026-10-25-today-refinement.md。
 
 ## 历史：首次布局研究（2026-10-11）
 
