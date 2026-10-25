@@ -1,7 +1,8 @@
 const {chromium}=require('playwright');const assert=require('node:assert/strict');
 const base=process.env.DAILY_PLAN_TEST_URL;if(!base||!['127.0.0.1','localhost'].includes(new URL(base).hostname))throw Error('仅本机临时库');
 (async()=>{const browser=await chromium.launch({headless:true,executablePath:process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH});try{
- const page=await browser.newPage({viewport:{width:390,height:844},isMobile:true,hasTouch:true,timezoneId:'Asia/Shanghai'});await page.clock.install({time:new Date('2026-10-19T12:00:00+08:00')});
+ const day=new Date().toLocaleDateString('en-CA',{timeZone:'Asia/Shanghai'});
+ const page=await browser.newPage({viewport:{width:390,height:844},isMobile:true,hasTouch:true,timezoneId:'Asia/Shanghai'});await page.clock.install({time:new Date(day+'T12:00:00+08:00')});
  const errors=[];page.on('pageerror',e=>errors.push(e.message));
  const api=async(path,method='GET',data)=>{const r=await page.request.fetch(`${base}/api/${path}`,{method,data});assert(r.ok(),await r.text());return r.json();};
  assert((await api('system/health')).database_path.startsWith('/tmp/'));
@@ -28,15 +29,15 @@ const base=process.env.DAILY_PLAN_TEST_URL;if(!base||!['127.0.0.1','localhost'].
  assert.equal(await page.locator(`[data-target-category="${category}"]`).inputValue(),'35');assert.equal(await page.locator('[data-target-category=computer]').count(),0);
  await page.locator('#checkin-form [type=submit]').click();await page.locator('#plan-section').waitFor();
  assert.equal(await page.locator('#main-route-list .task-card').first().getAttribute('data-category'),category);
- await page.locator('#approve-plan').click();await page.waitForURL('**/execute?date=2026-10-19');await page.locator('#execute-panel').waitFor();
+ await page.locator('#approve-plan').click();await page.waitForURL('**/execute?date='+day);await page.locator('#execute-panel').waitFor();
  const card=page.locator(`.execution-task-card`).filter({has:page.locator('h3',{hasText:'吉他'})});
  await card.locator('.task-start-button').click();await card.locator('[data-start-label-id=""]').click();await page.waitForFunction(()=>!document.querySelector('#execute-stop').disabled);
- let state=await api('daily-execution/2026-10-19');assert.equal(state.tasks.find(t=>t.id===state.active_segment.task_id).category,category);
+ let state=await api('daily-execution/'+day);assert.equal(state.tasks.find(t=>t.id===state.active_segment.task_id).category,category);
  await page.locator('#execute-stop').click();await page.waitForFunction(()=>document.querySelector('#execute-stop').disabled&&document.querySelector('#execute-current-panel').getAttribute('aria-busy')==='false');
- await page.goto(base+'/review?date=2026-10-19');await page.waitForFunction(()=>document.querySelector('#review-workspace-content').getAttribute('aria-busy')==='false');
+ await page.goto(base+'/review?date='+day);await page.waitForFunction(()=>document.querySelector('#review-workspace-content').getAttribute('aria-busy')==='false');
  await page.goto(base+'/settings');await page.locator('summary').filter({hasText:'日常计划'}).click();await row().waitFor();await row().locator('.main-project-remove').click();
  await page.locator('#settings-form [type=submit]').click();await page.waitForFunction(()=>document.querySelector('#toast').textContent==='设置已保存');
- const preserved=await api('daily-plans/2026-10-19');assert(preserved.tasks.some(t=>t.category===category));
+ const preserved=await api('daily-plans/'+day);assert(preserved.tasks.some(t=>t.category===category));
  assert.deepEqual(await api('daily-plans/2026-10-18'),oldSnapshot);
  await page.locator('#main-project-existing').selectOption(category);await page.locator('#main-project-add-existing').click();assert.equal(await row().locator('[data-draft-main-category]').inputValue(),'35','重新加入保留默认分钟');
  assert.deepEqual(errors,[]);console.log('PASS: 自建吉他／移出408／排序／默认目标、动态今天页、确认及计时、移出后历史保持、重新加入与四视口输入');

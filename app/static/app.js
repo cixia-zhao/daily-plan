@@ -404,6 +404,8 @@ if (page === 'today') {
   let currentPlan = null;
   let swapSourceId = null;
   let carryoverItems = [];
+  let targetEditState = null;
+  let targetEditBusy = false;
 
   function setTodayStage(stage) {
     const checkinStage = $('#today-checkin-stage');
@@ -414,7 +416,7 @@ if (page === 'today') {
     document.body.classList.toggle('today-list-stage', showingReview);
     $('#today-page-header .plan-status-actions').classList.toggle('hidden', !showingReview);
     $('#today-page-header h1').textContent = showingReview
-      ? (currentPlan?.status === 'draft' ? '安排今天' : '今天的清单') : '今天的目标';
+      ? (currentPlan?.status === 'draft' ? '安排今天' : '今天的清单') : (targetEditState ? '修改目标时长' : '今天的目标');
     if (showingReview) window.scrollTo({top: 0, behavior: 'smooth'});
   }
 
@@ -632,6 +634,8 @@ if (page === 'today') {
   }
 
   function renderPlan(plan) {
+    targetEditState = null;
+    configureTargetForm(false);
     currentPlan = plan;
     swapSourceId = null;
     setTodayStage('review');
@@ -896,13 +900,84 @@ if (page === 'today') {
     return true;
   }
 
-  function renderMorningTargets() {
-    $('#morning-targets').innerHTML = (settings.main_project_categories || ['math', 'english', 'computer', 'rehab']).filter(category => category !== 'rehab' || settings.rehab_enabled).map(category => `<label>${esc(settings.task_titles[category] || category)}目标（分钟）<input type="number" min="0" max="720" step="15" required data-target-category="${category}" value="${settings.draft_main_minutes_by_category?.[category] || 0}"></label>`).join('');
+  function configureTargetForm(editing) {
+    $('#checkin-title').textContent = editing ? '各项目目标时长' : '填写今天的目标';
+    $('#target-edit-note').hidden = !editing;
+    $('#cancel-target-edit').hidden = !editing;
+    $('#checkin-submit > span').textContent = editing ? '保存并返回清单' : '生成今天的草稿';
+    $('#checkin-submit .checkin-next').hidden = editing;
+    $('#morning-energy-field').hidden = editing || !settings?.show_energy_selector;
+    $('#morning-day-type-field').hidden = editing || !settings?.show_day_type_selector;
+    $('#target-edit-error').hidden = true;
+    $('#target-edit-error').textContent = '';
+    $('#checkin-form').classList.toggle('editing-targets', editing);
+  }
+
+  function renderMorningTargets(tasks = null) {
+    const fields = tasks || (settings.main_project_categories || ['math', 'english', 'computer', 'rehab'])
+      .filter(category => category !== 'rehab' || settings.rehab_enabled)
+      .map(category => ({category, title:settings.task_titles[category] || category,
+        estimated_minutes:settings.draft_main_minutes_by_category?.[category] || 0}));
+    $('#morning-targets').innerHTML = fields.map(task => `<label><span class="target-field-label">${esc(task.title)}<small>分钟</small></span><input type="number" min="0" max="720" step="15" required aria-label="${esc(task.title)}目标分钟" data-target-category="${esc(task.category)}" ${task.id ? `data-target-task-id="${Number(task.id)}"` : ''} value="${Number(task.estimated_minutes)}"></label>`).join('');
     const update = () => { $('#morning-total').textContent = `计划合计 ${$$('[data-target-category]').reduce((sum, input) => sum + Number(input.value || 0), 0)} 分`; };
     $$('[data-target-category]').forEach(input => input.oninput = update);
     bindGoalSuggestions($$('[data-target-category]'));
     update();
   }
+
+  function beginTargetEdit() {
+    if (targetEditBusy || currentPlan?.status !== 'draft') return;
+    closeGoalSuggestions();
+    syncDraftFromDom();
+    targetEditState = {date:dateInput.value, tasks:taskPayload()};
+    configureTargetForm(true);
+    renderMorningTargets(currentPlan.tasks.filter(task => !task.is_sub));
+    setTodayStage('checkin');
+    window.scrollTo({top:0, behavior:'smooth'});
+    $('#checkin-title').tabIndex = -1;
+    $('#checkin-title').focus({preventScroll:true});
+    window.PlanUI?.enter($('#today-checkin-stage'), -1);
+  }
+
+  function setTargetEditBusy(busy) {
+    targetEditBusy = busy;
+    $('#checkin-form').setAttribute('aria-busy', String(busy));
+    $$('#checkin-form input, #checkin-form select, #checkin-form button').forEach(node => node.disabled = busy);
+    [dateButton, $('#reset-day'), $('#restore-reset'), carryoverButton].forEach(node => { if (node) node.disabled = busy; });
+  }
+
+  async function saveTargetEdit() {
+    if (targetEditBusy || !targetEditState) return;
+    const edit = targetEditState;
+    const minutes = new Map($$('[data-target-task-id]').map(input => [Number(input.dataset.targetTaskId), Number(input.value)]));
+    const tasks = edit.tasks.map(task => minutes.has(task.id) ? {...task, estimated_minutes:minutes.get(task.id)} : task);
+    closeGoalSuggestions();
+    $('#target-edit-error').hidden = true;
+    setTargetEditBusy(true);
+    $('#checkin-submit > span').textContent = '正在保存…';
+    try {
+      const plan = await api(`/api/daily-plans/${edit.date}`, {method:'PUT', body:JSON.stringify({tasks})});
+      invalidateCalendarMonth(edit.date);
+      renderPlan(plan);
+      $('#adjust-checkin').focus({preventScroll:true});
+      window.PlanUI?.enter($('#today-review-stage'));
+      toast('目标时长已保存');
+    } catch (error) {
+      $('#target-edit-error').textContent = error.message;
+      $('#target-edit-error').hidden = false;
+    } finally {
+      setTargetEditBusy(false);
+      if (targetEditState) $('#checkin-submit > span').textContent = '保存并返回清单';
+    }
+  }
+
+  $('#cancel-target-edit').onclick = () => {
+    if (targetEditBusy) return;
+    closeGoalSuggestions();
+    renderPlan(currentPlan);
+    $('#adjust-checkin').focus({preventScroll:true});
+    window.PlanUI?.enter($('#today-review-stage'));
+  };
 
   async function loadCarryovers() {
     carryoverItems = await api('/api/carryovers');
@@ -912,6 +987,9 @@ if (page === 'today') {
   async function loadPlanForDate() {
     loadTargetHistory();
     cancelSwap();
+    targetEditState = null;
+    configureTargetForm(false);
+    renderMorningTargets();
     currentPlan = null;
     setTodayStage('checkin');
     $('#time-summary').classList.add('hidden');
@@ -930,6 +1008,9 @@ if (page === 'today') {
       if (!result) return;
       invalidateCalendarMonth(dateInput.value);
       cancelSwap();
+      targetEditState = null;
+      configureTargetForm(false);
+      renderMorningTargets();
       currentPlan = null;
       setTodayStage('checkin');
       $('#time-summary').classList.add('hidden');
@@ -946,7 +1027,8 @@ if (page === 'today') {
 
   $('#checkin-form').onsubmit = async event => {
     event.preventDefault();
-    if(!validateMorningTargets())return;
+    if (targetEditBusy || !validateMorningTargets()) return;
+    if (targetEditState) { await saveTargetEdit(); return; }
     closeGoalSuggestions();
     const submit = event.submitter;
     if (currentPlan?.status === 'draft') {
@@ -996,7 +1078,7 @@ if (page === 'today') {
       $('#save-draft').disabled = false;
     }
   };
-  $('#adjust-checkin').onclick = () => setTodayStage('checkin');
+  $('#adjust-checkin').onclick = beginTargetEdit;
   const openExecutionDesk = () => {
     window.location.href = `/execute?date=${encodeURIComponent(dateInput.value)}`;
   };
@@ -1010,6 +1092,10 @@ if (page === 'today') {
     $('#morning-energy-field').hidden=!settings.show_energy_selector;
     $('#morning-day-type-field').hidden=!settings.show_day_type_selector;
     bindSharedCalendarTrigger(dateButton, () => dateInput.value, async nextDate => {
+      if (targetEditBusy || nextDate === dateInput.value) return;
+      if (targetEditState && $$('[data-target-task-id]').some(input => Number(input.value) !== targetEditState.tasks.find(task => task.id === Number(input.dataset.targetTaskId))?.estimated_minutes)) {
+        if (!await confirmAction('尚未保存的目标时长会丢弃，原清单保持不变。', {title:'放弃修改并切换日期？', confirmLabel:'放弃并切换'})) return;
+      }
       dateInput.value = nextDate;
       updateDateTrigger(dateButton, nextDate);
       await loadPlanForDate();
