@@ -9,8 +9,8 @@ from pathlib import Path
 from urllib.parse import parse_qs, quote
 
 from dotenv import load_dotenv
-from fastapi import FastAPI, Request
-from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from starlette.middleware.sessions import SessionMiddleware
@@ -21,6 +21,7 @@ from .auth import build_auth_settings, verify_password
 from .database import initialize
 from .services.ai_planner import AIPlanner
 from .services.weekly_review_analyzer import WeeklyReviewAnalyzer
+from .services.pwa import asset_version, manifest
 
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -89,6 +90,24 @@ def create_app(
     app.mount("/static", StaticFiles(directory=static_dir), name="static")
     templates = Jinja2Templates(directory=templates_dir)
     templates.env.globals["static_version"] = lambda filename: int((static_dir / filename).stat().st_mtime)
+    pwa_version = asset_version(static_dir)
+
+    @app.get('/manifest.webmanifest')
+    def pwa_manifest():
+        return JSONResponse(manifest(), media_type='application/manifest+json', headers={'Cache-Control':'no-cache'})
+
+    @app.get('/sw.js')
+    def pwa_worker():
+        source=(static_dir/'pwa/sw.js').read_text().replace('__PWA_VERSION__', pwa_version)
+        return Response(source, media_type='application/javascript', headers={'Cache-Control':'no-cache','Service-Worker-Allowed':'/'})
+
+    @app.get('/offline')
+    def pwa_offline():
+        return FileResponse(static_dir/'pwa/offline.html', media_type='text/html', headers={'Cache-Control':'no-cache'})
+
+    @app.get('/favicon.ico')
+    def favicon():
+        return FileResponse(static_dir/'pwa/favicon.ico', media_type='image/x-icon')
 
     def safe_next_path(value: str | None) -> str:
         if value and value.startswith("/") and not value.startswith("//") and not value.startswith("/login"):
@@ -97,7 +116,7 @@ def create_app(
 
     @app.middleware("http")
     async def require_authentication(request: Request, call_next):
-        if not app.state.auth.required or request.url.path == "/login" or request.url.path.startswith("/static/"):
+        if not app.state.auth.required or request.url.path in ('/login','/manifest.webmanifest','/sw.js','/offline','/favicon.ico') or request.url.path.startswith("/static/"):
             return await call_next(request)
         if request.session.get("authenticated") is True:
             return await call_next(request)
@@ -107,6 +126,13 @@ def create_app(
         if request.url.query:
             next_path = f"{next_path}?{request.url.query}"
         return RedirectResponse(url=f"/login?next={quote(next_path, safe='/?=&')}", status_code=303)
+
+    @app.middleware('http')
+    async def prevent_private_caching(request: Request, call_next):
+        response=await call_next(request)
+        if request.url.path not in ('/manifest.webmanifest','/sw.js','/offline','/favicon.ico') and not request.url.path.startswith('/static/'):
+            response.headers['Cache-Control']='no-store'
+        return response
 
     app.add_middleware(
         SessionMiddleware,
@@ -158,8 +184,18 @@ def create_app(
     def execute_page(request: Request):
         today = datetime.now(ZoneInfo("Asia/Shanghai")).date().isoformat()
         requested = request.query_params.get("date")
+        if requested:
+            try:
+                parsed = datetime.strptime(requested, "%Y-%m-%d").date()
+                if parsed.isoformat() != requested:
+                    raise ValueError("非标准日期")
+            except ValueError:
+                raise HTTPException(422, "日期格式应为YYYY-MM-DD且为有效日期")
         if requested and requested != today:
-            return RedirectResponse("/review?date=" + quote(requested, safe="") + "&records=1", status_code=303)
+            return templates.TemplateResponse(request, "execution_history.html", {
+                "execution_date": requested, "records_only": True, "inline_records": True,
+                "is_past": requested < today,
+            })
         return templates.TemplateResponse(request, "execute.html", {"execution_date": today})
 
     @app.get("/weekly", response_class=HTMLResponse)

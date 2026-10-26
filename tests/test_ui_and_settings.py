@@ -117,7 +117,9 @@ def test_execute_page_assets_exist():
     execute = "\n".join(Path(path).read_text(encoding="utf-8") for path in ["app/templates/execute.html", "app/templates/execution_tasks.html", "app/templates/execution_overlay.html"])
     styles = Path("app/static/style.css").read_text(encoding="utf-8")
 
-    assert "if (page === 'execute' || $('#review-records-workspace'))" in script
+    assert "page === 'execute'" in script
+    assert "$('#review-records-workspace')" in script
+    assert "$('#history-records-workspace')" in script
     assert "/api/daily-execution/" in script
     assert "Array.isArray(rawDetail)" in script
     assert 'id="execute-date-button"' not in execute

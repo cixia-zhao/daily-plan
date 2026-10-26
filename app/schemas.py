@@ -151,6 +151,11 @@ class ExecutionLabelStartInput(BaseModel):
     task_id: int | None = None
 
 
+class ExecutionAutoStopInput(BaseModel):
+    segment_id: int = Field(strict=True, gt=0)
+    due_at: datetime | None = None
+
+
 class QuickCorrectionInput(BaseModel):
     request_id: str = Field(pattern=r"^[a-zA-Z0-9_-]{16,80}$")
     source_segment_id: int = Field(gt=0)

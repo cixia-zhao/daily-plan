@@ -1,0 +1,15 @@
+/* 安装及联网状态沿用暖纸表面，默认不占阅读空间。 */
+:root{--pwa-paper:#f4f1e9;--pwa-surface:#fffdf8;--pwa-ink:#29251f;--pwa-muted:#736b60;--pwa-line:#d8d0c3;--pwa-accent:#ac624a}
+html{background:var(--pwa-paper)}
+body{padding-top:env(safe-area-inset-top);padding-bottom:env(safe-area-inset-bottom)}
+.site-header{top:env(safe-area-inset-top)}
+.pwa-install-menu{display:block;width:100%;text-align:left;background:transparent!important;border:0!important;padding:10px 14px!important;font-weight:400!important;color:inherit;cursor:pointer}
+.pwa-install-login{border:0;background:transparent;color:var(--pwa-muted);min-height:44px;font:inherit;font-size:13px;cursor:pointer}
+.pwa-notice{position:fixed;top:calc(8px + env(safe-area-inset-top));left:12px;right:12px;max-width:620px;margin:auto;z-index:70;display:flex;align-items:center;gap:10px;padding:8px 12px;background:var(--pwa-ink);color:var(--pwa-surface);border-radius:10px;box-shadow:0 4px 20px #29251f20;font-size:13px;line-height:1.6}
+.pwa-notice>span{flex:1}.pwa-notice button{min-height:44px;flex:none;border:1px solid #ffffff40;border-radius:6px;padding:8px 10px;background:transparent;color:inherit;font:inherit;font-size:12px}
+.pwa-dialog{width:min(420px,calc(100vw - 28px));max-height:calc(100dvh - 32px);overflow:auto;box-sizing:border-box;border:1px solid var(--pwa-line);border-radius:16px;padding:24px;background:var(--pwa-surface);color:var(--pwa-ink)}
+.pwa-dialog::backdrop{background:#29231c55}.pwa-dialog-heading{display:flex;align-items:center;justify-content:space-between}.pwa-dialog-heading img{border-radius:10px}.pwa-dialog button{min-height:44px;min-width:44px;cursor:pointer;font:inherit;font-size:14px}.pwa-dialog-heading button{border:0;background:transparent;color:var(--pwa-muted);font-size:23px}
+.pwa-dialog h2{font-family:Georgia,"Songti SC",serif;font-size:26px;font-weight:500;line-height:1.4;margin:22px 0 12px}.pwa-dialog p{font-size:14px;line-height:1.8;color:var(--pwa-muted);margin:10px 0}.pwa-dialog-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:28px}.pwa-dialog-actions button{padding:8px 15px;border:1px solid var(--pwa-line);border-radius:8px;background:transparent;color:var(--pwa-muted)}.pwa-dialog-actions #pwa-dialog-action{background:var(--pwa-ink);color:var(--pwa-surface);border-color:var(--pwa-ink)}
+.pwa-dialog button:focus-visible,.pwa-notice button:focus-visible{outline:2px solid var(--pwa-accent);outline-offset:2px}
+@media(orientation:landscape){body{padding-left:env(safe-area-inset-left);padding-right:env(safe-area-inset-right)}}
+@media(display-mode:standalone){body{min-height:100dvh}.login-page{min-height:100dvh}}

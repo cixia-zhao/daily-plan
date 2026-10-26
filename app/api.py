@@ -10,6 +10,7 @@ from fastapi.responses import FileResponse
 
 from .backup_utils import create_sqlite_backup, prune_old_backups
 from .database import connect
+from .services.auto_stop import dispatch_auto_stops
 from .services.reminders import schedule_reminder, cancel_reminders, reminder_for_segment, notification_status
 from .services.time_accounting import label_category, record_category, counts_in_learning_session, time_summary, combine_summaries, summary_text
 from .services.daily_reset import restore_snapshot, save_reset_snapshot, snapshot_metadata
@@ -28,6 +29,7 @@ from .schemas import (
     ExecutionSegmentCreateInput,
     ExecutionSegmentUpdateInput,
     ExecutionTaskStartInput,
+    ExecutionAutoStopInput,
     QuickCorrectionInput,
     GPTRecordSaveInput,
     PlanUpdate,
@@ -191,6 +193,8 @@ EMPTY_REVIEW = {
 
 
 def _db(request: Request):
+    # 独立事务提交已到期结算，后续请求即使冲突回滚也不能让计时复活。
+    dispatch_auto_stops(request.app.state.database_path)
     return connect(request.app.state.database_path)
 
 
@@ -520,6 +524,8 @@ def _serialize_execution_segment_row(row) -> dict:
         "seconds": seconds,
         "included": bool(row["included"]),
         "is_estimated": bool(row["is_estimated"]),
+        "auto_stop_at": row["auto_stop_at"],
+        "stopped_automatically": bool(row["stopped_automatically"]),
     }
 
 
@@ -803,9 +809,12 @@ def _close_active_execution_segment(connection, plan_date: str | None = None, en
         return None
     cancel_reminders(connection,active["id"])
     effective_end = ended_at or _now_iso()
+    automatic = bool(active['auto_stop_at'] and _parse_iso_datetime(active['auto_stop_at']) <= _parse_iso_datetime(effective_end))
+    if automatic:
+        effective_end = active['auto_stop_at']
     if _parse_iso_datetime(effective_end) <= _parse_iso_datetime(active["started_at"]):
         effective_end = active["started_at"]
-    connection.execute("UPDATE task_execution_segments SET ended_at=? WHERE id=?", (effective_end, active["id"]))
+    connection.execute("UPDATE task_execution_segments SET ended_at=?,auto_stop_at=?,stopped_automatically=? WHERE id=?", (effective_end, active['auto_stop_at'] if automatic else None, int(automatic), active["id"]))
     return active["task_id"]
 
 
@@ -1757,6 +1766,8 @@ def quick_correct_execution(plan_date: date, payload: QuickCorrectionInput, requ
         task = _get_task_row_for_execution(connection, day, active['task_id'])
         now = _now_iso()
         end = _parse_iso_datetime(now)
+        if active['auto_stop_at'] and _parse_iso_datetime(active['auto_stop_at']) <= end:
+            raise HTTPException(409, '本次计时已到自动停止时刻，请核对记录后再补录')
         start = end - timedelta(minutes=payload.minutes)
         if start < _parse_iso_datetime(active['started_at']):
             raise HTTPException(409, '补记时长超过当前有效学习段，请选择更短的时长；原记录保留')
@@ -1780,14 +1791,34 @@ def quick_correct_execution(plan_date: date, payload: QuickCorrectionInput, requ
                VALUES(?,?,?,?,?,?,?,?)''',
             (day, task['id'], 'effective', active['time_category'], active['label_id'], active['label_name'], now, active['included']),
         )
+        continuation_id = cursor.lastrowid
+        connection.execute('UPDATE task_execution_segments SET auto_stop_at=? WHERE id=?', (active['auto_stop_at'], continuation_id))
+        connection.execute('UPDATE task_execution_segments SET auto_stop_at=NULL WHERE id=?', (active['id'],))
         connection.execute(
             '''INSERT INTO execution_quick_corrections(plan_date,request_id,source_segment_id,correction_segment_id,continuation_segment_id,minutes,time_category,created_at)
                VALUES(?,?,?,?,?,?,?,?)''',
-            (day, payload.request_id, active['id'], correction_id, cursor.lastrowid, payload.minutes, category, now),
+            (day, payload.request_id, active['id'], correction_id, continuation_id, payload.minutes, category, now),
         )
         connection.execute("UPDATE plans SET status='approved' WHERE id=? AND status='submitted'", (task['plan_id'],))
         _sync_plan_actual_minutes_from_execution(connection, task['plan_id'])
         return _build_execution_payload(connection, day)
+
+
+@router.put("/daily-execution/{plan_date}/auto-stop")
+def set_execution_auto_stop(plan_date: date, payload: ExecutionAutoStopInput, request: Request):
+    with _db(request) as connection:
+        connection.execute('BEGIN IMMEDIATE')
+        active = _get_active_execution_segment(connection, plan_date.isoformat())
+        if not active or active['id'] != payload.segment_id:
+            raise HTTPException(409, '当前计时已停止或切换，请核对后重新设置')
+        due = _parse_iso_datetime(payload.due_at.isoformat()) if payload.due_at else None
+        now = _parse_iso_datetime(_now_iso())
+        if active['auto_stop_at'] and _parse_iso_datetime(active['auto_stop_at']) <= now:
+            raise HTTPException(409, '已到自动停止时刻，请先核对记录')
+        if due and (due <= now or due <= _parse_iso_datetime(active['started_at']) or due > now + timedelta(days=1)):
+            raise HTTPException(422, '请选择未来24小时内、晚于计时开始的停止时间')
+        connection.execute('UPDATE task_execution_segments SET auto_stop_at=? WHERE id=?', (_local_iso(due) if due else None, active['id']))
+        return _build_execution_payload(connection, plan_date.isoformat())
 
 
 @router.post("/daily-execution/{plan_date}/stop")
@@ -1874,6 +1905,8 @@ def update_execution_segment(plan_date: date, segment_id: int, payload: Executio
         if running:
             if _parse_iso_datetime(_local_iso(payload.started_at)) > _parse_iso_datetime(_now_iso()):
                 raise HTTPException(422, '正在计时的开始时间不能晚于当前时间')
+            if existing['auto_stop_at'] and _parse_iso_datetime(_local_iso(payload.started_at)) >= _parse_iso_datetime(existing['auto_stop_at']):
+                raise HTTPException(422, '开始时间必须早于已设置的自动停止时间，请先修改自动停止设置')
             if payload.ended_at is not None:
                 raise HTTPException(409, '运行段保存后继续计时；如需结束，请使用停止按钮')
             linked = connection.execute('SELECT 1 FROM execution_quick_corrections WHERE continuation_segment_id=?', (segment_id,)).fetchone()
@@ -1930,6 +1963,8 @@ def update_execution_segment(plan_date: date, segment_id: int, payload: Executio
                         or label_id != existing['label_id'] or _local_iso(payload.started_at) != existing['started_at']
                         or payload.time_category not in (None, existing['time_category'])):
             cancel_reminders(connection, segment_id)
+            if payload.task_id != existing['task_id'] or payload.segment_kind != existing['segment_kind'] or label_id != existing['label_id']:
+                connection.execute('UPDATE task_execution_segments SET auto_stop_at=NULL WHERE id=?', (segment_id,))
         connection.execute("UPDATE plans SET status='approved' WHERE id=? AND status='submitted'", (existing["plan_id"],))
         _sync_plan_actual_minutes_from_execution(connection, existing["plan_id"])
         if existing["plan_id"] != task["plan_id"]:

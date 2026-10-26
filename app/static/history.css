@@ -1,0 +1,46 @@
+/* 历史项目与时间记录在同一阅读层，不以抽屉遮挡页面。 */
+body[data-page=execution-history] main{max-width:1040px;padding-bottom:32px}
+.history-heading p{font-size:13px;margin-top:6px}
+.return-today{display:inline-flex;align-items:center;justify-content:center;min-height:44px;padding:8px 10px;color:var(--accent);font-size:13px;white-space:nowrap}
+.return-today:hover{text-decoration:underline;text-underline-offset:4px}
+.history-metrics{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;padding:8px 0 24px}
+.history-metrics>div{padding-left:16px;border-left:1px solid var(--line);display:grid;gap:7px}
+.history-metrics>div:first-child{padding-left:0;border:0}
+.history-metrics span{color:var(--muted);font-size:13px}
+.history-metrics strong{font-family:Georgia,"Songti SC",serif;font-size:28px;font-weight:500;line-height:1.3}
+.history-projects,.inline-records .execution-controls{background:var(--surface);border:0;border-radius:12px;padding:18px 22px;margin-bottom:18px}
+.history-section-heading{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:4px}
+.history-section-heading h2{font-size:20px;font-weight:500}
+.history-text-link{display:inline-flex;align-items:center;min-height:44px;color:var(--muted);font-size:13px}
+.history-task{padding:15px 0;border-bottom:1px solid var(--line)}
+.history-task:last-child{border:0}
+.history-task-heading{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.history-task-heading h3{display:flex;align-items:center;gap:8px;margin:0;font-size:16px;font-weight:500;overflow-wrap:anywhere}
+.history-task-heading>span{color:var(--muted);font-size:12px;flex-shrink:0}
+.history-task-metrics{display:flex;flex-wrap:wrap;gap:8px 18px;margin:7px 0 0 27px;font-size:13px;color:var(--muted)}
+body[data-page=execution-history] .inline-records .execution-controls{position:static;display:flex;width:100%;max-height:none;animation:none;box-shadow:none;overflow:visible;margin:0;border-radius:12px}
+.inline-records .execution-controls-heading{padding:0;min-height:44px}
+.inline-records .execution-controls-heading h2{font-size:20px}
+.inline-records .execution-sheet-body{padding:12px 0 0;overflow:visible;max-height:none}
+.inline-records :is(.execution-sheet-handle,#execution-controls-close,#execution-controls-backdrop){display:none}
+.history-bottom-actions{margin-top:18px}
+.history-bottom-actions>a,.review-execution-link{display:inline-flex;align-items:center;justify-content:center;min-height:44px;padding:8px 13px;border:1px solid var(--line);border-radius:8px}
+@media(max-width:759px){
+ .history-heading{gap:8px}
+ .history-heading .date-actions{flex-wrap:wrap;gap:4px}
+ .history-heading h1{font-size:26px}
+ .history-metrics{gap:8px;padding-bottom:18px}
+ .history-metrics>div{padding-left:10px}
+ .history-metrics strong{font-size:23px}
+ .history-projects,.inline-records .execution-controls{padding:14px 16px}
+ .history-task-heading{align-items:flex-start}
+}
+body[data-page=execution-history] .history-heading .date-chip{padding:0;border:0;background:transparent}
+body[data-page=execution-history] .history-heading .date-trigger{min-height:44px;height:44px;padding:8px 12px;border:1px solid var(--line);border-radius:8px;background:var(--surface);font-size:14px;font-weight:500}
+@media(max-width:759px){
+ body[data-page=execution-history] .history-heading{display:flex;flex-direction:column;align-items:stretch;gap:8px}
+ body[data-page=execution-history] .history-heading>div:first-child{display:block}
+ body[data-page=execution-history] .history-heading h1{font-size:26px;white-space:nowrap}
+ body[data-page=execution-history] .history-heading .date-actions{display:flex;justify-content:space-between;align-items:center;gap:8px;align-self:stretch}
+ body[data-page=execution-history] .history-heading .return-today{order:2}
+}

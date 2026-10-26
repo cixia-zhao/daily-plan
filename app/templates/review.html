@@ -5,6 +5,7 @@
 <section class="hero compact">
   <div><h1 id="review-page-title">日复盘</h1><p id="review-week-range">先看数据，再留下结论与下一步。</p><p id="review-period-status" class="review-period-status" hidden></p></div>
   <div class="date-actions">
+    <a class="return-today" data-return-today href="/review" hidden>回到今天</a>
     <button id="reset-day" class="danger-soft reset-day-button" type="button" aria-label="重置今天">重置</button>
     <button id="restore-reset" class="ghost-button" type="button" hidden aria-label="恢复重置前记录">恢复记录</button>
     <div class="date-chip date-chip-button">
@@ -42,7 +43,8 @@
   <div id="daily-execution-board-empty" class="muted">这一天还没有执行记录。</div>
   <div id="daily-execution-board"><div id="daily-project-chart"></div><details class="review-task-detail"><summary>任务明细 · 有效细分、分心与休息</summary><div id="daily-execution-details" class="execution-board-grid"></div></details></div>
 </section>
-<button id="review-records-open" class="ghost-button review-records-open" type="button">查看与编辑时间记录 <span aria-hidden="true">↗</span></button>
+<a id="review-execution-link" class="ghost-button review-execution-link" href="/execute">查看当日执行记录</a>
+<button id="review-records-open" class="ghost-button review-records-open" type="button">编辑时间记录 <span aria-hidden="true">↗</span></button>
 <section id="daily-time-summary" class="time-summary-section" aria-label="当天已记录时间去向"></section>
 <p id="daily-word-count-summary" class="learning-outcome-summary" hidden></p>
 <p id="daily-outcome-summary" class="learning-outcome-summary" hidden></p>

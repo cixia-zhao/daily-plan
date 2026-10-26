@@ -64,7 +64,9 @@ function confirmAction(message, options={}) {
 }
 
 async function api(path, options={}) {
-  const response = await fetch(path, {headers:{'Content-Type':'application/json'}, ...options});
+  let response;
+  try { response = await fetch(path, {cache:'no-store',headers:{'Content-Type':'application/json'}, ...options}); }
+  catch { window.dispatchEvent(new Event('app-network-error')); throw new Error('无法连接服务器，这次操作尚未确认保存；请联网后核对记录再重试。'); }
   if (!response.ok) {
     let detail = '操作失败';
     try {
@@ -399,7 +401,8 @@ if (page === 'today') {
   const carryoverHint = $('#carryover-hint');
   const carryoverCount = $('#carryover-count');
   const carryoverList = $('#carryover-popover-list');
-  dateInput.value = todayIso();
+  const requestedDate = new URLSearchParams(location.search).get('date');
+  dateInput.value = PlanUI.validDate(requestedDate) ? requestedDate : todayIso();
   updateDateTrigger(dateButton, dateInput.value);
   let currentPlan = null;
   let swapSourceId = null;
@@ -417,6 +420,9 @@ if (page === 'today') {
     $('#today-page-header .plan-status-actions').classList.toggle('hidden', !showingReview);
     $('#today-page-header h1').textContent = showingReview
       ? (currentPlan?.status === 'draft' ? '安排今天' : '今天的清单') : (targetEditState ? '修改目标时长' : '今天的目标');
+    const historical = dateInput.value !== todayIso();
+    if (historical && !targetEditState) $('#today-page-header h1').textContent = dateInput.value < todayIso() ? '历史计划' : '所选日期计划';
+    $('#reset-day').textContent = historical ? '重置此日' : '重置今天';
     if (showingReview) window.scrollTo({top: 0, behavior: 'smooth'});
   }
 
@@ -536,7 +542,7 @@ if (page === 'today') {
     } else {
       button.className = 'primary btn-submit';
       button.disabled = false;
-      button.textContent = '进入执行台';
+      button.textContent = dateInput.value === todayIso() ? '进入执行台' : '查看当日执行记录';
       badge.className = 'status plan-confirmed-status';
       badge.textContent = '计划已安排';
     }
@@ -901,7 +907,7 @@ if (page === 'today') {
   }
 
   function configureTargetForm(editing) {
-    $('#checkin-title').textContent = editing ? '各项目目标时长' : '填写今天的目标';
+    $('#checkin-title').textContent = editing ? '各项目目标时长' : dateInput.value === todayIso() ? '填写今天的目标' : '填写此日目标';
     $('#target-edit-note').hidden = !editing;
     $('#cancel-target-edit').hidden = !editing;
     $('#checkin-submit > span').textContent = editing ? '保存并返回清单' : '生成今天的草稿';
@@ -985,6 +991,8 @@ if (page === 'today') {
   }
 
   async function loadPlanForDate() {
+    PlanUI.setDate(dateInput.value);
+    history.replaceState(null, '', '/?date='+encodeURIComponent(dateInput.value));
     loadTargetHistory();
     cancelSwap();
     targetEditState = null;
@@ -1104,7 +1112,8 @@ if (page === 'today') {
   }).catch(error => toast(error.message));
 }
 
-if (page === 'execute' || $('#review-records-workspace')) {
+if (page === 'execute' || $('#review-records-workspace') || $('#history-records-workspace')) {
+  const historyView = page === 'execution-history';
   const recordsOnly = page !== 'execute';
   let executionTab = 'courses';
   let controlsFocus = null;
@@ -1129,6 +1138,7 @@ if (page === 'execute' || $('#review-records-workspace')) {
   let syncFailed = false;
   let timingPending = false;
   let timingAction = '';
+  let autoStopBusy = false;
   let quickCorrectionBusy = false;
   let quickCorrectionSource = null;
   let quickCorrectionCategory = null;
@@ -1139,7 +1149,7 @@ if (page === 'execute' || $('#review-records-workspace')) {
   const segmentDialog = $('#segment-edit-dialog');
   const chronology = new ExecutionTimeline($('#execute-chronology'), openSegmentEditor, openNewSegmentEditor);
   $('#segment-edit-close').onclick=()=>{if(!segmentEditBusy)segmentDialog.close();};
-  segmentDialog.addEventListener('close',()=>{if(segmentDialogDate===dateInput.value)$('#execute-chronology .chronology-surface')?.focus({preventScroll:true});});
+  segmentDialog.addEventListener('close',()=>{if(segmentDialogDate===dateInput.value)(recordsPageOpen?$('#execution-records-content .chronology-record.is-selected')||$('#execution-records-content .chronology-dismiss'):$('#execute-chronology .chronology-surface'))?.focus({preventScroll:true});});
   segmentDialog.addEventListener('cancel',event=>{if(segmentEditBusy)event.preventDefault();});
   segmentDialog.addEventListener('click',event=>{if(!segmentEditBusy&&event.target===segmentDialog&&event.clientX!==0){const box=segmentDialog.getBoundingClientRect();if(event.clientX<box.left||event.clientX>box.right||event.clientY<box.top||event.clientY>box.bottom)segmentDialog.close();}});
   function openSegmentEditor(id) {
@@ -1161,24 +1171,36 @@ if (page === 'execute' || $('#review-records-workspace')) {
   const backdrop = $('#execution-controls-backdrop');
   const mini = $('#execution-mini');
   const phoneSheet = matchMedia('(max-width:999px)');
-  function controlsBusy() { return timingPending||segmentEditBusy||quickCorrectionBusy||wordCountsBusy; }
+  function controlsBusy() { return timingPending||segmentEditBusy||quickCorrectionBusy||wordCountsBusy||autoStopBusy; }
   function beginControlsClose() {
-    if(controlsClosing)return;
-    controlsClosing=true;controlsRoot.classList.add('is-closing');backdrop.classList.add('is-closing');
+    if(historyView || controlsClosing)return;
+    controlsClosing=true;
+    const closeDuration=phoneSheet.matches?sheetDrag.dismiss():matchMedia('(prefers-reduced-motion: reduce)').matches?0:180;
+    controlsRoot.classList.add('is-closing');backdrop.classList.add('is-closing');
     controlsCloseTimer=setTimeout(()=>{
-      controlsClosing=false;controlsCloseTimer=null;controlsRoot.classList.remove('is-closing');backdrop.classList.remove('is-closing');updateExecutionControls();
+      controlsClosing=false;controlsCloseTimer=null;controlsRoot.classList.remove('is-closing');backdrop.classList.remove('is-closing');sheetDrag.reset();updateExecutionControls();
       const fallback=executionState?.active_segment?$('#execution-mini-open'):recordsOnly?$('#review-records-open'):controlsFab;
       const restore=controlsFocus?.isConnected&&controlsFocus.matches('button,a[href],input,select,textarea,[tabindex]')&&controlsFocus.getClientRects().length?controlsFocus:fallback;
       restore?.focus({preventScroll:true});
-    },matchMedia('(prefers-reduced-motion: reduce)').matches?0:180);
+    },closeDuration);
   }
   function updateExecutionControls() {
+    if (historyView) {
+      controlsExpanded=true;
+      controlsRoot.hidden=!executionState || (!executionState.plan && !executionState.has_execution);
+      controlsRoot.removeAttribute('aria-modal');
+      controlsFab.hidden=true; mini.hidden=true; backdrop.hidden=true;
+      $('#execution-controls-title').textContent='时间轴与记录';
+      $('#execution-overlay').classList.toggle('has-running',Boolean(executionState?.active_segment));
+      return;
+    }
     const active=Boolean(executionState?.active_segment);
-    if(controlsDate!==dateInput.value){controlsDate=dateInput.value;controlsExpanded=false;controlsHadActive=false;}
+    if(controlsDate!==dateInput.value){controlsDate=dateInput.value;controlsExpanded=false;controlsHadActive=false;resetRecordsPage();}
     if(active&&!controlsHadActive||timingPending||!$('#execute-operation-feedback').hidden)controlsExpanded=true;
-    else if(controlsHadActive&&!active&&!segmentDialog.open&&!$('#quick-correction-dialog').open&&!$('#word-count-dialog').open){controlsExpanded=false;beginControlsClose();}
+    else if(controlsHadActive&&!active&&!segmentDialog.open&&!$('#quick-correction-dialog').open&&!$('#word-count-dialog').open&&!$('#auto-stop-dialog').open&&!recordsPageOpen){controlsExpanded=false;beginControlsClose();}
     controlsHadActive=active;
     const shown=controlsExpanded||controlsClosing;
+    if(controlsRoot.hidden&&shown)controlsRoot.style.removeProperty('animation');
     controlsRoot.hidden=!shown;
     controlsFab.hidden=recordsOnly||shown||active;
     mini.hidden=recordsOnly||shown||!active;
@@ -1202,12 +1224,14 @@ if (page === 'execute' || $('#review-records-workspace')) {
   }
   function openExecutionControls() {
     if(controlsCloseTimer){clearTimeout(controlsCloseTimer);controlsCloseTimer=null;controlsClosing=false;controlsRoot.classList.remove('is-closing');backdrop.classList.remove('is-closing');}
-    if(!controlsExpanded)controlsFocus=document.activeElement;
+    if(!controlsExpanded){sheetDrag.reset();resetRecordsPage();controlsFocus=document.activeElement;}
     controlsDate=dateInput.value;controlsExpanded=true;updateExecutionControls();
-    requestAnimationFrame(()=>{if(phoneSheet.matches&&!segmentDialog.open&&!$('#quick-correction-dialog').open&&!$('#word-count-dialog').open)$('#execution-controls-close').focus({preventScroll:true});chronology.render();});
+    requestAnimationFrame(()=>{if(!historyView&&phoneSheet.matches&&!document.querySelector('dialog[open]'))$('#execution-controls-close').focus({preventScroll:true});chronology.render();});
   }
   function closeExecutionControls() {
-    if(controlsBusy()||segmentDialog.open||$('#quick-correction-dialog').open||$('#word-count-dialog').open)return false;
+    if(historyView)return false;
+    if(!controlsExpanded && !controlsClosing)return true;
+    if(controlsBusy()||document.querySelector('dialog[open]'))return false;
     controlsExpanded=false;$('#execute-operation-feedback').hidden=true;beginControlsClose();updateExecutionControls();return true;
   }
   controlsFab.onclick=openExecutionControls;
@@ -1215,12 +1239,31 @@ if (page === 'execute' || $('#review-records-workspace')) {
   $('#execution-controls-close').onclick=closeExecutionControls;
   $('#execution-sheet-handle').onclick=closeExecutionControls;
   backdrop.onclick=closeExecutionControls;
-  phoneSheet.addEventListener('change',updateExecutionControls);
-  let sheetGesture=null;
-  $('#execution-sheet-handle').addEventListener('pointerdown',event=>{sheetGesture={id:event.pointerId,y:event.clientY};event.currentTarget.setPointerCapture(event.pointerId);});
-  $('#execution-sheet-handle').addEventListener('pointerup',event=>{if(sheetGesture?.id===event.pointerId&&event.clientY-sheetGesture.y>45)closeExecutionControls();sheetGesture=null;});
+  const sheetBody=$('.execution-sheet-body',controlsRoot),workPage=$('#execution-workpage'),recordsPage=$('#execution-records-page');
+  let recordsPageOpen=false,pageAnimation=null,workScroll=0;
+  function resetRecordsPage() {
+    pageAnimation?.cancel();pageAnimation=null;recordsPageOpen=false;
+    workPage.hidden=false;recordsPage.hidden=true;sheetBody.style.removeProperty('height');sheetBody.classList.remove('showing-records');
+    chronology.nearby=null;
+  }
+  if(!historyView){
+    chronology.recordsNode=$('#execution-records-content');
+    chronology.recordsReturnLabel=recordsOnly?'← 返回时间轴':'← 返回计时';
+    chronology.onRecordsPage=show=>{
+      pageAnimation?.cancel();
+      if(show&&!recordsPageOpen){sheetBody.style.height=`${sheetBody.getBoundingClientRect().height}px`;workScroll=sheetBody.scrollTop;}
+      recordsPageOpen=show;workPage.hidden=show;recordsPage.hidden=!show;
+      sheetBody.classList.toggle('showing-records',show);sheetBody.scrollTop=show?0:workScroll;
+      const target=show?recordsPage:workPage;
+      if(!matchMedia('(prefers-reduced-motion:reduce)').matches)pageAnimation=target.animate([{opacity:0,transform:`translateX(${show?20:-20}px)`},{opacity:1,transform:'translateX(0)'}],{duration:240,easing:'cubic-bezier(.22,.8,.25,1)'});
+      requestAnimationFrame(()=>{if(show)$('#execution-records-content .chronology-dismiss')?.focus({preventScroll:true});else{chronology.render();$('#execute-chronology .chronology-browse')?.focus({preventScroll:true});}});
+    };
+  }
+  const sheetDrag=new ExecutionSheetDrag(controlsRoot,backdrop,()=>!historyView&&phoneSheet.matches&&controlsExpanded&&!controlsClosing&&!controlsBusy()&&!document.querySelector('dialog[open]'),closeExecutionControls);
+  phoneSheet.addEventListener('change',()=>{sheetDrag.reset();updateExecutionControls();});
+  window.addEventListener('resize',()=>{if(!recordsPageOpen)sheetBody.style.removeProperty('height');});
   document.addEventListener('keydown',event=>{
-    if(!controlsExpanded||document.querySelector('dialog[open]'))return;
+    if(historyView||!controlsExpanded||document.querySelector('dialog[open]'))return;
     if(event.key==='Escape'){if(executionUiState.expandedLabelBucket||executionUiState.effectivePickerTaskId!==null)return;event.preventDefault();event.stopImmediatePropagation();closeExecutionControls();return;}
     if(event.key==='Tab'&&phoneSheet.matches){const focusable=[...controlsRoot.querySelectorAll('button:not(:disabled),input:not(:disabled),select:not(:disabled),textarea:not(:disabled),[tabindex="0"]')].filter(node=>node.getClientRects().length);const first=focusable[0],last=focusable.at(-1);if(event.shiftKey&&document.activeElement===first){event.preventDefault();last?.focus();}else if(!event.shiftKey&&document.activeElement===last){event.preventDefault();first?.focus();}}
   });
@@ -1247,6 +1290,7 @@ if (page === 'execute' || $('#review-records-workspace')) {
   function showExecutionError(message) {
     $('#execute-operation-message').textContent = message;
     $('#execute-operation-feedback').hidden = false;
+    if(recordsPageOpen)chronology.showRecords(false);
     openExecutionControls();
     requestAnimationFrame(()=>$('#execute-operation-feedback').scrollIntoView({block:'nearest'}));
   }
@@ -1254,11 +1298,11 @@ if (page === 'execute' || $('#review-records-workspace')) {
   async function executionApi(path, options={}) {
     const requestDate=dateInput.value;
     const writing = options.method && options.method !== 'GET';
-    const timing = writing && (/\/(tasks\/start|labels\/start|stop|quick-corrections)$/.test(path) || (options.method==='PUT' && path.endsWith(`/segments/${executionState?.active_segment?.id}`)));
+    const timing = writing && (/\/(tasks\/start|labels\/start|stop|quick-corrections|auto-stop)$/.test(path) || (options.method==='PUT' && path.endsWith(`/segments/${executionState?.active_segment?.id}`)));
     if (timing && timingPending) throw new Error('正在处理当前计时操作，请稍候。');
     if (timing) {
       timingPending = true;
-      timingAction = options.method==='PUT' ? '保存修改' : path.endsWith('/quick-corrections') ? '补记' : path.endsWith('/stop') ? '停止' : executionState?.active_segment ? '切换' : '开始';
+      timingAction = path.endsWith('/auto-stop') ? '设置自动停止' : options.method==='PUT' ? '保存修改' : path.endsWith('/quick-corrections') ? '补记' : path.endsWith('/stop') ? '停止' : executionState?.active_segment ? '切换' : '开始';
       $('#execute-operation-feedback').hidden = true;
       updateTimingControls();
     }
@@ -1281,9 +1325,51 @@ if (page === 'execute' || $('#review-records-workspace')) {
     }
   }
 
+  const autoDialog=$('#auto-stop-dialog'),autoTime=$('#auto-stop-time'),autoError=$('#auto-stop-error');
+  let autoStopSegment=null,autoStopDate=null;
+  const localDateTime=value=>{const d=new Date(value);return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}T${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}:${String(d.getSeconds()).padStart(2,'0')}`;};
+  function previewAutoStop() {
+    const due=new Date(autoTime.value),seconds=(due-Date.now())/1000;
+    $('#auto-stop-preview').textContent=Number.isFinite(seconds)&&seconds>0?`将在 ${due.toLocaleString('zh-CN',{month:'long',day:'numeric',hour:'2-digit',minute:'2-digit'})} 停止并保存。`:'请选择未来24小时内的停止时刻。';
+    $$('[data-auto-minutes]',autoDialog).forEach(b=>b.setAttribute('aria-pressed',String(Number(b.dataset.autoMinutes)===$('#auto-stop-minutes').valueAsNumber)));
+  }
+  function useAutoStopMinutes(minutes) {
+    if(!Number.isInteger(minutes)||minutes<1||minutes>1440){autoError.textContent='请填写1～1440的整数分钟。';autoError.hidden=false;return;}
+    $('#auto-stop-minutes').value=minutes;autoTime.value=localDateTime(Date.now()+minutes*60000);autoError.hidden=true;previewAutoStop();
+  }
+  $('#auto-stop-open').onclick=()=>{
+    const active=executionState?.active_segment;if(!active||controlsBusy())return;
+    autoStopSegment=active.id;autoStopDate=dateInput.value;autoError.hidden=true;
+    $('#auto-stop-minutes').value='';autoTime.value=active.auto_stop_at?localDateTime(active.auto_stop_at):'';
+    $('#auto-stop-cancel').disabled=!active.auto_stop_at;previewAutoStop();autoDialog.showModal();
+  };
+  $$('[data-auto-minutes]',autoDialog).forEach(b=>b.onclick=()=>useAutoStopMinutes(Number(b.dataset.autoMinutes)));
+  $('#auto-stop-minutes').oninput=()=>{const minutes=$('#auto-stop-minutes').valueAsNumber;if(Number.isInteger(minutes)&&minutes>=1&&minutes<=1440)useAutoStopMinutes(minutes);};
+  autoTime.oninput=()=>{$('#auto-stop-minutes').value='';autoError.hidden=true;previewAutoStop();};
+  async function saveAutoStop(cancel=false) {
+    if(autoStopBusy)return;
+    if(!cancel&&!autoTime.value){autoError.textContent='请先选择停止时间。';autoError.hidden=false;return;}
+    const due=cancel?null:new Date(autoTime.value),delta=due?due-Date.now():0;
+    if(due&&(!Number.isFinite(delta)||delta<=0||delta>86400000)){autoError.textContent='请选择未来24小时内的停止时间。';autoError.hidden=false;return;}
+    autoStopBusy=true;autoError.hidden=true;
+    const controls=[...autoDialog.querySelectorAll('button,input')];controls.forEach(c=>c.disabled=true);
+    try {
+      const result=await executionApi(`/api/daily-execution/${autoStopDate}/auto-stop`,{method:'PUT',body:JSON.stringify({segment_id:autoStopSegment,due_at:due?.toISOString()||null})});
+      autoDialog.close();renderExecutionState(result);toast(cancel?'已取消自动停止，继续计时':'自动停止时间已保存');
+    }catch(error){autoError.textContent=error.message;autoError.hidden=false;}
+    finally {autoStopBusy=false;controls.forEach(c=>c.disabled=false);$('#auto-stop-cancel').disabled=!executionState?.active_segment?.auto_stop_at;updateTimingControls();}
+  }
+  $('#auto-stop-form').onsubmit=e=>{e.preventDefault();saveAutoStop();};
+  $('#auto-stop-cancel').onclick=()=>saveAutoStop(true);
+  $('#auto-stop-close').onclick=()=>{if(!autoStopBusy)autoDialog.close();};
+  autoDialog.addEventListener('cancel',e=>{if(autoStopBusy)e.preventDefault();});
+  autoDialog.addEventListener('close',()=>{if($('#auto-stop-open').getClientRects().length)$('#auto-stop-open').focus({preventScroll:true});});
+
   function updateClockDigits() {
     if (document.hidden) return;
-    const seconds = clockActive ? Math.max(0, Math.floor(clockSeconds + (performance.now() - clockReceivedAt) / 1000)) : 0;
+    const active=executionState?.active_segment,limit=active?.auto_stop_at?Math.max(0,(new Date(active.auto_stop_at)-new Date(active.started_at))/1000):Infinity;
+    const seconds = clockActive ? Math.min(limit,Math.max(0, Math.floor(clockSeconds + (performance.now() - clockReceivedAt) / 1000))) : 0;
+    if(clockActive&&active?.auto_stop_at&&seconds>=limit){syncLiveExecution();}
     $('#execute-clock').textContent = [Math.floor(seconds / 3600), Math.floor(seconds / 60) % 60, seconds % 60]
       .map(value => String(value).padStart(2, '0')).join(':');
     $('#execution-mini-clock').textContent=$('#execute-clock').textContent;
@@ -1301,7 +1387,8 @@ if (page === 'execute' || $('#review-records-workspace')) {
     const board = result.task_execution_board?.find(item => item.task_id === task.id);
     const advancing = Boolean(active && active.task_id === task.id && active.segment_kind === 'effective' && active.included !== false);
     // 聚合已含当前段截至响应时的秒数，这里只补响应后的经过时间。
-    const elapsed = advancing ? Math.max(0, (performance.now() - clockReceivedAt) / 1000) : 0;
+    const deadlineRemaining=active?.auto_stop_at?Math.max(0,(new Date(active.auto_stop_at)-new Date(active.started_at))/1000-clockSeconds):Infinity;
+    const elapsed = advancing ? Math.min(deadlineRemaining,Math.max(0, (performance.now() - clockReceivedAt) / 1000)) : 0;
     const seconds = Math.max(0, Number(board?.effective_seconds || 0) + elapsed);
     const target = Math.max(0, Number(task.estimated_minutes || 0) * 60);
     const ratio = target ? Math.min(1, seconds / target) : 0;
@@ -1373,6 +1460,12 @@ if (page === 'execute' || $('#review-records-workspace')) {
 
   function renderLiveExecution(result) {
     const active = result?.active_segment;
+    const previous=clockSource?.active_segment;
+    if(previous?.auto_stop_at&&!active&&result?.segments?.some(s=>s.id===previous.id&&s.stopped_automatically))toast('已按设定时间自动停止，记录已保存');
+    else if(previous?.auto_stop_at&&active&&active.id!==previous.id&&!active.auto_stop_at)toast('已切换计时，原自动停止设置已取消');
+    $('#auto-stop-open').hidden=!active||recordsOnly||historyView;
+    $('#auto-stop-open').disabled=timingPending;
+    $('#auto-stop-caption').textContent=active?.auto_stop_at?`${new Date(active.auto_stop_at).toLocaleTimeString('zh-CN',{hour:'2-digit',minute:'2-digit'})} 自动停止 · 可修改`:'设置自动停止';
     if (clockSource !== result) {
       clockSource = result;
       clockActive = Boolean(active);
@@ -1413,8 +1506,10 @@ if (page === 'execute' || $('#review-records-workspace')) {
       if (document.hidden || target !== dateInput.value || revision !== executionRevision || sequence !== executionLoadSequence || executionWrites) return;
       syncFailed = false;
       $('#execute-operation-feedback').hidden = true;
+      const activeChanged=executionState?.active_segment?.id!==result.active_segment?.id;
       executionState = result;
       renderLiveExecution(result);
+      if(activeChanged&&!recordsOnly&&!historyView){renderExecutionTasks();renderExecutionSubmitList();}
       chronology.update(result,receivedTimes.get(result));
       const runnable = result.plan && ['approved', 'submitted'].includes(result.plan.status);
       $('#execute-submit-panel').classList.toggle('hidden', !runnable);
@@ -1548,6 +1643,7 @@ if (page === 'execute' || $('#review-records-workspace')) {
     executionState = await executionApi(`/api/daily-execution/${dateInput.value}/tasks/start`, {method:'POST', body:JSON.stringify({task_id:taskId, label_id:labelId || null, duplicate_choice:duplicateChoice})});
     executionUiState.effectivePickerTaskId = null;
     renderExecutionState(executionState);
+    if(recordsPageOpen)chronology.showRecords(false);
     openExecutionControls();
     toast(successMessage);
   }
@@ -2193,6 +2289,7 @@ if (page === 'execute' || $('#review-records-workspace')) {
     $('#execution-support').classList.toggle('hidden', !runnable);
     $('#execute-chronology').classList.toggle('hidden', !runnable);
     $('#execute-mobile-toolbar').classList.toggle('hidden',!runnable);
+    if(autoDialog.open&&autoStopDate!==result.date&&!autoStopBusy)autoDialog.close();
     if(segmentDialog.open&&segmentDialogDate!==result.date)segmentDialog.close();
     if(runnable)chronology.update(result,receivedTimes.get(result));
     $('#execute-submit-panel').classList.toggle('hidden', !readyToClose);
@@ -2370,6 +2467,7 @@ if (page === 'execute' || $('#review-records-workspace')) {
     get busy(){return controlsBusy()||segmentDialog.open||$('#quick-correction-dialog').open||$('#word-count-dialog').open;},
     get date(){return dateInput.value;},
     get isOpen(){return controlsExpanded;},
+    get state(){return executionState;},
   };
 }
 

@@ -370,6 +370,8 @@ if (page === 'review') {
     if(moving)window.DailyPlanRecords?.close();
     selectedDate = dateValue; selectedScope = scope;
     dateInput.value = dateValue; updateDateTrigger(dateButton, dateValue);
+    PlanUI.setDate(dateValue);
+    $('#review-execution-link').href='/execute?date='+encodeURIComponent(dateValue);
     $('#review-loading').hidden = false;
     $('#review-loading').textContent = '正在读取记录…';
     $('#review-retry').hidden = true;

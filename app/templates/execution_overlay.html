@@ -1,12 +1,12 @@
-<div id="execution-overlay" class="execution-overlay{% if records_only|default(false) %} records-only{% endif %}">
+<div id="execution-overlay" class="execution-overlay{% if records_only|default(false) %} records-only{% endif %}{% if inline_records|default(false) %} inline-records{% endif %}">
 <input id="execute-date" type="hidden" value="{{ execution_date|default('') }}">
 <button id="execution-controls-fab" class="execution-controls-fab" type="button" aria-expanded="false" aria-controls="execution-controls" hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="13" r="8"/><path d="M12 9v5l3 2M9 2h6M12 2v3m6 1 2-2"/></svg><span>计时与记录</span></button>
 <div id="execution-mini" class="execution-mini" hidden><button id="execution-mini-open" type="button" aria-label="展开计时与记录"><span id="execution-mini-title"></span><span id="execution-mini-clock">00:00:00</span></button><button id="execution-mini-stop" class="primary" type="button" aria-label="停止当前计时">停止</button></div>
 <button id="execution-controls-backdrop" class="execution-controls-backdrop" type="button" tabindex="-1" aria-label="收起计时与记录" hidden></button>
-<div id="execution-controls" class="execution-controls" role="dialog" aria-labelledby="execution-controls-title" hidden>
+<div id="execution-controls" class="execution-controls" role="{{ 'region' if inline_records|default(false) else 'dialog' }}" aria-labelledby="execution-controls-title" hidden>
   <button id="execution-sheet-handle" class="execution-sheet-handle" type="button" aria-label="收起计时面板"><span></span></button>
   <div class="execution-controls-heading"><h2 id="execution-controls-title">计时与记录</h2><button id="execution-controls-close" class="ghost-button" type="button" aria-label="收起面板"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button></div>
-  <div class="execution-sheet-body"><p id="execution-records-empty" class="muted" hidden></p>
+  <div class="execution-sheet-body"><div id="execution-workpage"><p id="execution-records-empty" class="muted" hidden></p>
 <section id="execute-current-panel" class="panel execution-current-panel hidden" aria-label="当前执行与计时">
   <div class="execution-current">
     <div class="execution-current-task"><div class="execution-current-heading"><span class="step">当前执行</span></div><span id="execute-active-badge">当前空闲</span></div>
@@ -15,6 +15,7 @@
       <button id="execute-stop" class="ghost-button stop-current" type="button" disabled aria-label="停止计时">停止</button>
     </div>
   </div>
+  <button id="auto-stop-open" class="auto-stop-open" type="button" hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><circle cx="12" cy="13" r="8"/><path d="M9 2h6m-3 3V2m0 7v4l3 2"/></svg><span id="auto-stop-caption">设置自动停止</span><span aria-hidden="true">›</span></button>
 </section>
 <div id="execution-support" class="execution-support hidden">
   <div id="execute-goal-progress" class="execution-goal-progress" hidden>
@@ -50,7 +51,21 @@
         <button class="primary" type="submit">添加活动</button><button class="ghost-button record-cancel" type="button">取消</button>
       </form>
 </div>
+<section id="execution-records-page" aria-label="全部时间记录" hidden><div id="execution-records-content"></div></section>
 </div>
+</div>
+<dialog id="auto-stop-dialog" class="auto-stop-dialog" aria-labelledby="auto-stop-title">
+  <form id="auto-stop-form">
+    <div class="segment-dialog-heading"><h2 id="auto-stop-title">自动停止</h2><button id="auto-stop-close" class="ghost-button" type="button" aria-label="关闭自动停止设置">×</button></div>
+    <p class="muted">只设置本次计时。提前停止，仍保存实际时长。</p>
+    <div class="auto-stop-presets" role="group" aria-label="再计时多少分钟">{% for minutes in [25,45,60] %}<button type="button" data-auto-minutes="{{ minutes }}">{{ minutes }} 分钟</button>{% endfor %}</div>
+    <div class="auto-stop-custom"><label>再计时 · 分钟<input id="auto-stop-minutes" type="number" min="1" max="1440" step="1" inputmode="numeric" placeholder="分钟"></label></div>
+    <label>停止日期与时刻<input id="auto-stop-time" type="datetime-local" step="1" required></label>
+    <p id="auto-stop-preview" class="muted" aria-live="polite">请选择停止时间。</p>
+    <p id="auto-stop-error" class="form-error" role="alert" hidden></p>
+    <div class="auto-stop-actions"><button id="auto-stop-cancel" type="button" class="ghost-button">取消自动停止</button><button type="submit" class="primary">保存设置</button></div>
+  </form>
+</dialog>
 <dialog id="word-count-dialog" class="word-count-dialog" aria-labelledby="word-count-title">
   <form id="word-count-form">
     <h3 id="word-count-title">记词数</h3>

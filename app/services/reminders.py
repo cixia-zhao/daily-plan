@@ -117,6 +117,8 @@ def dispatch_due(database_path, sender, *, now=None, preview=False):
 async def run_reminders(app):
     while True:
         try:
+            from .auto_stop import dispatch_auto_stops
+            await asyncio.to_thread(dispatch_auto_stops, app.state.database_path)
             await asyncio.to_thread(dispatch_due,app.state.database_path,
                 app.state.reminder_sender,preview=bool(getattr(app.state,'ui_preview',False)))
         except asyncio.CancelledError:

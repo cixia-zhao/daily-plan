@@ -2,7 +2,8 @@
 <html lang="zh-CN">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  {% include "pwa_head.html" %}
   <title>{% block title %}今日航线{% endblock %}</title>
   <link rel="stylesheet" href="/static/style.css?v={{ static_version('style.css') }}">
   {% block page_styles %}{% endblock %}
@@ -19,7 +20,7 @@
     <a class="brand" href="/"><span class="brand-mark">✓</span><span>今日航线</span></a>
     <nav class="site-nav" aria-label="主导航">
       <div class="primary-nav">
-        <a href="/" data-nav="today">今天</a>
+        <a href="/" data-nav="today">计划</a>
         <a href="/execute" data-nav="execute">执行</a>
         <a href="/review" data-nav="review">复盘</a>
       </div>
@@ -28,6 +29,7 @@
         <div class="nav-more-panel">
           <a href="/gpt-workbench" data-nav="gpt-workbench">GPT 工作台</a>
           <a href="/settings" data-nav="settings">设置</a>
+          <button id="pwa-install" class="pwa-install-menu" type="button">安装到桌面</button>
           {% if request.app.state.auth.required %}
           <form action="/logout" method="post" class="logout-form"><button type="submit" class="nav-logout">退出登录</button></form>
           {% endif %}
@@ -85,5 +87,6 @@
   <script src="/static/surfaces.js?v={{ static_version('surfaces.js') }}" defer></script>
   <script src="/static/app.js?v={{ static_version('app.js') }}" defer></script>
   {% block page_scripts %}{% endblock %}
+  {% include "pwa_controls.html" %}
 </body>
 </html>

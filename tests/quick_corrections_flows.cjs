@@ -35,6 +35,6 @@ if(!base||!['127.0.0.1','localhost'].includes(new URL(base).hostname))throw Erro
  await dialog.locator('[data-quick-minutes="5"]').click();await page.waitForFunction(()=>!document.querySelector('#quick-correction-close').disabled);assert(await dialog.isVisible());assert.equal((await api(path)).segments.length,3,'响应丢失时服务器已提交一次');
  await dialog.locator('[data-quick-minutes="5"]').click();await dialog.waitFor({state:'hidden'});assert.equal((await api(path)).segments.length,3,'相同请求重试不重复扣减');
  await page.reload();await page.locator('#execute-panel').waitFor();await page.locator('.chronology-browse').click();assert.match(await page.locator('.chronology-nearby').innerText(),/补记·估计/);
- await page.locator('#execute-stop').click();await page.waitForFunction(()=>document.querySelector('#execute-stop').disabled&&document.querySelector('#execute-current-panel').getAttribute('aria-busy')==='false');assert(await page.locator('#quick-correction-open').isDisabled());
+ await page.locator('.chronology-dismiss').click();await page.locator('#execute-stop').click();await page.waitForFunction(()=>document.querySelector('#execute-stop').disabled&&document.querySelector('#execute-current-panel').getAttribute('aria-busy')==='false');assert(await page.locator('#quick-correction-open').isDisabled());
  assert.deepEqual(errors,[]);console.log('PASS: 轻量补记／自动继续、估计标记、秒级编辑与撤销、生活口径、四视口44px、超量保留、响应丢失重试不重复、刷新与停止');
 }finally{await browser.close();}})().catch(e=>{console.error(e);process.exitCode=1;});

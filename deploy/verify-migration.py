@@ -41,6 +41,12 @@ def verify(source, target):
                 assert db.execute(f'SELECT COUNT(*) FROM "{table}"').fetchone()[0] == 0, f'{table}新增表不为空'
             if 'is_estimated' not in before.get('task_execution_segments', ([], []))[0]:
                 assert db.execute('SELECT COUNT(*) FROM task_execution_segments WHERE is_estimated!=0').fetchone()[0] == 0
+    with sqlite3.connect(target) as db:
+        old_columns=before.get('task_execution_segments', ([], []))[0]
+        if 'auto_stop_at' not in old_columns:
+            assert db.execute('SELECT COUNT(*) FROM task_execution_segments WHERE auto_stop_at IS NOT NULL').fetchone()[0] == 0
+        if 'stopped_automatically' not in old_columns:
+            assert db.execute('SELECT COUNT(*) FROM task_execution_segments WHERE stopped_automatically!=0').fetchone()[0] == 0
     return {'source': str(source), 'validated_copy': str(target), 'migration_runs': 2,
             'old_tables': {table: len(rows) for table, (_, rows) in before.items()},
             'original_data_sha256': hashlib.sha256(repr(before).encode()).hexdigest(),

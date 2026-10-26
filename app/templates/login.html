@@ -2,7 +2,8 @@
 <html lang="zh-CN">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  {% include "pwa_head.html" %}
   <title>登录 - 今日航线</title>
   <link rel="stylesheet" href="/static/style.css?v={{ static_version('style.css') }}">
 </head>
@@ -20,7 +21,9 @@
         <input id="password" name="password" type="password" autocomplete="current-password" required autofocus>
         <button type="submit" class="primary">进入今日航线</button>
       </form>
+      <button id="pwa-install" class="pwa-install-login" type="button">安装到桌面</button>
     </section>
   </main>
+  {% include "pwa_controls.html" %}
 </body>
 </html>
