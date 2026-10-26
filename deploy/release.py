@@ -116,7 +116,6 @@ def stage(args,release):
     with tarfile.open(args.wheel_archive) as archive:archive.extractall(wheel_dir,filter='data')
     run(['/usr/bin/python3','-m','venv',str(release/'.venv')])
     run([str(release/'.venv/bin/python'),'-m','pip','install','--no-index','--find-links',str(wheel_dir/'daily-plan-release-wheels'),'-r',str(wheel_dir/'daily-plan-release-requirements.txt')],stdout=subprocess.DEVNULL)
-    import tempfile
     with tempfile.TemporaryDirectory(prefix='daily-plan-release-tests-') as temporary:
         test_env=dict(os.environ, APP_RUNTIME='development', DATABASE_PATH=str(Path(temporary)/'bootstrap.db'), DAILY_PLAN_BACKUP_DIR=str(Path(temporary)/'backups'))
         for key in ('DEEPSEEK_API_KEY','DAILY_PLAN_NTFY_URL','DAILY_PLAN_NTFY_TOPIC','DAILY_PLAN_NTFY_TOKEN'):
