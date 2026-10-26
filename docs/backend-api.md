@@ -298,6 +298,6 @@ share-to-phone.ps1 → zip 打包 + 临时 HTTP 文件服务
 执行段新增`auto_stop_at`和`stopped_automatically`，默认null／false，接口逐段返回。后台每3秒结算，API取库前也通过独立事务结算到期段，结束值写原截止时刻；失败请求的回滚不撤销此前已到期结算。统计仍调用统一聚合方法。提前停止或显式切换取消原截止，不影响新段；快捷补记把截止转到继续段。重启后补结算、并发调度幂等，恢复重置快照不复活计时。迁移仅新增两列，已在旧结构备份副本两次验证原字段／记录保持。单次调度实际运行可能略晚，记录结束值仍准确；网页不应把本地倒计时当服务器保存确认。
 
 
-## 公共PWA入口（2026-10-26，发布准备）
+## 公共PWA入口（2026-10-26，已发布）
 
 GET /manifest.webmanifest、/sw.js、/offline及/favicon.ico为无需登录的公共资源；不公开业务数据。manifest声明今日航线、standalone、作用域/与普通／maskable图标。sw.js响应application/javascript、Cache-Control:no-cache、Service-Worker-Allowed:/，版本按静态资源内容哈希变化；业务HTML／API／私有重定向统一no-store。其他私有接口认证规则保持，未登录401或转登录。

@@ -314,6 +314,6 @@ execution_overlay.html新增自动停止设置窗、execution-workpage与executi
 timeline.js在执行／复盘面板使用外置记录页：整卡切走原计时与操作区，冻结切页前正文高度，列表内部滚动，返回反向轻切页；保留选择、滚动与编辑返回焦点。完整历史页不使用外置记录页，仍内嵌查看。surfaces.js的ExecutionSheetDrag仅由拖柄／标题发起，直接更新自身transform并以距离与最近速度判断关闭，包含阻尼回弹、pointercancel／捕获清理、断点复位；正文滚动及时间轴横滑不抢手势。208项后端及7组不同临时库浏览器通过；实际手机触感与iOS仍需验收。
 
 
-## PWA（2026-10-26，发布准备）
+## PWA（2026-10-26，已发布）
 
 pwa_head／pwa_controls共用安装元信息、状态与说明窗，pwa.js负责主动安装、iOS说明、在线状态与手动更新。root sw.js来自static/pwa/sw.js注入静态内容哈希，只缓存公共资源和offline文档；API／认证／业务页不进入缓存。独立窗口与手机安全区由pwa.css补充，常态无提示条。真实localhost生命周期专项见tests/run_pwa_browser.py与pwa_flows.cjs，使用/tmp版本文件模拟升级，不修改仓库资源或实际预览库。

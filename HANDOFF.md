@@ -1,14 +1,14 @@
 # 今日航线交接
 
-## PWA配置与发布准备（2026-10-26，已授权推送部署，尚未发布）
+## 当前正式发布：PWA、自动停止与历史记录（2026-10-26）
 
-- 用户要求先完善PWA再推送部署，明确确认可安装独立窗口、清晰离线提示与手动更新；暂不离线编辑／自动补传。随后询问名称／图标、独立模式、缓存与HTTPS，已说明正式HTTPS已有，其余本轮补齐并待发布。
-- 新增manifest及192／512图标、maskable与Apple180、favicon，沿用暖纸陶土圆章勾号；scope与id固定/，standalone、主题色、计划／执行／复盘快捷入口。登录页同样具备安装元信息。更多菜单与登录页安装入口：支持原生安装事件、iOS分享／添加主屏幕说明和HTTP预览限制，已独立打开显示应用说明。
-- root sw.js按静态内容哈希版本、no-cache与/作用域；仅缓存公共静态资源及中性offline页面，不缓存API、业务HTML、登录或写入，不补传。HTML／API与私有重定向no-store。断网导航保留原URL并可检查恢复；现页面网络失败提示未确认并核对，不宣称保存。首次安装不误报更新，新工作线程等待手动点击；另一页的未保存输入不强制刷新。状态栏／安全区与原主题一致。
-- Python3.12本机213项临时库全套通过（8.32秒，FastAPI0.162）。真实localhost Service Worker专项通过安装manifest、图标、主动促装、离线恢复、仅公共缓存、API断网失败、真实等待／激活更新与另页输入保持、四视口／iOS说明；timer_sheet、date_navigation、review_workspace受影响回归通过。安装与离线390截图已实读并保存docs/design-previews/2026-10-26-pwa-*.png。真实系统安装及iOS状态栏仍需实机验收。
-- 发布基线：远程仍dacabf9，服务active。codexdev账户普通SSH可用；sudo -n -l及调用既有发布脚本verify均提示需要密码。自动审批拒绝“用已有密钥直接以root连接”的只读权限检查，理由是超出常规受限发布权限；未绕过或重试该入口，继续普通账户的安全暂存准备。现有脚本和正式锁定离线依赖已通过普通账户只读取回，未改变服务器配置／权限／正式数据。
-- deploy/release.py沿用既有发布脚本，增加当前历史200、自动停止API、PWA匿名资源及私有no-store验收；支持部署账户独立暂存目录的stage，正式precheck／deploy固定/opt/daily-plan/releases。计划先提交推送并完成服务器普通账户锁定依赖检查，正式切换仍须解决管理员执行权限；不得把暂存或计划写为已部署。当前正式仍dacabf9。
-
+- 用户授权补齐PWA后推送部署，并明确确认可安装独立窗口、离线提示、手动更新与暂不离线编辑／补传。应用03c7bcdb25056fa5b06bd107ac698adbb366cfd6已推送GitHub main，于中国时间2026-10-26 23:01:06上线https://120.55.53.215/。本节取代下方未提交／未发布状态；收尾文档单独提交，不改变运行应用。
+- 上线名称／普通与maskable／Apple图标、favicon、standalone、主题与安全区、安装入口和Safari说明；公共资源／中性离线页缓存，API／认证／业务HTML不缓存，网络失败不误报保存；新版本手动更新、不强制刷新另页输入。包含此前完整历史执行与三页日期共享、单次自动停止、整卡等高记录切页及手机跟手抽屉。没有带入预览数据或新增离线重放。
+- 本机Python3.12临时库213项（8.32秒，FastAPI0.162）通过；localhost真实Service Worker安装／缓存／离线恢复／等待与手动激活／另页输入／四视口和iOS说明专项、timer_sheet、date_navigation、review_workspace通过，其他阶段回归见下节。服务器普通账户暂存与固定新发布目录沿用正式锁定依赖FastAPI0.153，各213项通过（31.71／31.68秒）。无痕安装诊断会报in-incognito，公网最终验收改用全新普通浏览器配置。
+- 普通codexdev账户缺sudo权限；自动审批曾拒绝直接root连接的只读检查。先完成提交推送及普通账户安全暂存验证，再由用户明确授权现有密钥root连接，仅本轮备份／迁移／部署／验收；随后执行成功，不修改长期登录、sudo或生产配置。初次暂存拦截发布脚本局部导入错误，03c7bcd已修复，无线上影响。
+- 在线及停服最终备份副本各初始化两次，原91段、144任务及所有其他原列原行、完整性与外键通过；正式初始化后服务启动前与验证副本逐表逐行一致。原子切换后5页面、28静态资源逐字节、历史200、自动停止与补记API、日周比较、目标编辑、PWA匿名资源与私有no-store、未登录API401、正式库与通知configured=true／preview=false通过。相关服务与定时器active，NRestarts=0，环境文件哈希保持。没有生产测试写入、AI调用或测试通知。
+- 线上目录/opt/daily-plan/releases/03c7bcdb25056fa5b06bd107ac698adbb366cfd6，上一dacabf9完整保留。在线备份/var/backups/daily-plan/precheck-pwa-03c7bcd-20261026-230017.db；最终/var/backups/daily-plan/predeploy-pwa-03c7bcd-20261026-230104.db；对应-validated.db副本保留。部署结果/var/backups/daily-plan/deployment-pwa-03c7bcd-20261026-230104.json，脚本同目录deploy-pwa-03c7bcd.py。详情与源归档哈希见docs/releases/2026-10-26-pwa-timer.md。
+- 回退先备份现库、核对已设自动停止的激活段，再停服切回上一目录重启；旧版不支持自动截止，不能忽略新设置或用旧备份覆盖新记录。独立预览保留data/ui-preview.db与ui-preview-backups，未与正式混用。公网普通新浏览器配置的可信TLS／安全上下文、manifest／maskable、Chrome安装条件零错误、离线兜底与恢复、零写入通过；实读截图docs/design-previews/2026-10-26-pwa-public-390.png。实体系统实际安装／iOS状态栏与真实触感仍待用户实机确认。应用已提交推送部署，发布交接随收尾提交推送。
 
 ## 自动停止、整卡记录切页与跟手抽屉（2026-10-26，独立预览已更新）
 
