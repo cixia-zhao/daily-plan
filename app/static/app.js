@@ -1171,9 +1171,10 @@ if (page === 'execute' || $('#review-records-workspace') || $('#history-records-
   const backdrop = $('#execution-controls-backdrop');
   const mini = $('#execution-mini');
   const phoneSheet = matchMedia('(max-width:999px)');
+  const pinnedControls = () => !recordsOnly && !historyView && !phoneSheet.matches;
   function controlsBusy() { return timingPending||segmentEditBusy||quickCorrectionBusy||wordCountsBusy||autoStopBusy; }
   function beginControlsClose() {
-    if(historyView || controlsClosing)return;
+    if(historyView || pinnedControls() || controlsClosing)return;
     controlsClosing=true;
     const closeDuration=phoneSheet.matches?sheetDrag.dismiss():matchMedia('(prefers-reduced-motion: reduce)').matches?0:180;
     controlsRoot.classList.add('is-closing');backdrop.classList.add('is-closing');
@@ -1194,19 +1195,22 @@ if (page === 'execute' || $('#review-records-workspace') || $('#history-records-
       $('#execution-overlay').classList.toggle('has-running',Boolean(executionState?.active_segment));
       return;
     }
-    const active=Boolean(executionState?.active_segment);
+    const active=executionState?.active_segment;
+    const pinned=pinnedControls();
     if(controlsDate!==dateInput.value){controlsDate=dateInput.value;controlsExpanded=false;controlsHadActive=false;resetRecordsPage();}
     if(active&&!controlsHadActive||timingPending||!$('#execute-operation-feedback').hidden)controlsExpanded=true;
-    else if(controlsHadActive&&!active&&!segmentDialog.open&&!$('#quick-correction-dialog').open&&!$('#word-count-dialog').open&&!$('#auto-stop-dialog').open&&!recordsPageOpen){controlsExpanded=false;beginControlsClose();}
-    controlsHadActive=active;
-    const shown=controlsExpanded||controlsClosing;
+    else if(!pinned&&controlsHadActive&&!active&&!segmentDialog.open&&!$('#quick-correction-dialog').open&&!$('#word-count-dialog').open&&!$('#auto-stop-dialog').open&&!recordsPageOpen){controlsExpanded=false;beginControlsClose();}
+    controlsHadActive=Boolean(active);
+    const shown=pinned||controlsExpanded||controlsClosing;
     if(controlsRoot.hidden&&shown)controlsRoot.style.removeProperty('animation');
     controlsRoot.hidden=!shown;
     controlsFab.hidden=recordsOnly||shown||active;
     mini.hidden=recordsOnly||shown||!active;
     controlsFab.setAttribute('aria-expanded',String(controlsExpanded));
     controlsFab.disabled=controlsBusy();
+    $('#execution-controls-close').hidden=pinned;
     $('#execution-controls-close').disabled=controlsBusy();
+    controlsRoot.setAttribute('role',pinned?'region':'dialog');
     $('#execution-sheet-handle').disabled=controlsBusy();
     $('#execution-mini-stop').disabled=timingPending;
     backdrop.hidden=!shown||!phoneSheet.matches;
@@ -1229,7 +1233,7 @@ if (page === 'execute' || $('#review-records-workspace') || $('#history-records-
     requestAnimationFrame(()=>{if(!historyView&&phoneSheet.matches&&!document.querySelector('dialog[open]'))$('#execution-controls-close').focus({preventScroll:true});chronology.render();});
   }
   function closeExecutionControls() {
-    if(historyView)return false;
+    if(historyView||pinnedControls())return false;
     if(!controlsExpanded && !controlsClosing)return true;
     if(controlsBusy()||document.querySelector('dialog[open]'))return false;
     controlsExpanded=false;$('#execute-operation-feedback').hidden=true;beginControlsClose();updateExecutionControls();return true;
@@ -1260,7 +1264,10 @@ if (page === 'execute' || $('#review-records-workspace') || $('#history-records-
     };
   }
   const sheetDrag=new ExecutionSheetDrag(controlsRoot,backdrop,()=>!historyView&&phoneSheet.matches&&controlsExpanded&&!controlsClosing&&!controlsBusy()&&!document.querySelector('dialog[open]'),closeExecutionControls);
-  phoneSheet.addEventListener('change',()=>{sheetDrag.reset();updateExecutionControls();});
+  phoneSheet.addEventListener('change',()=>{
+    if(pinnedControls()&&controlsCloseTimer){clearTimeout(controlsCloseTimer);controlsCloseTimer=null;controlsClosing=false;controlsRoot.classList.remove('is-closing');backdrop.classList.remove('is-closing');}
+    sheetDrag.reset();updateExecutionControls();
+  });
   window.addEventListener('resize',()=>{if(!recordsPageOpen)sheetBody.style.removeProperty('height');});
   document.addEventListener('keydown',event=>{
     if(historyView||!controlsExpanded||document.querySelector('dialog[open]'))return;

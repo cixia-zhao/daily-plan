@@ -5,7 +5,7 @@
 {% block content %}
 <section class="hero compact history-heading">
   <div><h1 id="history-page-title">{{ '历史执行记录' if is_past else '执行记录' }}</h1><p>查看当日项目与实际投入；时间记录可在下方修正。</p></div>
-  <div class="date-actions"><a class="return-today" data-return-today href="/execute">回到今天</a><div class="date-chip date-chip-button"><button id="history-date-button" class="date-trigger" type="button">{{ execution_date }}</button></div></div>
+  <div class="date-actions"><a class="return-today" data-return-today href="/return-today">回到今天</a><div class="date-chip date-chip-button"><button id="history-date-button" class="date-trigger" type="button">{{ execution_date }}</button></div></div>
 </section>
 <p id="history-loading" class="muted" role="status">正在读取当日执行记录…</p>
 <div id="history-error" class="notice" role="alert" hidden><p>读取失败，原记录保留。</p><button id="history-retry" class="ghost-button" type="button">重新读取</button></div>

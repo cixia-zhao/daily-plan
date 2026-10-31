@@ -23,6 +23,9 @@ def test_public_install_resources_do_not_expose_private_pages(tmp_path):
         assert client.get('/favicon.ico').status_code==200
         assert client.get('/api/settings').status_code==401
         assert client.get('/execute',follow_redirects=False).status_code==303
+        destination=client.get('/return-today',follow_redirects=False)
+        assert destination.status_code==303
+        assert destination.headers['location']=='/login?next=/return-today'
         login=client.get('/login');assert 'apple-touch-icon' in login.text and 'pwa-install' in login.text
         assert login.headers['cache-control']=='no-store'
 

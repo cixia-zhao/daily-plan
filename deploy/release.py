@@ -63,7 +63,22 @@ def verify_http(release):
             assert hashlib.sha256(response.content).hexdigest()==sha(release/'app/static'/filename),filename
         response=client.get('/execute?date=2026-10-22')
         assert response.status_code==200 and 'data-page="execution-history"' in response.text
+        assert 'data-return-today href="/return-today"' in response.text
         today=client.get('/').text
+        assert 'data-return-today href="/return-today"' in today
+        assert 'data-return-today href="/return-today"' in client.get('/review').text
+        destination=client.get('/return-today')
+        assert destination.status_code==303 and destination.headers['cache-control']=='no-store'
+        from urllib.parse import parse_qs, urlsplit
+        from zoneinfo import ZoneInfo
+        current_day=datetime.now(ZoneInfo('Asia/Shanghai')).date().isoformat()
+        location=urlsplit(destination.headers['location'])
+        assert location.path in ('/','/execute','/review')
+        assert parse_qs(location.query)['date']==[current_day]
+        with sqlite3.connect(f'file:{DB}?mode=ro',uri=True) as database:
+            running=database.execute('SELECT 1 FROM task_execution_segments WHERE plan_date=? AND ended_at IS NULL LIMIT 1',(current_day,)).fetchone()
+        if running:assert location.path=='/execute','正在计时必须回执行页'
+        if location.path=='/review':assert parse_qs(location.query)['scope']==['daily']
         assert 'surfaces.css' in today
         assert 'plan-list-surface' in today and '修改目标时长' in today and 'cancel-target-edit' in today
         assert 'target-edit-error' in today
@@ -88,6 +103,8 @@ def verify_http(release):
         assert 'rel="manifest"' in today and 'viewport-fit=cover' in today
     with httpx.Client(base_url='http://127.0.0.1:8000',timeout=10,trust_env=False) as client:
         private=client.get('/api/settings');assert private.status_code==401 and private.headers['cache-control']=='no-store'
+        destination=client.get('/return-today');assert destination.status_code==303
+        assert destination.headers['location']=='/login?next=/return-today'
         manifest=client.get('/manifest.webmanifest');assert manifest.status_code==200
         data=manifest.json();assert data['name']=='今日航线' and data['display']=='standalone'
         assert any(icon.get('purpose')=='maskable' for icon in data['icons'])
@@ -97,7 +114,7 @@ def verify_http(release):
         assert client.get('/offline').status_code==200 and client.get('/favicon.ico').status_code==200
     for service in ['daily-plan.service','daily-plan-ntfy.service','nginx.service','daily-plan-backup.timer','daily-plan-cert-renew.timer']:
         run(['systemctl','is-active','--quiet',service])
-    return {'protected_pages':5,'static_files_match':len(static_files),'production_database':True,'notification_configured':True,'unauthenticated_api':401,'services_active':True,'new_api_registered':True,'history_page':200,'pwa_public_resources':True,'pwa_standalone':True,'private_no_store':True,'auto_stop_api':True,'shared_execution_panel':True,'comparison_apis':2,'today_edit_controls':True,'today_content_surface':True}
+    return {'protected_pages':5,'static_files_match':len(static_files),'production_database':True,'notification_configured':True,'unauthenticated_api':401,'services_active':True,'new_api_registered':True,'history_page':200,'pwa_public_resources':True,'pwa_standalone':True,'private_no_store':True,'auto_stop_api':True,'shared_execution_panel':True,'comparison_apis':2,'today_edit_controls':True,'today_content_surface':True,'return_today_redirect':True,'return_today_login_protected':True,'return_today_running_priority':True}
 
 
 def migration(release, source, target):

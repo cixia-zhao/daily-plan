@@ -18,7 +18,7 @@ from starlette.middleware.sessions import SessionMiddleware
 from .services.reminders import NtfySender, run_reminders
 from .api import router
 from .auth import build_auth_settings, verify_password
-from .database import initialize
+from .database import connect, initialize
 from .services.ai_planner import AIPlanner
 from .services.weekly_review_analyzer import WeeklyReviewAnalyzer
 from .services.pwa import asset_version, manifest
@@ -179,6 +179,36 @@ def create_app(
     @app.get("/review", response_class=HTMLResponse)
     def review_page(request: Request):
         return templates.TemplateResponse(request, "review.html", {})
+
+    @app.get("/return-today")
+    def return_today():
+        today = datetime.now(ZoneInfo("Asia/Shanghai")).date().isoformat()
+        with connect(app.state.database_path) as connection:
+            plan = connection.execute("SELECT id, status FROM plans WHERE plan_date=?", (today,)).fetchone()
+            running = connection.execute(
+                "SELECT 1 FROM task_execution_segments WHERE plan_date=? AND ended_at IS NULL LIMIT 1", (today,)
+            ).fetchone()
+            # 词数即使填零，也表示用户已经明确记录；仅查看页面不算执行。
+            recorded = connection.execute("""
+                SELECT 1 FROM task_execution_segments WHERE plan_date=? AND ended_at IS NOT NULL
+                UNION ALL SELECT 1 FROM vocabulary_daily_counts WHERE plan_date=?
+                UNION ALL SELECT 1 FROM task_duration_records r JOIN tasks t ON t.id=r.task_id
+                    JOIN plans p ON p.id=t.plan_id WHERE p.plan_date=?
+                UNION ALL SELECT 1 FROM tasks t JOIN plans p ON p.id=t.plan_id
+                    WHERE p.plan_date=? AND (t.actual_minutes>0 OR t.legacy_actual_minutes>0
+                        OR t.habit_status IS NOT NULL OR t.completed=1)
+                LIMIT 1
+            """, (today, today, today, today)).fetchone()
+        if running:
+            target = "/execute"
+        elif recorded:
+            target = "/review"
+        elif plan and plan["status"] in ("approved", "submitted"):
+            target = "/execute"
+        else:
+            target = "/"
+        suffix = "&scope=daily" if target == "/review" else ""
+        return RedirectResponse(f"{target}?date={today}{suffix}", status_code=303)
 
     @app.get("/execute", response_class=HTMLResponse)
     def execute_page(request: Request):

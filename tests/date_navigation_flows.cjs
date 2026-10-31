@@ -32,7 +32,7 @@ if(!base||new URL(base).hostname!=='127.0.0.1')throw Error('仅本机临时库')
   await page.locator('#open-execution-desk').click();await page.locator('#history-page-title').waitFor();
   assert(new URL(page.url()).pathname==='/execute');
   await page.locator('.primary-nav [data-nav=review]').click();await page.waitForURL('**/review?date='+past+'*');
-  await page.locator('[data-return-today]').click();await page.waitForFunction(()=>document.querySelector('#review-date').value===new Date().toLocaleDateString('en-CA'));
+  await page.locator('[data-return-today]').click();await page.waitForURL('**/?date='+today);assert.equal(await page.locator('#plan-date').inputValue(),today,'今天无计划则回到目标填写页');
   assert.equal(writes.length,0,'纯浏览不产生业务写入');
   assert.deepEqual((await api('daily-execution/'+past)).segments,before.segments,'导航不改变原记录');
   await page.goto(base+'/execute?date='+past);await page.locator('#history-page-title').waitFor();
@@ -51,6 +51,15 @@ if(!base||new URL(base).hostname!=='127.0.0.1')throw Error('仅本机临时库')
   const invalid=await page.request.get(base+'/execute?date=2026-99-99');assert.equal(invalid.status(),422);
   d.setDate(d.getDate()-1);const empty=d.toLocaleDateString('en-CA',{timeZone:'Asia/Shanghai'});
   await page.goto(base+'/execute?date='+empty);await page.locator('#history-empty').waitFor();assert.match(await page.locator('#history-empty').innerText(),/没有/);
-  assert.deepEqual(errors,[]);console.log('PASS: 三页保留日期／刷新／回今天、历史全项目与内嵌时间轴、无浏览写入、编辑刷新、空日期及坏日期、四视口');
+  const currentPlan=await api('daily-plans/draft','POST',{date:today,energy:'normal',day_type:'normal',target_minutes:{math:60,english:30,computer:0,rehab:0}});
+  await page.goto(base+'/?date='+past);await page.locator('[data-return-today]').click();await page.waitForURL('**/?date='+today);await page.locator('#approve-plan').waitFor();
+  await api('daily-plans/'+today+'/approve','POST');
+  await page.goto(base+'/execute?date='+past);await page.locator('[data-return-today]').click();await page.waitForURL('**/execute?date='+today);await page.locator('#execute-panel').waitFor();
+  await api('vocabulary-counts/'+today,'PUT',{new_words:12,review_words:25});
+  await page.goto(base+'/review?date='+past);await page.locator('[data-return-today]').click();await page.waitForURL('**/review?date='+today+'&scope=daily');await page.waitForFunction(()=>document.querySelector('#review-workspace-content').getAttribute('aria-busy')==='false');
+  const math=currentPlan.tasks.find(t=>t.category==='math');await api('daily-execution/'+today+'/tasks/start','POST',{task_id:math.id,label_id:'effective_math_course'});
+  await page.goto(base+'/review?date='+past);await page.locator('[data-return-today]').click();await page.waitForURL('**/execute?date='+today);await page.locator('#execute-stop:not(:disabled)').waitFor();
+  await api('daily-execution/'+today+'/stop','POST');await page.goto(base+'/execute?date='+past);await page.locator('[data-return-today]').click();await page.waitForURL('**/review?date='+today+'&scope=daily');
+  assert.deepEqual(errors,[]);console.log('PASS: 三页保留日期／刷新／回今天按空白、草稿、未执行和已记词数跳转、历史全项目与内嵌时间轴、无浏览写入、编辑刷新、空日期及坏日期、四视口');
  }finally{await browser.close();}
 })().catch(e=>{console.error(e);process.exit(1)});
