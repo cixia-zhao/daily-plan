@@ -20,6 +20,8 @@ import os
 app=create_app(database_path=os.environ['DATABASE_PATH'],backup_dir=os.environ['DAILY_PLAN_BACKUP_DIR'],runtime_mode='development',disable_ai=True,disable_notifications=True)
 @app.middleware('http')
 async def test_worker_version(request,call_next):
+    if request.url.path=='/execute' and Path(os.environ['PWA_TEST_FAILURE']).exists():
+        return Response('temporary unavailable',status_code=503)
     if request.url.path=='/sw.js':
         source=Path('app/static/pwa/sw.js').read_text().replace('__PWA_VERSION__',Path(os.environ['PWA_TEST_REVISION']).read_text())
         return Response(source,media_type='application/javascript',headers={'Cache-Control':'no-cache','Service-Worker-Allowed':'/'})
@@ -27,7 +29,7 @@ async def test_worker_version(request,call_next):
 ''')
     with socket.socket() as sock:
         sock.bind(('127.0.0.1',0));port=sock.getsockname()[1]
-    env=dict(os.environ,APP_RUNTIME='development',DATABASE_PATH=str(temp/'test.db'),DAILY_PLAN_BACKUP_DIR=str(temp/'backups'),DEEPSEEK_API_KEY='',DAILY_PLAN_NTFY_URL='',DAILY_PLAN_NTFY_TOPIC='',DAILY_PLAN_NTFY_TOKEN='',PYTHONPATH=str(root)+os.pathsep+folder,DAILY_PLAN_TEST_URL=f'http://127.0.0.1:{port}',PWA_TEST_REVISION=str(revision))
+    env=dict(os.environ,APP_RUNTIME='development',DATABASE_PATH=str(temp/'test.db'),DAILY_PLAN_BACKUP_DIR=str(temp/'backups'),DEEPSEEK_API_KEY='',DAILY_PLAN_NTFY_URL='',DAILY_PLAN_NTFY_TOPIC='',DAILY_PLAN_NTFY_TOKEN='',PYTHONPATH=os.pathsep.join([str(root),folder,os.environ.get('PYTHONPATH','')]),DAILY_PLAN_TEST_URL=f'http://127.0.0.1:{port}',PWA_TEST_REVISION=str(revision),PWA_TEST_FAILURE=str(temp/'temporary-failure'))
     with (temp/'server.log').open('w+') as log:
         server=subprocess.Popen([sys.executable,'-m','uvicorn','pwa_test_boot:app','--host','127.0.0.1','--port',str(port)],cwd=root,env=env,stdout=log,stderr=log)
         try:

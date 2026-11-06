@@ -163,6 +163,24 @@ class QuickCorrectionInput(BaseModel):
     time_category: Literal["distraction", "life"]
 
 
+class TimeCorrectionInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    request_id: str = Field(pattern=r"^[a-zA-Z0-9_-]{16,80}$")
+    source_segment_id: int = Field(strict=True, gt=0)
+    mode: Literal["segment", "switch"] = "segment"
+    minutes: int = Field(strict=True, ge=1, le=1440)
+    offset_minutes: int = Field(default=0, strict=True, ge=0, le=1440)
+    label_id: str | None = Field(default=None, max_length=100)
+    task_id: int | None = Field(default=None, strict=True, gt=0)
+    effective_label_id: str | None = Field(default=None, max_length=100)
+
+
+class CorrectionShortcutInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    label_id: str = Field(min_length=1, max_length=100)
+    minutes: int = Field(strict=True, ge=1, le=1440)
+
+
 class ExecutionSegmentCreateInput(BaseModel):
     time_category: TimeCategory | None = None
     duplicate_choice: Literal["both", "manual", "timer"] | None = None

@@ -100,6 +100,20 @@ def verify_http(release):
         assert '/api/daily-execution/{plan_date}/auto-stop' in paths
         assert 'auto-stop-dialog' in client.get('/execute').text
         assert 'execution-records-page' in client.get('/execute').text
+        execution=client.get('/execute').text
+        assert 'ui-controls.css' in execution and 'time-correction-add' in execution
+        assert 'time-correction-manage' in execution and '返回上一页' in execution
+        assert 'network-recovery.js' in execution and 'time-correction.js' in execution
+        assert '/api/daily-execution/{plan_date}/time-corrections' in paths
+        assert '/api/correction-shortcuts' in paths
+        current_execution=client.get('/api/daily-execution/'+current_day)
+        assert current_execution.status_code==200
+        current_data=current_execution.json()
+        assert isinstance(current_data['correction_activities'],list)
+        assert isinstance(current_data['correction_shortcuts'],list)
+        with sqlite3.connect(f'file:{DB}?mode=ro',uri=True) as database:
+            correction_columns={row[1] for row in database.execute('PRAGMA table_info(execution_quick_corrections)')}
+            assert {'request_json','original_state_json'}<=correction_columns
         assert 'rel="manifest"' in today and 'viewport-fit=cover' in today
     with httpx.Client(base_url='http://127.0.0.1:8000',timeout=10,trust_env=False) as client:
         private=client.get('/api/settings');assert private.status_code==401 and private.headers['cache-control']=='no-store'
@@ -114,7 +128,7 @@ def verify_http(release):
         assert client.get('/offline').status_code==200 and client.get('/favicon.ico').status_code==200
     for service in ['daily-plan.service','daily-plan-ntfy.service','nginx.service','daily-plan-backup.timer','daily-plan-cert-renew.timer']:
         run(['systemctl','is-active','--quiet',service])
-    return {'protected_pages':5,'static_files_match':len(static_files),'production_database':True,'notification_configured':True,'unauthenticated_api':401,'services_active':True,'new_api_registered':True,'history_page':200,'pwa_public_resources':True,'pwa_standalone':True,'private_no_store':True,'auto_stop_api':True,'shared_execution_panel':True,'comparison_apis':2,'today_edit_controls':True,'today_content_surface':True,'return_today_redirect':True,'return_today_login_protected':True,'return_today_running_priority':True}
+    return {'protected_pages':5,'static_files_match':len(static_files),'production_database':True,'notification_configured':True,'unauthenticated_api':401,'services_active':True,'new_api_registered':True,'history_page':200,'pwa_public_resources':True,'pwa_standalone':True,'private_no_store':True,'auto_stop_api':True,'shared_execution_panel':True,'comparison_apis':2,'today_edit_controls':True,'today_content_surface':True,'return_today_redirect':True,'return_today_login_protected':True,'return_today_running_priority':True,'time_correction_api':True,'correction_schema':True,'shared_icon_controls':True,'network_recovery':True}
 
 
 def migration(release, source, target):

@@ -11,6 +11,7 @@
   <link rel="stylesheet" href="/static/timeline.css?v={{ static_version('timeline.css') }}">
   <link rel="stylesheet" href="/static/workspace.css?v={{ static_version('workspace.css') }}">
   <link rel="stylesheet" href="/static/surfaces.css?v={{ static_version('surfaces.css') }}">
+  <link rel="stylesheet" href="/static/ui-controls.css?v={{ static_version('ui-controls.css') }}">
 </head>
 <body data-page="{% block page %}today{% endblock %}">
   {% if request.app.state.ui_preview | default(false) %}
@@ -85,6 +86,7 @@
   <script src="/static/visuals.js?v={{ static_version('visuals.js') }}" defer></script>
   <script src="/static/timeline.js?v={{ static_version('timeline.js') }}" defer></script>
   <script src="/static/surfaces.js?v={{ static_version('surfaces.js') }}" defer></script>
+  <script src="/static/time-correction.js?v={{ static_version('time-correction.js') }}" defer></script>
   <script src="/static/app.js?v={{ static_version('app.js') }}" defer></script>
   {% block page_scripts %}{% endblock %}
   {% include "pwa_controls.html" %}

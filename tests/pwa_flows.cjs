@@ -13,8 +13,17 @@ if(!base||new URL(base).hostname!=='127.0.0.1'||!revision?.startsWith('/tmp/dail
  await p.evaluate(()=>{window.installCalls=0;const event=new Event('beforeinstallprompt',{cancelable:true});event.prompt=async()=>window.installCalls++;event.userChoice=Promise.resolve({outcome:'dismissed'});dispatchEvent(event);});assert.equal(await p.evaluate(()=>window.installCalls),0);await p.locator('.nav-more summary').click();await p.locator('#pwa-install').click();await p.locator('#pwa-dialog-action').click();assert.equal(await p.evaluate(()=>window.installCalls),1);
  // 断网不假称已保存、不缓存API；断网导航显示中性页，重新连接回原URL。
  await context.setOffline(true);await p.locator('#pwa-notice').waitFor();assert.match(await p.locator('#pwa-notice').innerText(),/核对/);assert(await p.evaluate(()=>fetch('/api/settings').then(()=>false,()=>true)));
- await p.goto(base+'/execute');await p.getByRole('heading',{name:'暂时无法连接'}).waitFor();await p.screenshot({path:'/tmp/pwa-offline-390.png'});assert.equal(new URL(p.url()).pathname,'/execute');await context.setOffline(false);await p.locator('#offline-retry').click();await p.locator('#execute-panel').waitFor({state:'attached'});
+ await p.goto(base+'/execute');await p.getByRole('heading',{name:'暂时无法连接'}).waitFor();await p.screenshot({path:'/tmp/pwa-offline-390.png'});assert.equal(new URL(p.url()).pathname,'/execute');await context.setOffline(false);await p.locator('#execute-panel').waitFor({state:'attached'});assert.equal(new URL(p.url()).pathname,'/execute');
+ // 网络一直在线但服务暂时503：退避重试，恢复后不需要online事件或点击。
+ const failure=process.env.PWA_TEST_FAILURE;assert(failure?.startsWith('/tmp/daily-plan-pwa-'));fs.writeFileSync(failure,'fail');
+ await p.goto(base+'/execute?date=2026-10-21#records');await p.getByRole('heading',{name:'暂时无法连接'}).waitFor();
+ await p.waitForFunction(()=>document.querySelector('#offline-status').textContent.includes('自动重试'));fs.unlinkSync(failure);
+ await p.locator('#history-page-title').waitFor();assert.equal(new URL(p.url()).search,'?date=2026-10-21');assert.equal(new URL(p.url()).hash,'#records');
  await p.goto(base+'/');await p.locator('[data-target-category=math]').waitFor();await p.locator('[data-target-category=math]').fill('123');
+ // 普通页面只检查／同步，不重载表单，不重放写入。
+ let unavailable=true;await p.route('**/api/system/health',route=>unavailable?route.fulfill({status:503,body:'temporary unavailable'}):route.continue());
+ await p.evaluate(()=>dispatchEvent(new Event('app-network-error')));await p.locator('#pwa-notice').waitFor();
+ await p.waitForTimeout(1300);unavailable=false;await p.locator('#pwa-notice').waitFor({state:'hidden'});assert.equal(await p.locator('[data-target-category=math]').inputValue(),'123');await p.unroute('**/api/system/health');
  // 下载新版只提示，输入不丢；用户确认后激活，其他页不被强制刷新。
  const second=await context.newPage();await second.goto(base+'/');await second.locator('[data-target-category=math]').waitFor();await second.locator('[data-target-category=math]').fill('234');
  fs.writeFileSync(revision,'test-version-two');await p.evaluate(async()=>{await (await navigator.serviceWorker.getRegistration()).update();});await p.locator('#pwa-update-open').waitFor();assert.equal(await p.locator('[data-target-category=math]').inputValue(),'123');assert.equal(await second.locator('[data-target-category=math]').inputValue(),'234');

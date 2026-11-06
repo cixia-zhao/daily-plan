@@ -36,6 +36,10 @@ def initialize(path: str | Path) -> None:
             cursor.execute("ALTER TABLE task_execution_segments ADD COLUMN auto_stop_at TEXT")
         if "stopped_automatically" not in segment_columns:
             cursor.execute("ALTER TABLE task_execution_segments ADD COLUMN stopped_automatically INTEGER NOT NULL DEFAULT 0")
+        correction_columns = {row[1] for row in cursor.execute('PRAGMA table_info(execution_quick_corrections)')}
+        for column in ('request_json', 'original_state_json'):
+            if column not in correction_columns:
+                cursor.execute(f'ALTER TABLE execution_quick_corrections ADD COLUMN {column} TEXT')
         cursor.execute("PRAGMA table_info(reviews)")
         review_columns = [row[1] for row in cursor.fetchall()]
         for name, ddl in [

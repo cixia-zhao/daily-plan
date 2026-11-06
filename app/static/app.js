@@ -68,6 +68,7 @@ async function api(path, options={}) {
   try { response = await fetch(path, {cache:'no-store',headers:{'Content-Type':'application/json'}, ...options}); }
   catch { window.dispatchEvent(new Event('app-network-error')); throw new Error('无法连接服务器，这次操作尚未确认保存；请联网后核对记录再重试。'); }
   if (!response.ok) {
+    if (response.status >= 500) window.dispatchEvent(new Event('app-network-error'));
     let detail = '操作失败';
     try {
       const payload = await response.json();
@@ -1140,9 +1141,6 @@ if (page === 'execute' || $('#review-records-workspace') || $('#history-records-
   let timingAction = '';
   let autoStopBusy = false;
   let quickCorrectionBusy = false;
-  let quickCorrectionSource = null;
-  let quickCorrectionCategory = null;
-  let quickCorrectionRequestId = null;
   const receivedTimes = new WeakMap();
   let segmentDialogDate = null;
   let segmentEditBusy = false;
@@ -1288,7 +1286,7 @@ if (page === 'execute' || $('#review-records-workspace') || $('#history-records-
     currentPanel.setAttribute('aria-busy',String(timingPending));
     $('#execute-stop').disabled = timingPending || !active;
     $('#execute-stop').textContent = timingPending && timingAction === '停止' ? '正在停止…' : '停止';
-    $('#quick-correction-open').disabled = timingPending || !active || active.segment_kind !== 'effective' || active.included === false;
+    $('#quick-correction-open').disabled = timingPending || quickCorrectionBusy || !active || active.included === false;
     $$('.task-start-button, .effective-start-option, .execution-label-button, #mobile-counted-toggle, #mobile-interrupt-toggle').forEach(button=>{button.disabled=timingPending;});
     $('#mobile-return-effective').disabled = timingPending || !(active && active.segment_kind !== 'effective' && active.task_id);
     updateExecutionControls();
@@ -1305,11 +1303,11 @@ if (page === 'execute' || $('#review-records-workspace') || $('#history-records-
   async function executionApi(path, options={}) {
     const requestDate=dateInput.value;
     const writing = options.method && options.method !== 'GET';
-    const timing = writing && (/\/(tasks\/start|labels\/start|stop|quick-corrections|auto-stop)$/.test(path) || (options.method==='PUT' && path.endsWith(`/segments/${executionState?.active_segment?.id}`)));
+    const timing = writing && (/\/(tasks\/start|labels\/start|stop|quick-corrections|time-corrections|auto-stop)$/.test(path) || (options.method==='PUT' && path.endsWith(`/segments/${executionState?.active_segment?.id}`)));
     if (timing && timingPending) throw new Error('正在处理当前计时操作，请稍候。');
     if (timing) {
       timingPending = true;
-      timingAction = path.endsWith('/auto-stop') ? '设置自动停止' : options.method==='PUT' ? '保存修改' : path.endsWith('/quick-corrections') ? '补记' : path.endsWith('/stop') ? '停止' : executionState?.active_segment ? '切换' : '开始';
+      timingAction = path.endsWith('/auto-stop') ? '设置自动停止' : options.method==='PUT' ? '保存修改' : (path.endsWith('/quick-corrections') || path.endsWith('/time-corrections')) ? '修正时间' : path.endsWith('/stop') ? '停止' : executionState?.active_segment ? '切换' : '开始';
       $('#execute-operation-feedback').hidden = true;
       updateTimingControls();
     }
@@ -1418,52 +1416,12 @@ if (page === 'execute' || $('#review-records-workspace') || $('#history-records-
     $('#execute-goal-fill').style.width = `${ratio * 100}%`;
   }
 
-  const quickDialog = $('#quick-correction-dialog');
-  const quickError = $('#quick-correction-error');
-  function updateQuickCorrectionControls() {
-    $$('[data-quick-category]',quickDialog).forEach(button=>{
-      button.disabled=quickCorrectionBusy;
-      button.setAttribute('aria-pressed',String(button.dataset.quickCategory===quickCorrectionCategory));
-    });
-    $$('[data-quick-minutes], input, [type=submit]',quickDialog).forEach(control=>{control.disabled=quickCorrectionBusy || !quickCorrectionCategory;});
-    $('#quick-correction-close').disabled=quickCorrectionBusy;
-    $('#quick-correction-form [type=submit]').textContent=quickCorrectionBusy?'保存中…':'保存';
-  }
-  $('#quick-correction-open').onclick=()=>{
-    const active=executionState?.active_segment;
-    if(timingPending || !active || active.segment_kind!=='effective' || active.included===false)return;
-    quickCorrectionSource=active.id;
-    quickCorrectionCategory=null;
-    quickCorrectionRequestId=Array.from(crypto.getRandomValues(new Uint8Array(16)),value=>value.toString(16).padStart(2,'0')).join('');
-    $('#quick-correction-context').textContent=`从${active.task_title}当前有效段划出，保存后继续。`;
-    $('#quick-correction-custom').value='';
-    quickError.hidden=true;
-    updateQuickCorrectionControls();
-    quickDialog.showModal();
-  };
-  $$('[data-quick-category]',quickDialog).forEach(button=>button.onclick=()=>{
-    quickCorrectionCategory=button.dataset.quickCategory;quickError.hidden=true;updateQuickCorrectionControls();
+  const timeCorrectionDialog = new TimeCorrectionDialog({
+    state:()=>executionState, date:()=>dateInput.value, settings:()=>settings,
+    pending:()=>timingPending || segmentEditBusy || autoStopBusy,
+    setBusy:value=>{quickCorrectionBusy=value;updateTimingControls();},
+    request:executionApi, render:renderExecutionState, notify:toast,
   });
-  async function saveQuickCorrection(minutes) {
-    if(quickCorrectionBusy || !quickCorrectionCategory)return;
-    if(!Number.isInteger(minutes) || minutes<1 || minutes>1440){quickError.textContent='请选择或填写1～1440的整数分钟。';quickError.hidden=false;return;}
-    quickCorrectionBusy=true;quickError.hidden=true;updateQuickCorrectionControls();
-    try {
-      const result=await executionApi(`/api/daily-execution/${dateInput.value}/quick-corrections`,{method:'POST',body:JSON.stringify({request_id:quickCorrectionRequestId,source_segment_id:quickCorrectionSource,time_category:quickCorrectionCategory,minutes})});
-      renderExecutionState(result);quickDialog.close();toast('估计补记已保存，继续原学习');
-    }catch(error){quickError.textContent=error.message;quickError.hidden=false;}
-    finally{quickCorrectionBusy=false;updateQuickCorrectionControls();}
-  }
-  $$('[data-quick-minutes]',quickDialog).forEach(button=>button.onclick=()=>saveQuickCorrection(Number(button.dataset.quickMinutes)));
-  $('#quick-correction-form').onsubmit=event=>{event.preventDefault();saveQuickCorrection(Number($('#quick-correction-custom').value));};
-  $('#quick-correction-close').onclick=()=>{if(!quickCorrectionBusy)quickDialog.close();};
-  quickDialog.addEventListener('cancel',event=>{if(quickCorrectionBusy)event.preventDefault();});
-  quickDialog.addEventListener('click',event=>{
-    if(event.target!==quickDialog || quickCorrectionBusy)return;
-    const box=quickDialog.getBoundingClientRect();
-    if(event.clientX<box.left || event.clientX>box.right || event.clientY<box.top || event.clientY>box.bottom)quickDialog.close();
-  });
-  quickDialog.addEventListener('close',()=>$('#quick-correction-open').focus({preventScroll:true}));
 
   function renderLiveExecution(result) {
     const active = result?.active_segment;

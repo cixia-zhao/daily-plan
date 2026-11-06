@@ -63,7 +63,8 @@ if(!base || !['127.0.0.1','localhost'].includes(new URL(base).hostname)) throw E
   assert.equal(await clock(),'00:00:00');
   assert.match(await page.locator('#execute-record-status').innerText(),/学习记录已保存/);
   await page.route('**/api/daily-execution/*/tasks/start',route=>route.fulfill({status:503,contentType:'application/json',body:'{"detail":"开始失败"}'}));
-  await start();await page.waitForFunction(()=>document.querySelector('#execute-record-status').textContent.includes('未确认保存'));
+  await start();await page.waitForFunction(()=>document.querySelector('#execute-operation-message').textContent.includes('开始失败'));
+  assert.equal((await api(`daily-execution/${day}`)).active_segment,null,'自动核对后仍未开始，不会自动重放失败的开始请求');
   assert.equal(await clock(),'00:00:00','失败不假装已开始');
   await page.unroute('**/api/daily-execution/*/tasks/start');
   await start();await page.waitForFunction(()=>!document.querySelector('#execute-stop').disabled);

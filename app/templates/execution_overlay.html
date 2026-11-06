@@ -25,13 +25,14 @@
   </div>
   <div class="execution-save-note"><span id="execute-record-status" role="status">正在读取记录…</span><span id="execute-review-status">复盘待填写</span></div>
   <p id="execute-reminder-status" class="muted" role="status" hidden></p>
+  <div id="time-correction-feedback" class="time-correction-feedback" role="status" hidden><span></span><button type="button" class="ghost-button">撤销修正</button></div>
   <div id="execute-operation-feedback" class="operation-feedback" hidden><p id="execute-operation-message" role="status"></p><button id="execute-sync-retry" class="ghost-button" type="button">核对当前记录</button></div>
 </div>
 
 <section id="execute-chronology" class="execution-chronology hidden" aria-label="可点选编辑的时间轴"></section>
 
       <div id="execute-mobile-toolbar" class="execution-mobile-toolbar hidden">
-        <button id="quick-correction-open" class="ghost-button execution-quick-open" type="button" disabled>补记刚才</button>
+        <button id="quick-correction-open" class="ghost-button execution-quick-open" type="button" disabled>修正时间</button>
         <button id="mobile-counted-toggle" class="ghost-button" type="button" aria-expanded="false" aria-controls="mobile-counted-panel">分心</button>
         <button id="mobile-interrupt-toggle" class="ghost-button" type="button" aria-expanded="false" aria-controls="mobile-interrupt-panel">休息／事务</button>
         <button id="mobile-return-effective" class="ghost-button" type="button" disabled>切回有效</button>
@@ -56,7 +57,7 @@
 </div>
 <dialog id="auto-stop-dialog" class="auto-stop-dialog" aria-labelledby="auto-stop-title">
   <form id="auto-stop-form">
-    <div class="segment-dialog-heading"><h2 id="auto-stop-title">自动停止</h2><button id="auto-stop-close" class="ghost-button" type="button" aria-label="关闭自动停止设置">×</button></div>
+    <div class="segment-dialog-heading"><h2 id="auto-stop-title">自动停止</h2><button id="auto-stop-close" type="button" class="ui-icon-button ui-icon-button-close" aria-label="关闭自动停止设置" title="关闭自动停止设置"><svg class="ui-icon" aria-hidden="true" focusable="false"><use href="/static/icons/ui.svg#close"></use></svg></button></div>
     <p class="muted">只设置本次计时。提前停止，仍保存实际时长。</p>
     <div class="auto-stop-presets" role="group" aria-label="再计时多少分钟">{% for minutes in [25,45,60] %}<button type="button" data-auto-minutes="{{ minutes }}">{{ minutes }} 分钟</button>{% endfor %}</div>
     <div class="auto-stop-custom"><label>再计时 · 分钟<input id="auto-stop-minutes" type="number" min="1" max="1440" step="1" inputmode="numeric" placeholder="分钟"></label></div>
@@ -80,7 +81,7 @@
 </dialog>
 
 <dialog id="segment-edit-dialog" class="segment-edit-dialog" aria-labelledby="segment-edit-title">
-  <div class="segment-dialog-heading"><h2 id="segment-edit-title">编辑时间段</h2><button id="segment-edit-close" type="button" class="ghost-button" aria-label="关闭时间编辑">×</button></div>
+  <div class="segment-dialog-heading"><h2 id="segment-edit-title">编辑时间段</h2><button id="segment-edit-close" type="button" class="ui-icon-button ui-icon-button-close" aria-label="关闭时间编辑" title="关闭时间编辑"><svg class="ui-icon" aria-hidden="true" focusable="false"><use href="/static/icons/ui.svg#close"></use></svg></button></div>
   <p id="segment-edit-context" class="muted"></p>
   <div id="segment-edit-content"></div>
   <p id="segment-edit-error" class="form-error" role="alert" hidden></p>
@@ -88,12 +89,9 @@
 
 <dialog id="quick-correction-dialog" class="quick-correction-dialog" aria-labelledby="quick-correction-title">
   <form id="quick-correction-form" novalidate>
-    <div class="quick-correction-heading"><h3 id="quick-correction-title">补记刚才</h3><button id="quick-correction-close" type="button" class="ghost-button" aria-label="关闭补记">×</button></div>
+    <div class="quick-correction-heading"><button id="time-correction-back" type="button" class="ui-icon-button" aria-label="返回上一页" title="返回" hidden><svg class="ui-icon" aria-hidden="true" focusable="false"><use href="/static/icons/ui.svg#back"></use></svg></button><h3 id="quick-correction-title">修正时间</h3><div class="quick-correction-tools" role="group" aria-label="快捷键操作"><button id="time-correction-add" type="button" class="ui-icon-button" data-correction-action="add" aria-label="添加快捷键" title="添加快捷键"><svg class="ui-icon" aria-hidden="true" focusable="false"><use href="/static/icons/ui.svg#plus"></use></svg></button><button id="time-correction-manage" type="button" class="ui-icon-button" data-correction-action="manage" aria-label="编辑快捷键" aria-pressed="false" title="编辑快捷键"><svg class="ui-icon" aria-hidden="true" focusable="false"><use href="/static/icons/ui.svg#edit"></use></svg></button></div><button id="quick-correction-close" type="button" class="ui-icon-button ui-icon-button-close" aria-label="关闭修正时间" title="关闭修正时间"><svg class="ui-icon" aria-hidden="true" focusable="false"><use href="/static/icons/ui.svg#close"></use></svg></button></div>
     <p id="quick-correction-context" class="muted"></p>
-    <div class="quick-correction-categories" role="group" aria-label="刚才做了什么"><button type="button" class="ghost-button" data-quick-category="distraction" aria-pressed="false">分心</button><button type="button" class="ghost-button" data-quick-category="life" aria-pressed="false">厕所／生活</button></div>
-    <div class="quick-correction-minutes" role="group" aria-label="估计时长">{% for minutes in [1,2,5,10] %}<button type="button" class="ghost-button" data-quick-minutes="{{ minutes }}" disabled>约{{ minutes }}分</button>{% endfor %}</div>
-    <div class="quick-correction-custom"><label>其他分钟<input id="quick-correction-custom" type="number" min="1" max="1440" step="1" inputmode="numeric" placeholder="自填" disabled></label><button type="submit" class="primary" disabled>保存</button></div>
-    <p class="quick-correction-note muted">划出最近几分钟，标为“补记·估计”；保存后继续原学习。</p>
+    <div id="time-correction-body" class="time-correction-body"></div>
     <p id="quick-correction-error" class="form-error" role="alert" hidden></p>
   </form>
 </dialog>

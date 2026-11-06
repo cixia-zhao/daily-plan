@@ -1,5 +1,12 @@
 # 后端接口与数据层速查文档
 
+## 时间修正与快捷配置（2026-11-06，独立预览）
+
+POST /api/daily-execution/{date}/time-corrections接收request_id、source_segment_id、mode（segment／switch）、minutes、offset_minutes、label_id，以及可选task_id、effective_label_id；仅操作当前计入统计的运行源段，范围不得超出源段。补活动按偏移拆分并继续原学习；回溯切换补回最近学习，保留原标签快照或显式选择细分。完整签名幂等，变化源段409，写事务整体回滚。返回correction_segment_id供原DELETE segments接口撤销；相关记录已变时拒绝覆盖，不复活已停止计时。旧补记接口兼容。
+
+执行GET新增correction_activities和correction_shortcuts。POST /api/correction-shortcuts按label_id／minutes幂等新增，最多24项；DELETE /api/correction-shortcuts/{id}移除。配置独立存app_settings的correction_shortcuts键，不覆盖主设置。execution_quick_corrections新增request_json与original_state_json两列；先备份副本验证迁移，实际状态与限制见HANDOFF.md。
+
+
 ## 页面路由：历史执行记录（2026-10-26，独立预览）
 
 GET /execute不带日期或日期为今天时沿用今日执行。带合法其他日期时返回execution_history.html完整查看页，HTTP200，不再303转复盘；要求标准YYYY-MM-DD有效日历日期，无效或非标准值422。未来日期没有计时入口，按查看页显示空状态。仅更改页面组合，不增加数据库字段或改变原业务API；历史时间修正继续复用原PUT与冲突／重叠校验。

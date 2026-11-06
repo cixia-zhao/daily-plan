@@ -19,8 +19,15 @@
  window.addEventListener('beforeinstallprompt',e=>{e.preventDefault();prompt=e;refreshInstall();});
  window.addEventListener('appinstalled',()=>{installedHere=true;prompt=null;refreshInstall();dialog.close();});standalone.addEventListener('change',refreshInstall);
  update.onclick=()=>openDialog('更新今日航线','请先保存正在编辑的内容，再重新打开当前页面。','正在进行的计时保留在服务器，不会因为重新打开而停止。','更新并重新打开',()=>{if(disconnected){$('pwa-dialog-detail').textContent='请先恢复连接再更新。';return;}requestedRefresh=true;if(waiting&&waiting.state==='installed')waiting.postMessage({type:'SKIP_WAITING'});else location.reload();});
- async function checkConnection(){reconnect.disabled=true;try{const r=await fetch('/manifest.webmanifest',{cache:'no-store'});if(!r.ok)throw Error();disconnected=false;window.dispatchEvent(new Event('focus'));}catch{disconnected=true;}finally{reconnect.disabled=false;renderNotice();}}
- reconnect.onclick=checkConnection;window.addEventListener('offline',()=>{disconnected=true;renderNotice();});window.addEventListener('online',checkConnection);window.addEventListener('app-network-error',()=>{disconnected=true;renderNotice();});
+ const recovery=new AppNetworkRecovery({
+  probe:async signal=>{const response=await fetch('/api/system/health',{cache:'no-store',credentials:'same-origin',signal});if(!response.ok&&response.status!==401)throw Error('服务未恢复');return response.ok;},
+  recovered:authorized=>{disconnected=false;renderNotice();if(authorized)window.dispatchEvent(new Event('focus'));},
+  status:phase=>{reconnect.disabled=phase==='checking';},
+ });
+ const checkConnection=()=>recovery.start();
+ const connectionLost=()=>{disconnected=true;renderNotice();recovery.start();};
+ reconnect.onclick=checkConnection;window.addEventListener('offline',connectionLost);window.addEventListener('app-network-error',connectionLost);
+ if(disconnected)recovery.start();
  refreshInstall();renderNotice();
  if(!('serviceWorker' in navigator)||!window.isSecureContext)return;
  navigator.serviceWorker.addEventListener('controllerchange',()=>{if(!controlledAtLoad){controlledAtLoad=true;return;}if(requestedRefresh)location.reload();else if(registration?.active){waiting=registration.active;renderNotice();}});

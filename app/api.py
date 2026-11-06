@@ -31,6 +31,8 @@ from .schemas import (
     ExecutionTaskStartInput,
     ExecutionAutoStopInput,
     QuickCorrectionInput,
+    TimeCorrectionInput,
+    CorrectionShortcutInput,
     GPTRecordSaveInput,
     PlanUpdate,
     PromptConfigItem,
@@ -771,6 +773,8 @@ def _build_execution_payload(connection, plan_date: str) -> dict:
         "plan": plan_payload,
         "tasks": tasks,
         "labels": _serialize_execution_labels(settings),
+        "correction_activities": list(_correction_activities(settings).values()),
+        "correction_shortcuts": _correction_shortcuts(connection),
         "active_segment": (_serialize_execution_segment_row(active) | {"reminder": reminder_for_segment(connection,active["id"])}) if active else None,
         "segments": segments,
         "duration_records": duration_records,
@@ -1804,6 +1808,109 @@ def quick_correct_execution(plan_date: date, payload: QuickCorrectionInput, requ
         return _build_execution_payload(connection, day)
 
 
+def _correction_activities(settings):
+    activities = {label['id']: dict(label) | {'time_category': label_category(label)} for label in _serialize_execution_labels(settings)}
+    activities['quick_distraction'] = {'id': 'quick_distraction', 'name': '分心', 'time_category': 'distraction'}
+    activities['quick_life'] = {'id': 'quick_life', 'name': '其他生活', 'time_category': 'life'}
+    return activities
+
+
+def _correction_shortcuts(connection):
+    row = connection.execute("SELECT value_json FROM app_settings WHERE key='correction_shortcuts'").fetchone()
+    return json.loads(row['value_json']) if row else [
+        {'id': 'meal_30', 'label_id': 'interrupt_meal', 'minutes': 30},
+        {'id': 'distraction_5', 'label_id': 'quick_distraction', 'minutes': 5},
+    ]
+
+
+@router.post('/correction-shortcuts')
+def add_correction_shortcut(payload: CorrectionShortcutInput, request: Request):
+    with _db(request) as connection:
+        connection.execute('BEGIN IMMEDIATE')
+        if payload.label_id not in _correction_activities(_get_settings(connection)):
+            raise HTTPException(404, '活动已不存在，请重新选择')
+        items = _correction_shortcuts(connection)
+        if any(item['label_id'] == payload.label_id and item['minutes'] == payload.minutes for item in items):
+            return items
+        if len(items) >= 24:
+            raise HTTPException(422, '最多保存24个快捷键，请先移除不用的快捷键')
+        items.append({'id': uuid4().hex, **payload.model_dump()})
+        connection.execute("INSERT INTO app_settings(key,value_json) VALUES('correction_shortcuts',?) ON CONFLICT(key) DO UPDATE SET value_json=excluded.value_json,updated_at=CURRENT_TIMESTAMP", (json.dumps(items, ensure_ascii=False),))
+        return items
+
+
+@router.delete('/correction-shortcuts/{shortcut_id}')
+def remove_correction_shortcut(shortcut_id: str, request: Request):
+    with _db(request) as connection:
+        connection.execute('BEGIN IMMEDIATE')
+        items = [item for item in _correction_shortcuts(connection) if item['id'] != shortcut_id]
+        connection.execute("INSERT INTO app_settings(key,value_json) VALUES('correction_shortcuts',?) ON CONFLICT(key) DO UPDATE SET value_json=excluded.value_json,updated_at=CURRENT_TIMESTAMP", (json.dumps(items, ensure_ascii=False),))
+        return items
+
+
+@router.post('/daily-execution/{plan_date}/time-corrections')
+def correct_execution_time(plan_date: date, payload: TimeCorrectionInput, request: Request):
+    day = plan_date.isoformat()
+    signature = payload.model_dump(mode='json')
+    with _db(request) as connection:
+        connection.execute('BEGIN IMMEDIATE')
+        previous = connection.execute('SELECT * FROM execution_quick_corrections WHERE request_id=?', (payload.request_id,)).fetchone()
+        if previous:
+            if not previous['request_json'] or json.loads(previous['request_json']) != signature:
+                raise HTTPException(409, '这个请求已用于其他修正，请核对记录后重新打开')
+            return _build_execution_payload(connection, day) | {'correction_segment_id': previous['correction_segment_id']}
+        active = _get_active_execution_segment(connection)
+        if not active or active['id'] != payload.source_segment_id or active['plan_date'] != day or not active['included']:
+            raise HTTPException(409, '当前计时已停止或切换，请核对后重新打开修正时间')
+        original = dict(connection.execute('SELECT * FROM task_execution_segments WHERE id=?', (active['id'],)).fetchone())
+        now = _now_iso()
+        end = _parse_iso_datetime(now) - timedelta(minutes=payload.offset_minutes)
+        start = end - timedelta(minutes=payload.minutes)
+        if start < _parse_iso_datetime(active['started_at']):
+            raise HTTPException(409, '修正范围超过当前这段记录，请选择更短的时长；原记录保留')
+        if active['auto_stop_at'] and _parse_iso_datetime(active['auto_stop_at']) <= _parse_iso_datetime(now):
+            raise HTTPException(409, '已经到自动停止时刻，请先核对记录')
+        settings = _get_settings(connection)
+        if payload.mode == 'segment':
+            if active['segment_kind'] != 'effective':
+                raise HTTPException(409, '当前在记录其他活动，请使用“补一次切换”补回学习')
+            label = _correction_activities(settings).get(payload.label_id)
+            if not label:
+                raise HTTPException(404, '请选择刚才实际做的活动')
+            task = _get_task_row_for_execution(connection, day, active['task_id'])
+            category, label_id, label_name = label['time_category'], label['id'], label['name']
+            kind = 'counted_label' if category == 'distraction' else 'interrupt_label'
+            continued = dict(original)
+        else:
+            if active['segment_kind'] == 'effective' or payload.offset_minutes:
+                raise HTTPException(422, '回溯切回学习用于当前非学习计时，且应持续到现在')
+            task = _get_task_row_for_execution(connection, day, payload.task_id or active['task_id'])
+            _prepare_execution_task(connection, task)
+            category, kind = 'learning', 'effective'
+            if payload.effective_label_id:
+                label_id, label_name = _resolve_segment_label(settings, task['category'], payload.effective_label_id, kind)
+            else:
+                last = connection.execute("SELECT label_id,label_name FROM task_execution_segments WHERE task_id=? AND segment_kind='effective' AND included=1 ORDER BY started_at DESC,id DESC LIMIT 1", (task['id'],)).fetchone()
+                label_id, label_name = (last['label_id'], last['label_name']) if last else (None, None)
+            if task['category'] == 'english' and label_id == 'effective_english_words' and _list_duration_records(connection, day):
+                raise HTTPException(409, '当天已有背单词分钟记录，请先核对重复来源后再修正')
+            continued = dict(original) | {'task_id': task['id'], 'segment_kind': kind, 'time_category': category, 'label_id': label_id, 'label_name': label_name, 'is_estimated': 0, 'auto_stop_at': None}
+        start_text, end_text = _local_iso(start), _local_iso(end)
+        cancel_reminders(connection, active['id'])
+        connection.execute('UPDATE task_execution_segments SET ended_at=?,auto_stop_at=NULL WHERE id=?', (start_text, active['id']))
+        _assert_no_segment_overlap(connection, day, task['id'], start_text, end_text)
+        correction_id = connection.execute('''INSERT INTO task_execution_segments(plan_date,task_id,segment_kind,time_category,label_id,label_name,started_at,ended_at,is_estimated) VALUES(?,?,?,?,?,?,?,?,1)''', (day, task['id'], kind, category, label_id, label_name, start_text, end_text)).lastrowid
+        _assert_no_segment_overlap(connection, day, continued['task_id'], end_text, None)
+        continuation_id = connection.execute('''INSERT INTO task_execution_segments(plan_date,task_id,segment_kind,time_category,label_id,label_name,started_at,auto_stop_at) VALUES(?,?,?,?,?,?,?,?)''', (day, continued['task_id'], continued['segment_kind'], continued['time_category'], continued['label_id'], continued['label_name'], end_text, continued['auto_stop_at'])).lastrowid
+        snapshot = None
+        if payload.mode == 'switch':
+            snapshot = json.dumps({'original': original, 'expected': {str(identity): dict(connection.execute('SELECT * FROM task_execution_segments WHERE id=?', (identity,)).fetchone()) for identity in (active['id'], correction_id, continuation_id)}}, ensure_ascii=False)
+        connection.execute('''INSERT INTO execution_quick_corrections(plan_date,request_id,source_segment_id,correction_segment_id,continuation_segment_id,minutes,time_category,created_at,request_json,original_state_json) VALUES(?,?,?,?,?,?,?,?,?,?)''', (day, payload.request_id, active['id'], correction_id, continuation_id, payload.minutes, category, now, json.dumps(signature), snapshot))
+        connection.execute("UPDATE plans SET status='approved' WHERE id=? AND status='submitted'", (task['plan_id'],))
+        _sync_plan_actual_minutes_from_execution(connection, task['plan_id'])
+        return _build_execution_payload(connection, day) | {'correction_segment_id': correction_id}
+
+
 @router.put("/daily-execution/{plan_date}/auto-stop")
 def set_execution_auto_stop(plan_date: date, payload: ExecutionAutoStopInput, request: Request):
     with _db(request) as connection:
@@ -1989,7 +2096,7 @@ def delete_execution_segment(plan_date: date, segment_id: int, request: Request)
         if existing["ended_at"] is None:
             raise HTTPException(409, "请先停止当前正在计时的记录，再删除它")
         if existing['is_estimated']:
-            undo_correction(connection, existing)
+            undo_correction(connection, existing, _now_iso())
         else:
             connection.execute("DELETE FROM task_execution_segments WHERE id=?", (segment_id,))
         connection.execute("UPDATE plans SET status='approved' WHERE id=? AND status='submitted'", (existing["plan_id"],))
