@@ -15,14 +15,17 @@
       <button id="execute-stop" class="ghost-button stop-current" type="button" disabled aria-label="停止计时">停止</button>
     </div>
   </div>
+  <div id="execute-goal-progress" class="execution-goal-progress" hidden>
+    <div class="execution-goal-caption"><span id="execute-goal-label"></span><span id="execute-goal-status"></span></div>
+    <svg id="execute-goal-track" class="execution-goal-border" role="progressbar" aria-label="当前项目今日有效时间目标" aria-valuemin="0" aria-valuemax="100" focusable="false" hidden>
+      <path class="execution-goal-border-track" aria-hidden="true"></path>
+      <path id="execute-goal-fill" pathLength="100" aria-hidden="true"></path>
+    </svg>
+    <div class="execution-goal-detail"><span class="execution-goal-activity"><span class="execution-goal-signal" aria-hidden="true"><i></i><i></i><i></i></span><span id="execute-goal-activity"></span></span><span id="execute-goal-remaining"></span></div>
+  </div>
   <button id="auto-stop-open" class="auto-stop-open" type="button" hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><circle cx="12" cy="13" r="8"/><path d="M9 2h6m-3 3V2m0 7v4l3 2"/></svg><span id="auto-stop-caption">设置自动停止</span><span aria-hidden="true">›</span></button>
 </section>
 <div id="execution-support" class="execution-support hidden">
-  <div id="execute-goal-progress" class="execution-goal-progress" hidden>
-    <div class="execution-goal-caption"><span id="execute-goal-label"></span><span id="execute-goal-status"></span></div>
-    <div id="execute-goal-track" class="execution-goal-track" role="progressbar" aria-label="当前项目今日有效时间目标" aria-valuemin="0" aria-valuemax="100"><span id="execute-goal-fill"></span></div>
-    <div class="execution-goal-detail"><span class="execution-goal-activity"><span class="execution-goal-signal" aria-hidden="true"><i></i><i></i><i></i></span><span id="execute-goal-activity"></span></span><span id="execute-goal-remaining"></span></div>
-  </div>
   <div class="execution-save-note"><span id="execute-record-status" role="status">正在读取记录…</span><span id="execute-review-status">复盘待填写</span></div>
   <p id="execute-reminder-status" class="muted" role="status" hidden></p>
   <div id="time-correction-feedback" class="time-correction-feedback" role="status" hidden><span></span><button type="button" class="ghost-button">撤销修正</button></div>

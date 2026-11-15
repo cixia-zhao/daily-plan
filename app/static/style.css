@@ -251,17 +251,18 @@ body[data-page=execute] input, body[data-page=execute] select, body[data-page=ex
 #execute-clock-caption { font-size: 12px; }
 #execute-clock { font-family: var(--font-sans, sans-serif); font-size: 40px; font-weight: 500; line-height: 1.15; letter-spacing: -.03em; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .execution-clock-control .stop-current { min-height: 44px; white-space: nowrap; }
-.execution-goal-progress { --goal-color: #bb7355; margin-top: 6px; }
+.execution-goal-progress { --goal-color: #bb7355; margin-top: 10px; }
 .execution-goal-caption { display: flex; justify-content: space-between; align-items: baseline; gap: 8px 16px; color: var(--muted); font-size: 13px; font-variant-numeric: tabular-nums; }
 #execute-goal-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 #execute-goal-status { flex-shrink: 0; color: #a15538; font-size: 16px; font-weight: 600; }
-.execution-goal-track { height: 10px; margin-top: 7px; overflow: hidden; border-radius: 6px; background: #e9e1d6; }
-#execute-goal-fill { display: block; position: relative; width: 0; height: 100%; overflow: hidden; border-radius: inherit; background: var(--goal-color); transition: width .8s linear, background-color .6s ease; }
+/* 进度沿计时卡片实际圆角边框推进，不再占用独立横条。 */
+.execution-goal-border { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; overflow: visible; }
+.execution-goal-border path { fill: none; stroke-width: 3; }
+.execution-goal-border-track { stroke: var(--line); }
+#execute-goal-fill { stroke: var(--goal-color); stroke-linecap: round; stroke-dasharray: 100 100; stroke-dashoffset: 100; transition: stroke-dashoffset .8s linear, stroke .6s ease; }
 .execution-goal-progress[data-stage=middle] { --goal-color: #ad6245; }
 .execution-goal-progress[data-stage=near] { --goal-color: #984b30; }
 .execution-goal-progress[data-stage=complete] { --goal-color: #a15538; }
-.execution-goal-progress.is-running #execute-goal-fill::after { content: ''; position: absolute; inset: 0 -28px; background: linear-gradient(45deg, rgba(255,253,248,.34) 25%, transparent 25%, transparent 50%, rgba(255,253,248,.34) 50%, rgba(255,253,248,.34) 75%, transparent 75%) 0 0 / 28px 28px; animation: goal-flow 1.4s linear infinite; }
-@keyframes goal-flow { from { transform: translateX(-28px); } to { transform: translateX(0); } }
 .execution-goal-detail { display: flex; justify-content: space-between; align-items: center; gap: 8px 16px; margin-top: 7px; color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
 .execution-goal-activity { display: flex; align-items: center; gap: 6px; min-width: 0; }
 .execution-goal-signal { display: flex; flex: 0 0 12px; gap: 2px; align-items: center; height: 12px; color: #a15538; }
@@ -272,7 +273,6 @@ body[data-page=execute] input, body[data-page=execute] select, body[data-page=ex
 @keyframes goal-signal { from { transform: scaleY(.3); } to { transform: scaleY(1); } }
 @media (prefers-reduced-motion: reduce) {
   #execute-goal-fill { transition: none; }
-  .execution-goal-progress.is-running #execute-goal-fill::after { animation: none; background: none; }
   .execution-goal-progress.is-running .execution-goal-signal i { animation: none; }
 }
 .execution-save-note { display: flex; flex-wrap: wrap; gap: 4px 16px; padding: 12px 0 16px; color: var(--muted); font-size: 12px; }

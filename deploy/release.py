@@ -104,6 +104,11 @@ def verify_http(release):
         assert 'ui-controls.css' in execution and 'time-correction-add' in execution
         assert 'time-correction-manage' in execution and '返回上一页' in execution
         assert 'network-recovery.js' in execution and 'time-correction.js' in execution
+        current_card=execution.split('id="execute-current-panel"',1)[1].split('</section>',1)[0]
+        assert 'id="execute-goal-track"' in current_card and 'class="execution-goal-border"' in current_card
+        assert 'id="execute-goal-fill" pathLength="100"' in current_card
+        assert 'class="execution-goal-track"' not in execution
+        assert 'is-unpinned' in (release/'app/static/surfaces.css').read_text()
         assert '/api/daily-execution/{plan_date}/time-corrections' in paths
         assert '/api/correction-shortcuts' in paths
         current_execution=client.get('/api/daily-execution/'+current_day)
@@ -128,7 +133,7 @@ def verify_http(release):
         assert client.get('/offline').status_code==200 and client.get('/favicon.ico').status_code==200
     for service in ['daily-plan.service','daily-plan-ntfy.service','nginx.service','daily-plan-backup.timer','daily-plan-cert-renew.timer']:
         run(['systemctl','is-active','--quiet',service])
-    return {'protected_pages':5,'static_files_match':len(static_files),'production_database':True,'notification_configured':True,'unauthenticated_api':401,'services_active':True,'new_api_registered':True,'history_page':200,'pwa_public_resources':True,'pwa_standalone':True,'private_no_store':True,'auto_stop_api':True,'shared_execution_panel':True,'comparison_apis':2,'today_edit_controls':True,'today_content_surface':True,'return_today_redirect':True,'return_today_login_protected':True,'return_today_running_priority':True,'time_correction_api':True,'correction_schema':True,'shared_icon_controls':True,'network_recovery':True}
+    return {'protected_pages':5,'static_files_match':len(static_files),'production_database':True,'notification_configured':True,'unauthenticated_api':401,'services_active':True,'new_api_registered':True,'history_page':200,'pwa_public_resources':True,'pwa_standalone':True,'private_no_store':True,'auto_stop_api':True,'shared_execution_panel':True,'comparison_apis':2,'today_edit_controls':True,'today_content_surface':True,'return_today_redirect':True,'return_today_login_protected':True,'return_today_running_priority':True,'time_correction_api':True,'correction_schema':True,'shared_icon_controls':True,'network_recovery':True,'goal_border_in_timer_card':True,'short_screen_controls':True}
 
 
 def migration(release, source, target):

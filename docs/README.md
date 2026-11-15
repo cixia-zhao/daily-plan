@@ -18,6 +18,8 @@
 
 ## 模块文档
 
+- [个人网页设计偏好](personal-web-design-preferences.md)：从今日航线积累的审美与操作习惯，含可复用的AI描述和五项检查。
+
 - `releases/2026-11-06-time-correction-controls.md`：本轮正式版本、验证、备份与回退。
 - `ui-controls-study-2026-11-06.md`：本轮图标可理解性、同类控件一致性与纸面质感的设计依据。
 

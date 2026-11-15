@@ -1382,6 +1382,29 @@ if (page === 'execute' || $('#review-records-workspace') || $('#history-records-
     chronology.tick();
   }
 
+  // 按实际宽高绘制圆角周长；顶部中点起步，沿右、下、左顺时针返回。
+  function resizeGoalBorder() {
+    const track = $('#execute-goal-track');
+    const width = currentPanel.clientWidth, height = currentPanel.clientHeight;
+    if (!width || !height) return;
+    // 矮横屏留出记录和快捷操作的滚动空间，避免整张吸顶卡片挡住入口。
+    const scroller = $('.execution-sheet-body', controlsRoot);
+    currentPanel.classList.toggle('is-unpinned', height + 112 > scroller.clientHeight);
+    if (track.hasAttribute('hidden')) return;
+    const inset = 2;
+    const radius = Math.max(0, Math.min(parseFloat(getComputedStyle(currentPanel).borderTopLeftRadius) || 12, width / 2, height / 2) - inset);
+    const left = inset, top = inset, right = width - inset, bottom = height - inset;
+    const middle = width / 2;
+    const path = `M ${middle} ${top} H ${right-radius} A ${radius} ${radius} 0 0 1 ${right} ${top+radius} V ${bottom-radius} A ${radius} ${radius} 0 0 1 ${right-radius} ${bottom} H ${left+radius} A ${radius} ${radius} 0 0 1 ${left} ${bottom-radius} V ${top+radius} A ${radius} ${radius} 0 0 1 ${left+radius} ${top} H ${middle} Z`;
+    const viewBox = `0 0 ${width} ${height}`;
+    if (track.getAttribute('viewBox') === viewBox) return;
+    track.setAttribute('viewBox', viewBox);
+    for (const stroke of track.querySelectorAll('path')) stroke.setAttribute('d', path);
+  }
+  const goalBorderResize = new ResizeObserver(resizeGoalBorder);
+  goalBorderResize.observe(currentPanel);
+  goalBorderResize.observe($('.execution-sheet-body', controlsRoot));
+
   function updateGoalProgress() {
     const result = clockSource;
     const active = result?.active_segment;
@@ -1410,10 +1433,12 @@ if (page === 'execute' || $('#review-records-workspace') || $('#history-records-
     $('#execute-goal-remaining').textContent = !target ? '' : ratio < 1 ? `还差 ${Math.ceil((target - seconds) / 60)} 分`
       : seconds - target >= 60 ? `超出 ${Math.floor((seconds - target) / 60)} 分` : '目标已完成';
     const track = $('#execute-goal-track');
-    track.hidden = !target;
+    track.toggleAttribute('hidden', !target);
     track.setAttribute('aria-valuenow', String(Math.floor(ratio * 100)));
     track.setAttribute('aria-valuetext', `${task.title}，今日有效${minutes}分，目标${task.estimated_minutes}分${ratio >= 1 ? '，已达目标' : ''}`);
-    $('#execute-goal-fill').style.width = `${ratio * 100}%`;
+    $('#execute-goal-fill').style.strokeDashoffset = String(100 - ratio * 100);
+    $('#execute-goal-fill').style.opacity = ratio > 0 ? '1' : '0';
+    resizeGoalBorder();
   }
 
   const timeCorrectionDialog = new TimeCorrectionDialog({
@@ -1497,7 +1522,7 @@ if (page === 'execute' || $('#review-records-workspace') || $('#history-records-
   window.addEventListener('focus', syncLiveExecution);
   window.addEventListener('pageshow', event => { if (event.persisted) syncLiveExecution(); });
   window.addEventListener('pagehide', event => {
-    if (!event.persisted) { clearInterval(clockInterval); clearInterval(syncInterval); }
+    if (!event.persisted) { clearInterval(clockInterval); clearInterval(syncInterval); goalBorderResize.disconnect(); }
   });
 
   function defaultExecutionUiState() {
