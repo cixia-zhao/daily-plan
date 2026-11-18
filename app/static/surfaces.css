@@ -45,7 +45,8 @@ body[data-page=execute] .execution-task-head h3{font-size:16px;font-weight:500}
 body[data-page=execute] .execution-task-meta{margin:7px 0 0 30px}
 body[data-page=execute] #execute-submit-panel{margin-top:0}
 body[data-page=execute] #execute-panel .execute-layout{display:block}
-.execution-controls-fab{z-index:25;bottom:calc(22px + env(safe-area-inset-bottom));background:var(--ink);border-color:var(--ink);color:var(--surface);border-radius:28px;box-shadow:0 5px 16px #30271922}
+.execution-controls-fab{--fab-safe-left:env(safe-area-inset-left,0px);--fab-safe-right:env(safe-area-inset-right,0px);--fab-safe-top:env(safe-area-inset-top,0px);--fab-safe-bottom:env(safe-area-inset-bottom,0px);position:fixed;z-index:25;right:calc(16px + var(--fab-safe-right));bottom:calc(22px + var(--fab-safe-bottom));display:grid;place-items:center;width:56px;height:56px;padding:0;background:var(--ink);border:1px solid var(--ink);color:var(--surface);border-radius:50%;box-shadow:0 5px 16px #30271922;touch-action:none;user-select:none;-webkit-user-select:none;cursor:grab}
+.execution-controls-fab.is-dragging{cursor:grabbing}
 .execution-controls-backdrop{position:fixed;inset:0;z-index:30;border:0;border-radius:0;background:#29231c40;padding:0;animation:surface-scrim 200ms ease both}
 @keyframes surface-scrim{from{opacity:0}to{opacity:1}}
 .execution-controls{display:flex;flex-direction:column;position:fixed;z-index:31;left:0;right:0;bottom:0;max-height:calc(100dvh - 64px);width:min(100%,640px);margin-inline:auto;border:1px solid var(--line);border-radius:22px 22px 0 0;background:var(--surface);box-shadow:0 -8px 36px #30271920;animation:sheet-up 300ms var(--surface-ease) both;overflow:hidden}

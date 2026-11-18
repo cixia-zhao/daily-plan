@@ -159,6 +159,7 @@ if (page === 'execute' || $('#execution-overlay')) {
     if (controlsRoot.hidden && shown) controlsRoot.style.removeProperty('animation');
     controlsRoot.hidden = !shown;
     controlsFab.hidden = recordsOnly || shown || active;
+    restoreFloatingPosition();
     mini.hidden = recordsOnly || shown || !active;
     controlsFab.setAttribute('aria-expanded', String(controlsExpanded));
     controlsFab.disabled = controlsBusy();
@@ -222,7 +223,108 @@ if (page === 'execute' || $('#execution-overlay')) {
     return true;
   }
 
-  controlsFab.onclick = openExecutionControls;
+  const floatingPositionKey = 'daily-plan:execution-control-position:v1';
+  let floatingAnchor = null;
+  let floatingGesture = null;
+  let suppressFloatingClick = false;
+  document.addEventListener('pointerdown', () => { suppressFloatingClick = false; }, true);
+  document.addEventListener('click', event => {
+    if (!suppressFloatingClick || event.detail === 0) return;
+    suppressFloatingClick = false;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+  }, true);
+  try {
+    const saved = JSON.parse(localStorage.getItem(floatingPositionKey));
+    if (saved && ['left', 'right'].includes(saved.side) && Number.isFinite(saved.ratio)) {
+      floatingAnchor = { side: saved.side, ratio: Math.max(0, Math.min(1, saved.ratio)) };
+    }
+  } catch { /* 受限存储不影响拖动与打开。 */ }
+
+  function floatingBounds() {
+    const viewport = window.visualViewport;
+    const offsetX = viewport?.offsetLeft || 0;
+    const offsetY = viewport?.offsetTop || 0;
+    const style = getComputedStyle(controlsFab);
+    const safe = edge => parseFloat(style.getPropertyValue(`--fab-safe-${edge}`)) || 0;
+    const left = offsetX + 16 + safe('left');
+    const top = Math.max(offsetY + 16 + safe('top'), (header?.getBoundingClientRect().bottom || 0) + 12);
+    return {
+      left,
+      right: Math.max(left, offsetX + (viewport?.width || innerWidth) - controlsFab.offsetWidth - 16 - safe('right')),
+      top,
+      bottom: Math.max(top, offsetY + (viewport?.height || innerHeight) - controlsFab.offsetHeight - 22 - safe('bottom')),
+    };
+  }
+
+  function moveFloatingControl(x, y, bounds = floatingBounds()) {
+    controlsFab.style.left = `${Math.max(bounds.left, Math.min(bounds.right, x))}px`;
+    controlsFab.style.top = `${Math.max(bounds.top, Math.min(bounds.bottom, y))}px`;
+    controlsFab.style.right = 'auto';
+    controlsFab.style.bottom = 'auto';
+  }
+
+  function restoreFloatingPosition() {
+    if (controlsFab.hidden || floatingGesture || !floatingAnchor) return;
+    const bounds = floatingBounds();
+    moveFloatingControl(bounds[floatingAnchor.side], bounds.top + floatingAnchor.ratio * (bounds.bottom - bounds.top), bounds);
+  }
+
+  controlsFab.addEventListener('pointerdown', event => {
+    if (!event.isPrimary || event.button !== 0 || controlsFab.disabled) return;
+    const rect = controlsFab.getBoundingClientRect();
+    suppressFloatingClick = false;
+    floatingGesture = { id: event.pointerId, x: event.clientX, y: event.clientY, left: rect.left, top: rect.top, moved: false };
+    controlsFab.setPointerCapture(event.pointerId);
+  });
+  controlsFab.addEventListener('pointermove', event => {
+    const gesture = floatingGesture;
+    if (!gesture || gesture.id !== event.pointerId) return;
+    const dx = event.clientX - gesture.x;
+    const dy = event.clientY - gesture.y;
+    if (!gesture.moved && Math.hypot(dx, dy) < 8) return;
+    gesture.moved = true;
+    controlsFab.classList.add('is-dragging');
+    moveFloatingControl(gesture.left + dx, gesture.top + dy);
+    event.preventDefault();
+  });
+  function finishFloatingDrag(event) {
+    const gesture = floatingGesture;
+    if (!gesture || gesture.id !== event.pointerId) return;
+    floatingGesture = null;
+    controlsFab.classList.remove('is-dragging');
+    if (gesture.moved) {
+      suppressFloatingClick = true;
+      const bounds = floatingBounds();
+      const rect = controlsFab.getBoundingClientRect();
+      floatingAnchor = {
+        side: rect.left < (bounds.left + bounds.right) / 2 ? 'left' : 'right',
+        ratio: bounds.bottom === bounds.top ? 0 : Math.max(0, Math.min(1, (rect.top - bounds.top) / (bounds.bottom - bounds.top))),
+      };
+      restoreFloatingPosition();
+      try { localStorage.setItem(floatingPositionKey, JSON.stringify(floatingAnchor)); } catch {}
+    } else if (event.type === 'pointerup' && event.pointerType === 'touch') {
+      // 某些触屏浏览器在拖动后不补发 click，轻点直接沿同一入口展开。
+      suppressFloatingClick = true;
+      event.preventDefault();
+      openExecutionControls();
+    }
+  }
+  ['pointerup', 'pointercancel', 'lostpointercapture'].forEach(type => controlsFab.addEventListener(type, finishFloatingDrag));
+  const floatingResize = new ResizeObserver(restoreFloatingPosition);
+  floatingResize.observe(controlsFab);
+  window.addEventListener('resize', restoreFloatingPosition);
+  window.visualViewport?.addEventListener('resize', restoreFloatingPosition);
+  window.visualViewport?.addEventListener('scroll', restoreFloatingPosition);
+  controlsFab.onclick = event => {
+    if (suppressFloatingClick && event.detail > 0) {
+      suppressFloatingClick = false;
+      event.preventDefault();
+      return;
+    }
+    suppressFloatingClick = false;
+    openExecutionControls();
+  };
   $('#execution-mini-open').onclick = openExecutionControls;
   $('#execution-controls-close').onclick = closeExecutionControls;
   $('#execution-sheet-handle').onclick = closeExecutionControls;
@@ -736,6 +838,7 @@ if (page === 'execute' || $('#execution-overlay')) {
       syncInterval = null;
       goalBorderResize.disconnect();
       goalBorderMutate.disconnect();
+      floatingResize.disconnect();
     }
   });
 

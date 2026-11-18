@@ -1,7 +1,7 @@
 {% set ui_sprite = '/static/icons/ui.svg?v=' ~ static_version('icons/ui.svg') %}
 <div id="execution-overlay" class="execution-overlay{% if records_only|default(false) %} records-only{% endif %}{% if inline_records|default(false) %} inline-records{% endif %}">
 <input id="execute-date" type="hidden" value="{{ execution_date|default('') }}">
-<button id="execution-controls-fab" class="execution-controls-fab" type="button" aria-expanded="false" aria-controls="execution-controls" hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="13" r="8"/><path d="M12 9v5l3 2M9 2h6M12 2v3m6 1 2-2"/></svg><span>计时与记录</span></button>
+<button id="execution-controls-fab" class="execution-controls-fab" type="button" aria-label="打开计时与记录" title="打开计时与记录" aria-expanded="false" aria-controls="execution-controls" hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="13" r="8"/><path d="M12 9v5l3 2M9 2h6M12 2v3m6 1 2-2"/></svg></button>
 <div id="execution-mini" class="execution-mini" hidden><button id="execution-mini-open" type="button" aria-label="展开计时与记录"><span id="execution-mini-title"></span><span id="execution-mini-clock">00:00:00</span></button><button id="execution-mini-stop" class="primary" type="button" aria-label="停止当前计时">停止</button></div>
 <button id="execution-controls-backdrop" class="execution-controls-backdrop" type="button" tabindex="-1" aria-label="收起计时与记录" hidden></button>
 <div id="execution-controls" class="execution-controls" role="{{ 'region' if inline_records|default(false) else 'dialog' }}" aria-labelledby="execution-controls-title" hidden>

@@ -14,7 +14,7 @@ if(!base||new URL(base).hostname!=='127.0.0.1')throw Error('仅本机临时服�
   await api('daily-plans/draft',{date:day,energy:'normal',day_type:'normal',target_minutes:{math:120,english:0,computer:0,rehab:0}});
   const plan=await api(`daily-plans/${day}/approve`,{});task=plan.tasks.find(t=>t.category==='math');
   const data=await api(path+(game?'/labels/start':'/tasks/start'),game?{task_id:task.id,label_id:'counted_game'}:{task_id:task.id,label_id:'effective_math_course'});
-  execFileSync('python3',['-c',`import sqlite3,datetime,sys; p=sys.argv[1]; assert p.startswith('/tmp/daily-plan-ui-quick_corrections_flows-'); db=sqlite3.connect(p); db.execute('UPDATE task_execution_segments SET started_at=? WHERE id=?',((datetime.datetime.now()-datetime.timedelta(minutes=int(sys.argv[3]))).replace(microsecond=0).isoformat(),int(sys.argv[2]))); db.commit(); db.close()`,health.database_path,String(data.active_segment.id),game?'30':'60']);
+  execFileSync('.venv-preview/bin/python',['-c',`import sqlite3,datetime,sys; p=sys.argv[1]; assert p.startswith('/tmp/daily-plan-ui-quick_corrections_flows-'); db=sqlite3.connect(p); db.execute('UPDATE task_execution_segments SET started_at=? WHERE id=?',((datetime.datetime.now()-datetime.timedelta(minutes=int(sys.argv[3]))).replace(microsecond=0).isoformat(),int(sys.argv[2]))); db.commit(); db.close()`,health.database_path,String(data.active_segment.id),game?'30':'60']);
   await page.goto(base+`/execute?date=${day}`);await page.locator('#execute-panel').waitFor();
   if(!await page.locator('#quick-correction-open').isVisible()){if(await page.locator('#execution-mini-open').isVisible())await page.locator('#execution-mini-open').click();else await page.locator('#execution-controls-fab').click();}
  }
@@ -41,7 +41,7 @@ if(!base||new URL(base).hostname!=='127.0.0.1')throw Error('仅本机临时服�
  assert.equal(data.active_segment.label_id,'effective_math_course');assert.equal(data.segments.find(s=>s.is_estimated).seconds,1200);
  await fixture(true);await open();assert(await action('quick').first().isDisabled());await action('detail').click();
  await dialog.locator('[data-correction-field=effectiveLabel]').selectOption('effective_math_course');await choose('duration',10);await dialog.locator('[type=submit]').click();await dialog.waitFor({state:'hidden'});
- data=await api(path);assert.equal(data.active_segment.segment_kind,'effective');assert.equal(data.active_segment.label_id,'effective_math_course');assert.equal(data.time_summary.categories.learning,600);
+ data=await api(path);assert.equal(data.active_segment.segment_kind,'effective');assert.equal(data.active_segment.label_id,'effective_math_course');assert.equal(data.segments.find(s=>s.is_estimated&&s.segment_kind==='effective').seconds,600);assert(data.active_segment.seconds>=0&&data.active_segment.seconds<10);assert.equal(data.time_summary.categories.learning,600+data.active_segment.seconds,'有效汇总包含补回的10分钟与随后真实经过的秒数');
  await page.locator('#time-correction-feedback button').click();await page.locator('#time-correction-feedback').waitFor({state:'hidden'});assert.equal((await api(path)).active_segment.label_id,'counted_game');
  await fixture();await open();
  for(const viewport of [{width:360,height:640},{width:390,height:720},{width:768,height:844},{width:1100,height:800}]){

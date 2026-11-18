@@ -178,7 +178,7 @@ body[data-page=execute] #execute-task-list .execution-task-head h3>span{min-widt
 /* 空闲优先展示课程；响应式抽屉与右侧常驻面板样式由 surfaces.css 统一定义。 */
 body[data-page=execute] main{padding-top:8px;padding-bottom:110px}
 body[data-page=execute]:not(.execution-is-running) .execution-current-panel{position:static}
-.execution-controls-fab>svg{width:22px;height:22px;flex:0 0 22px}
+.execution-controls-fab>svg{width:22px;height:22px;flex:0 0 22px;pointer-events:none}
 .execution-controls-fab:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
 body[data-page=execute] #execute-mobile-toolbar{margin:12px 0 0;padding:0 0 10px;min-width:0}
 .chronology-nearby-heading>div{display:flex;align-items:center;gap:8px}
