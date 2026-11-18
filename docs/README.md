@@ -1,91 +1,14 @@
-# 项目模块文档索引
+# 文档索引（docs/）
 
-> 最后更新：2026-11-15
-> 当前正式应用a83e9f7于2026-11-15 19:50:18发布，包含卡片边框目标进度、同卡目标信息及矮屏操作保护，保留此前全部功能。备份、验收与回退见[本轮发布记录](releases/2026-11-15-goal-border.md)。下方旧开发状态按历史时点理解。
+本目录仅保留与当前架构、设计偏好和线上运维直接相关的现役文档，确保阅读上下文轻量准确。
 
-> 本机另有2026-10-19未发布改动：提醒分钟可留空、至少15分钟；独立的新学／复习每日累计词数。当前预览和验证见根目录HANDOFF.md，接口见backend-api.md。
+## 现役核心文档
+- **根目录总入口**：[AGENTS.md](../AGENTS.md)（开发红线与架构守则）、[HANDOFF.md](../HANDOFF.md)（线上版本与交接单）、[README.md](../README.md)（快速上手与目录结构）、[DESIGN.md](../DESIGN.md)（暖沙纸书刊设计规范）、[Tutor.md](../Tutor.md)（日常使用手册）。
+- **后端架构与接口契约**：[backend-api.md](backend-api.md)
+- **前端模块与样式契约**：[frontend.md](frontend.md)
+- **个人网页设计偏好**：[personal-web-design-preferences.md](personal-web-design-preferences.md)
+- **运维与手机通知配置**：[server-https-entry.md](server-https-entry.md)、[android-reminders.md](android-reminders.md)
+- **近期生产发布单**：[releases/2026-11-15-goal-border.md](releases/2026-11-15-goal-border.md)、[releases/2026-11-06-time-correction-controls.md](releases/2026-11-06-time-correction-controls.md)
 
-> 20日已完成目标常用／历史候选与15步进、默认隐藏精力／当天类型、自由主项目配置及执行台布局整理；当天当前项目累计有效目标进度条与轻动效也已完成。169项临时库测试与11组不同隔离浏览器通过，尚未发布。
-
-“今日航线”是单用户、本地优先的每日任务工具。当前最真实的核心数据流已经是：晨间输入 → 调整草稿并人工确认 → 直接进入执行台记录时间段 → 单独保存日复盘 → 需要时复制给 GPT 协作并贴回留档。
-
-## 推荐读取顺序
-
-1. 根目录 `README.md`：项目定位与当前多设备/服务器架构。
-2. 根目录 `Tutor.md`：用户日常操作、多设备接力和 Agent 快速概览。
-3. 根目录 `HANDOFF.md`：当前生产快照、风险与未完成事项。
-4. 根据任务只读下面对应模块文档，不要无差别全读。
-
-## 模块文档
-
-- [边框目标进度发布](releases/2026-11-15-goal-border.md)：本轮正式应用版本、验证、备份与回退。
-
-- [个人网页设计偏好](personal-web-design-preferences.md)：从今日航线积累的审美与操作习惯，含可复用的AI描述和五项检查。
-
-- `releases/2026-11-06-time-correction-controls.md`：本轮正式版本、验证、备份与回退。
-- `ui-controls-study-2026-11-06.md`：本轮图标可理解性、同类控件一致性与纸面质感的设计依据。
-
-- `requirements-audit-2026-10-20.md`：重新读取19日三条长提示词与中断记录，对照当前代码的逐项完成状态；区分已实现、后续方向、旧调研候选和未发布。
-- `study-break-design-2026-10-20.md`：学生短暂离开、暂停和番茄钟的研究依据与候选设计；仅讨论，尚未定案或实施。
-
-- `android-reminders.md`：已发布的时间分类、吃饭／休息提醒操作、Android订阅条件、环境配置与故障口径；正式发布状态见HANDOFF.md。
-
-- 根目录 `README.md`：项目总说明、真实使用状态、部署方式、配置项与文档导航。
-- `backend-api.md`：FastAPI 路由、SQLite 模型、执行时间段状态机、有效细分标签、Windows / Termux 启动辅助脚本。
-- `backend-services.md`：本地规则、兼容旧 AI 入口、GPT 协作文案和安全边界。
-- `cloud-deployment-primer.md`：给非技术视角看的云端部署入门说明，解释云服务器、备份、Tailscale、Git 备份和数据备份的区别。
-- `server-https-entry.md`：当前公网 IP HTTPS 入口、服务器维护、证书续期、验证和回退方法。
-- `cloud-private-deploy.md`：历史阿里云 + Tailscale 私有部署步骤，覆盖长期运行、自动备份和恢复思路。
-- `frontend.md`：今天页、执行台、单日复盘、七日复盘、设置页和 GPT 工作台的前端结构。
-- `termux-guide.md`：手机 Termux 安装、迁移、启动、更新与常见问题总说明。
-
-## 模块关系
-
-```text
-启动今日航线.cmd
-  ├─→ app.launcher：等待服务并打开浏览器
-  └─→ app.main：启动 FastAPI 与页面路由
-          ├─→ app.api：计划、执行、复盘、设置与 GPT 留档接口
-          │      ├─→ app.database / app.models：SQLite 与补表
-          │      └─→ app.services：本地规则、兼容旧 AI、周分析服务
-          └─→ templates + static：今天页、执行台、复盘页与设置页
-
-share-to-phone.ps1
-  └─→ dist/daily-plan-termux.zip：给手机下载的临时分发包
-
-Termux
-  ├─→ termux-install.sh：首次安装依赖并注册 dp / spdp
-  ├─→ termux-update.sh：先备份数据库，再拉 GitHub 最新代码
-  ├─→ termux-register-commands.sh：注册 dp / spdp
-  └─→ dp / spdp：手机日常启动入口
-```
-
-## 核心约束
-
-- GPT 只能辅助整理和追问，不能代替用户审批。
-- 只有明确的未完成具体待办进入待审池；习惯与每日目标留在当天，不自动滚入下一天。
-- 执行台同一时刻只允许一个激活段。
-- 任务总时间只等于“有效时间段 + 正常时长录入 + 计总标签”；中断标签只展示，不并入总时间。
-- 有效时间现在允许再细分到任务类别下的子标签；未细分时间会单独显示成 `未细分`。
-- 密钥不进入网页、数据库或设置接口。本机已修复隐式周分析，只有明确生成 AI 分析时发送周记录和正文，尚未发布；详见根目录 HANDOFF.md。
-- 当前手机日常使用通过浏览器访问阿里云同一份数据；Termux 文档仅保留为历史本地运行参考。
-
-## 已知实现差异
-
-- 今天页在确认后不再是主要执行入口，主按钮会引导到 `/execute`，主任务实际分钟也改为只读展示。
-- 今天页支持配置“主航线草稿默认分钟”，草稿确认后直接进入执行台；已有确认清单仍保留 `open-execution-desk` 入口。
-- 单日复盘页现在除了顶部总统计和晚间收束，还会展示“当天有执行记录的任务看板”。
-- 设置页除了原有任务配置，还管理执行标签、有效细分标签、主航线草稿默认分钟和“主航线包含运动”开关；GPT 模板编辑仍在 GPT 工作台，不在设置页。
-- 七日复盘当前按所选日期所在自然周统计，不是最近 7 个实际执行日。
-- 执行台现在默认按统一版本维护，桌面端和手机端不再故意做两套不同信息架构。
-- 根目录 `README.md` 现在兼任项目总入口和产品背景说明，适合直接发给 GPT 作为当前状态背景。
-
-- `design-references.md`：今天页设计参考、主次布局、手机和平板适配及本轮验证。
-
-- 根目录 `DESIGN.md`：用户认可的布局、暖纸色主题、减少模板感与后续 Agent 视觉约定。
-
-- `releases/2026-10-15-unified-review.md`：当前统一复盘与记录修复发布、备份、验收和回退。
-- `releases/2026-10-14-compact-ui.md`：上一轮手机细分与紧凑界面正式发布、数据库备份、验收和回退记录。
-- `releases/2026-10-13-execution-ui.md`：上一轮执行台与标签设置发布记录。
-
-- `project-review-2026-10-14.md`：项目关键路径审视、已复现的统计／隔离／保存问题、竞品来源和按优先级排列的建议。报告不是已实现清单。
+## 冷归档说明（`docs/archive/`）
+- 历史单次调研、十月份旧发布单、过程截图与早期废弃 Windows/Termux 脚本已统一移入 [archive/](archive/README.md)。**日常开发与 AI 代理严禁默认扫描 `docs/archive/`**。

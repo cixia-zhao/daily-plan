@@ -13,7 +13,7 @@
   <link rel="stylesheet" href="/static/surfaces.css?v={{ static_version('surfaces.css') }}">
   <link rel="stylesheet" href="/static/ui-controls.css?v={{ static_version('ui-controls.css') }}">
 </head>
-<body data-page="{% block page %}today{% endblock %}">
+<body data-page="{% block page %}today{% endblock %}" data-icon-sprite="/static/icons/ui.svg?v={{ static_version('icons/ui.svg') }}">
   {% if request.app.state.ui_preview | default(false) %}
   <div class="preview-banner" role="status">UI 预览 · 独立测试数据 · 不影响正式网站</div>
   {% endif %}
@@ -44,8 +44,10 @@
   <div id="confirm-modal" class="confirm-modal hidden" aria-hidden="true">
     <div class="confirm-backdrop" data-confirm-dismiss></div>
     <div class="confirm-dialog" role="dialog" aria-modal="true" aria-labelledby="confirm-title" aria-describedby="confirm-message">
-      <p id="confirm-title" class="confirm-eyebrow">请再次确认</p>
-      <h2 class="confirm-heading">清空这一天的数据？</h2>
+      <div class="modal-heading">
+        <h2 id="confirm-title" class="confirm-heading">清空这一天的数据？</h2>
+        <button type="button" class="ui-icon-button ui-icon-button-close" data-confirm-dismiss aria-label="关闭确认窗口" title="关闭"><svg class="ui-icon" aria-hidden="true" focusable="false"><use href="/static/icons/ui.svg?v={{ static_version('icons/ui.svg') }}#close"></use></svg></button>
+      </div>
       <p id="confirm-message" class="confirm-message"></p>
       <div class="confirm-actions">
         <button id="confirm-cancel" class="ghost-button" type="button">取消</button>
@@ -57,13 +59,11 @@
     <div class="calendar-backdrop" data-calendar-dismiss></div>
     <div class="calendar-dialog" role="dialog" aria-modal="true" aria-labelledby="calendar-title">
       <div class="calendar-header">
-        <div>
-          <p class="confirm-eyebrow">日期导航</p>
-          <h2 id="calendar-title" class="calendar-title">选择日期</h2>
-        </div>
+        <h2 id="calendar-title" class="calendar-title">选择日期</h2>
         <div class="calendar-header-actions">
-          <button id="calendar-prev-month" class="ghost-button" type="button" aria-label="上一月">←</button>
-          <button id="calendar-next-month" class="ghost-button" type="button" aria-label="下一月">→</button>
+          <button id="calendar-prev-month" class="ui-icon-button" type="button" aria-label="上一月" title="上一月"><svg class="ui-icon" aria-hidden="true" focusable="false"><use href="/static/icons/ui.svg?v={{ static_version('icons/ui.svg') }}#back"></use></svg></button>
+          <button id="calendar-next-month" class="ui-icon-button" type="button" aria-label="下一月" title="下一月"><svg class="ui-icon" aria-hidden="true" focusable="false"><use href="/static/icons/ui.svg?v={{ static_version('icons/ui.svg') }}#next"></use></svg></button>
+          <button id="calendar-close" class="ui-icon-button ui-icon-button-close" type="button" aria-label="关闭日历" title="关闭日历"><svg class="ui-icon" aria-hidden="true" focusable="false"><use href="/static/icons/ui.svg?v={{ static_version('icons/ui.svg') }}#close"></use></svg></button>
         </div>
       </div>
       <div id="calendar-month-label" class="calendar-month-label">正在加载…</div>
@@ -78,16 +78,13 @@
         <span><i class="legend-dot submitted"></i>已收尾</span>
         <span><i class="legend-dot reviewed"></i>已复盘</span>
       </div>
-      <div class="confirm-actions">
-        <button id="calendar-close" class="ghost-button" type="button">关闭</button>
-      </div>
     </div>
   </div>
+  <script src="/static/app.js?v={{ static_version('app.js') }}" defer></script>
+  <script src="/static/surfaces.js?v={{ static_version('surfaces.js') }}" defer></script>
   <script src="/static/visuals.js?v={{ static_version('visuals.js') }}" defer></script>
   <script src="/static/timeline.js?v={{ static_version('timeline.js') }}" defer></script>
-  <script src="/static/surfaces.js?v={{ static_version('surfaces.js') }}" defer></script>
   <script src="/static/time-correction.js?v={{ static_version('time-correction.js') }}" defer></script>
-  <script src="/static/app.js?v={{ static_version('app.js') }}" defer></script>
   {% block page_scripts %}{% endblock %}
   {% include "pwa_controls.html" %}
 </body>

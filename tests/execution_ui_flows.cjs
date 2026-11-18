@@ -105,7 +105,7 @@ if (!baseUrl || !['127.0.0.1','localhost','[::1]'].includes(new URL(baseUrl).hos
     await page.locator('#execute-stop').click();
     await waitForActive('当前空闲');
     // 时间轴补记与修改仍可使用。
-    await page.locator('#execution-controls-fab').click();await page.locator('.chronology-browse').click();
+    if(await page.locator('#execution-controls-fab').isVisible())await page.locator('#execution-controls-fab').click();await page.locator('.chronology-browse').click();
     await page.locator('#add-segment').click();
     const editor=page.locator('.timeline-card.draft');
     await editor.locator('.segment-start').fill(`${date}T08:00`);
@@ -128,7 +128,7 @@ if (!baseUrl || !['127.0.0.1','localhost','[::1]'].includes(new URL(baseUrl).hos
     // 设置只用一个加号；默认标签可改归类并持久化，旧记录保持原归类。
     await page.goto(`${baseUrl}/settings`);
     await page.waitForSelector('.execution-label-row',{state:'attached'});
-    await page.locator('.settings-group').filter({has:page.locator('#execution-label-fields')}).locator('summary').click();
+    await page.locator('.settings-group').filter({has:page.locator('#execution-label-fields')}).locator(':scope > summary').click();
     const defaultLabel=page.locator('.execution-label-row[data-label-id=counted_toilet]');
     assert(await defaultLabel.locator('.execution-label-bucket').isEnabled());
     await defaultLabel.locator('.execution-label-bucket').selectOption('external');
@@ -154,7 +154,7 @@ if (!baseUrl || !['127.0.0.1','localhost','[::1]'].includes(new URL(baseUrl).hos
     assert.equal(result.task_execution_board.find(board=>board.task_id===math.id).interrupt_labels.find(label=>label.label_id==='counted_toilet').minutes>=12,true);
     await page.goto(`${baseUrl}/execute?date=${date}`);
     await page.waitForSelector('#execute-panel:visible');
-    await page.locator('#execution-controls-fab').click();await page.locator('.chronology-browse').click();
+    if(await page.locator('#execution-controls-fab').isVisible())await page.locator('#execution-controls-fab').click();await page.locator('.chronology-browse').click();
     const oldRow=page.locator(`.timeline-card[data-segment-id="${historical.id}"]`);
     await page.locator(`.chronology-record[data-segment-id="${historical.id}"]`).click();await page.locator(`.chronology-record[data-segment-id="${historical.id}"]`).click();
     assert.equal(await oldRow.locator('.segment-label-id').inputValue(),'counted_toilet');
@@ -164,6 +164,7 @@ if (!baseUrl || !['127.0.0.1','localhost','[::1]'].includes(new URL(baseUrl).hos
     result=await state();
     assert.equal(result.segments.find(segment=>segment.id===historical.id).segment_kind,'counted_label');
     assert.equal(result.segments.find(segment=>segment.id===historical.id).minutes,13);
+    await page.locator('.chronology-dismiss').click();
     await page.locator('#mobile-interrupt-toggle').click();
     await page.locator('[data-label-id=counted_toilet]').click();
     await waitForActive('上厕所');

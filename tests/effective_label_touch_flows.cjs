@@ -6,10 +6,10 @@ if(!baseUrl||!['127.0.0.1','localhost','[::1]'].includes(new URL(baseUrl).hostna
 (async()=>{
  const browser=await chromium.launch({headless:true,executablePath:process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH});
  try {
+  const day=new Date().toLocaleDateString('en-CA',{timeZone:'Asia/Shanghai'});
   for(const size of [{width:360,height:640},{width:390,height:844},{width:768,height:1024},{width:1024,height:680}]) {
-   const page=await browser.newPage({viewport:size,isMobile:true,hasTouch:true});
+   const page=await browser.newPage({viewport:size,isMobile:true,hasTouch:true,timezoneId:'Asia/Shanghai'});
    const errors=[];page.on('pageerror',e=>errors.push(e.message));
-   const day='2026-10-13';
    const api=async(path,method='GET',data)=>{const r=await page.request.fetch(`${baseUrl}/api/${path}`,{method,data});assert(r.ok(),await r.text());return r.json();};
    await api(`daily-data/${day}`,'DELETE');
    const zero=[390,1024].includes(size.width);
@@ -18,7 +18,8 @@ if(!baseUrl||!['127.0.0.1','localhost','[::1]'].includes(new URL(baseUrl).hostna
    const math=plan.tasks.find(t=>t.category==='math'&&!t.is_sub),english=plan.tasks.find(t=>t.category==='english'&&!t.is_sub);
    const card=id=>page.locator(`[data-execution-task-id="${id}"]`);
    const state=()=>api(`daily-execution/${day}`);
-   const choose=async(id,label)=>{await card(id).locator('.task-start-button').tap();await card(id).locator(`[data-start-label-id="${label}"]`).tap();};
+   const dismissSheetIfPhone=async()=>{if(size.width>=1000)return;const closing=await page.locator('#execution-controls').evaluate(n=>n.hidden||n.classList.contains('is-closing'));if(!closing&&await page.locator('#execution-controls-close').isVisible())await page.locator('#execution-controls-close').tap();await page.locator('#execution-controls').waitFor({state:'hidden'});};
+   const choose=async(id,label)=>{await dismissSheetIfPhone();await card(id).locator('.task-start-button').tap();await card(id).locator(`[data-start-label-id="${label}"]`).tap();};
    await page.goto(`${baseUrl}/execute?date=${day}`);
    if(zero)await page.locator('[data-section-key=zero-main]').tap();
    const mathCard=card(math.id);
@@ -36,7 +37,7 @@ if(!baseUrl||!['127.0.0.1','localhost','[::1]'].includes(new URL(baseUrl).hostna
    await mathCard.locator('h3').tap();
    assert(await mathCard.locator('.execution-task-details').isVisible());
    assert((await mathCard.boundingBox()).height>collapsed.height,'展开才显示底部管理内容');
-   await page.locator('h1').tap();assert(await mathCard.locator('.execution-task-details').isHidden());
+   await page.locator('#execution-courses-tab').tap();assert(await mathCard.locator('.execution-task-details').isHidden());
    await choose(math.id,'effective_math_course');
    await page.waitForFunction(()=>document.querySelector('#execute-active-badge').textContent.includes('网课'));
    await choose(math.id,'effective_math_practice');
@@ -48,25 +49,24 @@ if(!baseUrl||!['127.0.0.1','localhost','[::1]'].includes(new URL(baseUrl).hostna
    await choose(math.id,'effective_math_practice');assert.equal((await state()).active_segment.id,activeId);
    await choose(math.id,'effective_math_course');
    await page.waitForFunction(()=>document.querySelector('#execute-active-badge').textContent.includes('网课'));
+   await dismissSheetIfPhone();
    await card(english.id).locator('h3').tap();
    assert.equal((await state()).active_segment.task_id,math.id,'展开另一卡片不改变当前计时');
    assert(await mathCard.locator('.execution-task-details').isHidden(),'点击另一卡片收起原卡片');
    await card(english.id).locator('.task-start-button').tap();
-   await page.locator('h1').tap();
+   await page.locator('#execution-courses-tab').tap();
    assert(await card(english.id).locator('.effective-start-panel').isHidden(),'点外部关闭选框');
    assert.equal((await state()).active_segment.task_id,math.id,'取消选框不切换');
    await choose(english.id,'effective_english_reading');
    await page.waitForFunction(()=>document.querySelector('#execute-active-badge').textContent.includes('阅读'));
    assert.equal((await state()).active_segment.task_id,english.id);
-   await page.locator('#execute-stop').tap();await page.waitForFunction(()=>document.querySelector('#execute-stop').disabled && document.querySelector('#execute-current-panel').getAttribute('aria-busy')==='false');
+   if(size.width<1000&&!await page.locator('#execute-stop').isVisible())await page.locator('#execution-mini-stop').tap();
+   else await page.locator('#execute-stop').tap();
+   await page.waitForFunction(()=>document.querySelector('#execute-stop').disabled && document.querySelector('#execute-current-panel').getAttribute('aria-busy')==='false');
+   await dismissSheetIfPhone();
    await mathCard.focus();await page.keyboard.press('Enter');assert(await mathCard.locator('.execution-task-details').isVisible());
    await page.keyboard.press('Escape');assert(await mathCard.locator('.execution-task-details').isHidden());
    assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
-   if([390,768].includes(size.width)) {
-    await mathCard.locator('.task-start-button').tap();
-    await page.evaluate(()=>getSelection()?.removeAllRanges());
-    await page.screenshot({path:`/tmp/daily-plan-label-picker-${size.width}.png`,fullPage:true});
-   }
    assert.deepEqual(errors,[]);await page.close();
   }
   console.log('PASS: 四视口快捷细分选中即计时、双向切换、重复不新增、取消无影响、卡片点击展开/外部收起、键盘和44px触控');

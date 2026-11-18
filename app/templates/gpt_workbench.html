@@ -3,34 +3,38 @@
 {% block page %}gpt-workbench{% endblock %}
 {% block content %}
 <section class="hero compact">
-  <div><p class="eyebrow">GPT COLLAB</p><h1>GPT 协作工作台</h1><p>统一管理单日/单周模板，以及贴回来的 GPT 协作记录。</p></div>
+  <div><h1>GPT 协作工作台</h1><p>管理单日与单周协作提示词模板，回看历史留档。</p></div>
 </section>
 <section class="workbench-grid">
   <section class="panel">
-    <div class="section-heading"><div><p class="step">01 · 模板</p><h2>单日与单周分开管理</h2></div></div>
+    <div class="section-heading"><div><h2>提示词模板</h2></div></div>
     <div class="prompt-manager">
       <div class="prompt-manager-switch surface-tabs" role="tablist" aria-label="模板范围"><span class="surface-tab-indicator" aria-hidden="true"></span>
         <button id="daily-template-tab" class="surface-tab prompt-scope-tab active" type="button" role="tab" aria-selected="true" aria-controls="prompt-editor-panel">单日模板</button>
         <button id="weekly-template-tab" class="surface-tab prompt-scope-tab" type="button" role="tab" aria-selected="false" tabindex="-1" aria-controls="prompt-editor-panel">单周模板</button>
       </div>
-      <div id="prompt-editor-panel" role="tabpanel" aria-labelledby="daily-template-tab">
-      <div class="prompt-manager-row">
-        <div id="prompt-list" class="prompt-chip-list"></div>
-        <div class="action-buttons">
-          <button id="add-prompt" class="secondary" type="button">新建模板</button>
-          <button id="delete-prompt" class="ghost-button" type="button">删除当前模板</button>
-          <button id="restore-system-prompt" class="ghost-button" type="button">恢复系统默认</button>
+      <div id="prompt-editor-panel" role="tabpanel" aria-labelledby="daily-template-tab" class="stack">
+        <div class="prompt-manager-row">
+          <div id="prompt-list" class="prompt-chip-list"></div>
+          <div class="action-buttons">
+            <button id="add-prompt" class="secondary" type="button">新建模板</button>
+            <button id="delete-prompt" class="ghost-button" type="button">删除当前模板</button>
+            <button id="restore-system-prompt" class="ghost-button" type="button">恢复系统默认</button>
+          </div>
         </div>
-      </div>
-      <input id="prompt-name-input" class="input-like" type="text" placeholder="模板名称">
-      <textarea id="prompt-content-input" rows="12" placeholder="在这里编辑当前模板文本"></textarea>
-      <p class="muted">系统默认模板会随代码更新；你自己的模板会保留原样。</p>
+        <label>模板名称<input id="prompt-name-input" class="input-like" type="text" placeholder="模板名称"></label>
+        <label>模板内容<textarea id="prompt-content-input" rows="12" placeholder="在这里编辑当前模板文本"></textarea></label>
+        <div class="prompt-save-bar">
+          <span id="prompt-save-status" class="prompt-save-status" role="status">已同步</span>
+          <span class="muted">自定义模板自动保存并长期保留。</span>
+        </div>
       </div>
     </div>
   </section>
   <section class="panel">
-    <div class="section-heading"><div><p class="step">02 · 历史</p><h2>回看贴回来的协作记录</h2></div></div>
+    <div class="section-heading"><div><h2>历史协作留档</h2></div></div>
     <div id="gpt-record-list" class="stack"></div>
   </section>
 </section>
 {% endblock %}
+{% block page_scripts %}<script src="/static/workbench.js?v={{ static_version('workbench.js') }}" defer></script>{% endblock %}

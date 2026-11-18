@@ -14,8 +14,10 @@
   <section id="history-metrics" class="history-metrics" aria-label="当日实际投入"></section>
   <section class="history-projects" aria-labelledby="history-projects-title"><div class="history-section-heading"><h2 id="history-projects-title">当日项目</h2><a id="history-plan-link" class="history-text-link" href="/?date={{ execution_date }}">查看当日计划</a></div><div id="history-task-list"></div></section>
 </div>
-<div id="history-records-workspace" hidden>{% include "execution_tasks.html" %}</div>
 {% include "execution_overlay.html" %}
 <div class="history-bottom-actions"><a id="history-review-link" class="ghost-button" href="/review?date={{ execution_date }}">查看当日复盘</a></div>
 {% endblock %}
-{% block page_scripts %}<script src="/static/history.js?v={{ static_version('history.js') }}" defer></script>{% endblock %}
+{% block page_scripts %}
+<script src="/static/execution.js?v={{ static_version('execution.js') }}" defer></script>
+<script src="/static/history.js?v={{ static_version('history.js') }}" defer></script>
+{% endblock %}

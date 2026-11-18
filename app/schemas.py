@@ -5,6 +5,9 @@ from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from app.services.catalog import MAX_DAILY_TASKS
+from app.services.clock import today_date
+
 
 Energy = Literal["minimum", "normal", "ample"]
 DayType = Literal["normal", "early_class"]
@@ -106,7 +109,7 @@ class PlanTaskInput(TaskDraft):
 
 
 class PlanUpdate(BaseModel):
-    tasks: list[PlanTaskInput] = Field(min_length=1, max_length=15)
+    tasks: list[PlanTaskInput] = Field(min_length=1, max_length=MAX_DAILY_TASKS)
 
 
 class ReviewInput(BaseModel):
@@ -226,7 +229,7 @@ class SettingsInput(BaseModel):
     main_project_categories: list[Category] | None = Field(default=None, min_length=1, max_length=11)
     weekly_review_mode: Literal["separate", "replace_day"] = "separate"
     weekly_review_day: int = Field(default=6, ge=0, le=6)
-    project_start_date: date = Field(default_factory=date.today)
+    project_start_date: date = Field(default_factory=today_date)
     task_titles: dict[Category, str]
     draft_main_minutes_by_category: dict[Category, int] = Field(default_factory=dict)
     budget_minimum: int = Field(default=90, ge=30, le=720)

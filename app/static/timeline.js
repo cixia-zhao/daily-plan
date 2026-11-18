@@ -44,7 +44,7 @@ window.ExecutionTimeline = class {
   }
   selectionHtml() {
     const s=this.result.segments.find(s=>s.id===this.selected);if(!s)return '';
-    return `<div class="chronology-selection" data-segment-id="${s.id}" style="--segment-color:${this.tone(s)}"><button type="button" class="chronology-selected-record" aria-label="${esc(this.label(s))}，再次点击编辑">${this.symbol(s)}<span><strong>${esc(this.label(s))}</strong><small class="chronology-selected-time">${this.timing(s)}</small></span><span class="chronology-edit-label">再点编辑</span></button><button type="button" class="ghost-button chronology-clear" aria-label="取消选中">×</button></div>`;
+    return `<div class="chronology-selection" data-segment-id="${s.id}" style="--segment-color:${this.tone(s)}"><button type="button" class="chronology-selected-record" aria-label="${esc(this.label(s))}，再次点击编辑">${this.symbol(s)}<span><strong>${esc(this.label(s))}</strong><small class="chronology-selected-time">${this.timing(s)}</small></span><span class="chronology-edit-label">再点编辑</span></button><button type="button" class="ui-icon-button chronology-clear" aria-label="取消选中" title="取消选中">${uiIcon('close')}</button></div>`;
   }
   nearbyHtml() {
     if(!this.nearby)return '';
@@ -82,7 +82,7 @@ window.ExecutionTimeline = class {
       this.viewStart=Math.max(extent.start,Math.min(this.viewStart,extent.end-span));
     }
     const graphic=extent?`<div class="chronology-axis" aria-hidden="true"></div><div class="chronology-window"><div class="chronology-scroll" tabindex="0" aria-label="时间轴，左右滑动或用方向键浏览"><div class="chronology-track" style="width:${(extent.end-extent.start)*this.scale}px">${this.result.segments.map(s=>`<span class="chronology-block ${segmentTimeCategory(s)} ${s.id===this.selected?'is-selected':''} ${s.ended_at?'':'is-live'} ${s.included===false?'is-excluded':''}" data-segment-id="${s.id}" style="left:${(new Date(s.started_at)-extent.start)*this.scale}px;width:${Math.max(1,(this.end(s)-new Date(s.started_at))*this.scale)}px;--segment-color:${this.tone(s)}" title="${esc(this.label(s))}"></span>`).join('')}<button class="chronology-surface" type="button" aria-label="点选时间段，选中后再次点击编辑；方向键可浏览"></button></div></div><div class="chronology-labels" aria-hidden="true">${this.result.segments.map(s=>`<span class="chronology-label" data-segment-id="${s.id}">${this.symbol(s)}<span class="chronology-label-text">${esc(segmentTimeCategory(s)==='learning'?s.task_title:timeCategoryNames[segmentTimeCategory(s)])}</span></span>`).join('')}</div></div>`:'<p class="chart-footnote">开始记录后，可在这里选择时间段。</p>';
-    this.node.innerHTML=`<div class="chronology-heading"><h2 class="chronology-instruction">点击选中，再点编辑</h2><div><button type="button" class="ghost-button chronology-prev" aria-label="向前查看一小时" ${extent?'':'disabled'}>←</button><button type="button" class="ghost-button chronology-next" aria-label="向后查看一小时" ${extent?'':'disabled'}>→</button><button type="button" class="ghost-button chronology-zoom" aria-label="${this.viewHours===2?'放大为一小时视窗':'还原为两小时视窗'}" aria-pressed="${this.viewHours===1}" ${extent?'':'disabled'}><svg class="timeline-control-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><circle cx="10" cy="10" r="6"/><path d="m15 15 5 5M7 10h6${this.viewHours===2?'M10 7v6':''}"/></svg></button><button type="button" class="ghost-button chronology-browse" aria-expanded="${!!this.nearby}" aria-label="${this.nearby?'收起':'展开'}全部时间记录" title="全部时间记录"><svg class="timeline-control-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="M9 6h11M9 12h11M9 18h11M4 6h.01M4 12h.01M4 18h.01"/></svg></button></div></div>${graphic}<div class="chronology-detail" aria-live="polite">${this.selectionHtml()}</div>${this.recordsNode?'':this.nearbyHtml()}`;
+    this.node.innerHTML=`<div class="chronology-heading"><h2 class="chronology-instruction">点击选中，再点编辑</h2><div><button type="button" class="ui-icon-button chronology-prev" aria-label="向前查看一小时" title="向前查看一小时" ${extent?'':'disabled'}>${uiIcon('back')}</button><button type="button" class="ui-icon-button chronology-next" aria-label="向后查看一小时" title="向后查看一小时" ${extent?'':'disabled'}>${uiIcon('next')}</button><button type="button" class="ghost-button chronology-zoom" aria-label="${this.viewHours===2?'放大为一小时视窗':'还原为两小时视窗'}" aria-pressed="${this.viewHours===1}" ${extent?'':'disabled'}><svg class="timeline-control-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><circle cx="10" cy="10" r="6"/><path d="m15 15 5 5M7 10h6${this.viewHours===2?'M10 7v6':''}"/></svg></button><button type="button" class="ghost-button chronology-browse" aria-expanded="${!!this.nearby}" aria-label="${this.nearby?'收起':'展开'}全部时间记录" title="全部时间记录"><svg class="timeline-control-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="M9 6h11M9 12h11M9 18h11M4 6h.01M4 12h.01M4 18h.01"/></svg></button></div></div>${graphic}<div class="chronology-detail" aria-live="polite">${this.selectionHtml()}</div>${this.recordsNode?'':this.nearbyHtml()}`;
     this.node.dataset.viewHours=this.viewHours;
     const scroll=this.node.querySelector('.chronology-scroll');
     if(scroll){
@@ -141,23 +141,40 @@ window.ExecutionTimeline = class {
   }
   paint() {
     const scroll=this.node.querySelector('.chronology-scroll');if(!scroll||!this.ext)return;
-    this.viewStart=this.ext.start+scroll.scrollLeft/this.scale;
+    const scrollLeft=scroll.scrollLeft,scrollMax=scroll.scrollWidth-scroll.clientWidth;
+    this.viewStart=this.ext.start+scrollLeft/this.scale;
     const end=this.viewStart+this.viewHours*3600000,step=this.viewHours===2?1800000:900000;
     const cross=new Date(this.viewStart).toDateString()!==new Date(end-1).toDateString();let ticks='';
     for(let t=Math.ceil(this.viewStart/step)*step;t<=end;t+=step){const x=(t-this.viewStart)*this.scale;if(x>3&&x<28||x<this.width-3&&x>this.width-28)continue;ticks+=`<span style="left:${x}px" class="${x<3?'at-start':x>this.width-3?'at-end':''}">${this.time(t,cross)}</span>`;}
     this.node.querySelector('.chronology-axis').innerHTML=ticks;
-    this.node.querySelector('.chronology-prev').disabled=scroll.scrollLeft<=1;
-    this.node.querySelector('.chronology-next').disabled=scroll.scrollLeft>=scroll.scrollWidth-scroll.clientWidth-1;
-    this.node.querySelectorAll('.chronology-label').forEach(label=>{
-      const s=this.result.segments.find(s=>s.id===Number(label.dataset.segmentId));
-      const left=Math.max(0,(new Date(s.started_at).getTime()-this.viewStart)*this.scale),right=Math.min(this.width,(this.end(s)-this.viewStart)*this.scale),room=right-left;
-      const text=label.querySelector('.chronology-label-text'),icon=label.querySelector('.project-symbol');
+    this.node.querySelector('.chronology-prev').disabled=scrollLeft<=1;
+    this.node.querySelector('.chronology-next').disabled=scrollLeft>=scrollMax-1;
+
+    // 读写分离：先重置全部标签为可测量态，再一次性批量读取文本宽度，最后统一写入布局
+    const labels=[...this.node.querySelectorAll('.chronology-label')];
+    const items=labels.map(label=>{
+      const s=this.result.segments.find(seg=>seg.id===Number(label.dataset.segmentId));
+      const left=Math.max(0,(new Date(s.started_at).getTime()-this.viewStart)*this.scale);
+      const right=Math.min(this.width,(this.end(s)-this.viewStart)*this.scale);
+      const room=right-left;
+      const text=label.querySelector('.chronology-label-text');
+      const icon=label.querySelector('.project-symbol');
+      if(room<28){label.hidden=true;return null;}
       label.hidden=false;text.style.display='';icon.style.display='';label.style.visibility='hidden';
-      const textWidth=text.getBoundingClientRect().width;
-      if(room>=textWidth+40){}else if(room>=textWidth+16)icon.style.display='none';else if(room>=28)text.style.display='none';else {label.hidden=true;return;}
-      const width=label.getBoundingClientRect().width;
-      if(width>room-4){label.hidden=true;return;}
-      label.style.left=`${left+(room-width)/2}px`;label.style.visibility='';
+      return {label,left,room,text,icon};
+    }).filter(Boolean);
+
+    const measured=items.map(item=>({...item,textWidth:item.text.getBoundingClientRect().width}));
+    measured.forEach(item=>{
+      if(item.room>=item.textWidth+40){}
+      else if(item.room>=item.textWidth+16)item.icon.style.display='none';
+      else item.text.style.display='none';
+    });
+    const finalWidths=measured.map(item=>({...item,width:item.label.getBoundingClientRect().width}));
+    finalWidths.forEach(item=>{
+      if(item.width>item.room-4){item.label.hidden=true;return;}
+      item.label.style.left=`${item.left+(item.room-item.width)/2}px`;
+      item.label.style.visibility='';
     });
   }
   wireGestures(scroll) {

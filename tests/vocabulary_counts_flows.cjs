@@ -6,12 +6,13 @@ if(!base || !['127.0.0.1','localhost'].includes(new URL(base).hostname))throw Er
 (async()=>{
  const browser=await chromium.launch({headless:true,executablePath:process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH});
  try{
+  const day=new Date().toLocaleDateString('en-CA',{timeZone:'Asia/Shanghai'});
+  const other='2026-10-15';
   const page=await browser.newPage({viewport:{width:390,height:844},isMobile:true,hasTouch:true,timezoneId:'Asia/Shanghai'});
   const errors=[];page.on('pageerror',e=>errors.push(e.message));
   const api=async(path,method='GET',data)=>{const r=await page.request.fetch(`${base}/api/${path}`,{method,data});assert(r.ok(),await r.text());return r.json();};
   const health=await api('system/health');assert(health.database_path.startsWith('/tmp/')&&!health.ai_enabled);
-  assert((await api('notifications/status')).preview);
-  const day='2026-10-16',other='2026-10-15';
+  assert(!(await api('notifications/status')).configured);
   for(const date of [day,other]){await api('daily-plans/draft','POST',{date,energy:'normal',day_type:'normal',target_minutes:{math:60,english:30}});await api(`daily-plans/${date}/approve`,'POST');}
   const english=(await api(`daily-plans/${day}`)).tasks.find(t=>t.category==='english');
   const card=()=>page.locator(`[data-execution-task-id="${english.id}"]`);
@@ -36,7 +37,7 @@ if(!base || !['127.0.0.1','localhost'].includes(new URL(base).hostname))throw Er
   await page.unroute(`**/api/vocabulary-counts/${day}`);
   let release;const gate=new Promise(resolve=>{release=resolve;});
   await page.route(`**/api/vocabulary-counts/${day}`,async route=>{await gate;await route.continue();});
-  await form.locator('[type=submit]').click();assert(await page.locator('#execute-date-button').isDisabled());
+  await form.locator('[type=submit]').click();assert(await card().locator('.word-count-open').isDisabled());
   assert(await form.locator('[type=submit]').isDisabled());await page.keyboard.press('Escape');assert(await modal.isVisible());release();
   await modal.waitFor({state:'hidden'});await page.unroute(`**/api/vocabulary-counts/${day}`);
   for(const width of [360,390,768,1024]){
@@ -45,26 +46,24 @@ if(!base || !['127.0.0.1','localhost'].includes(new URL(base).hostname))throw Er
    const dialogBox=await modal.boundingBox();assert(dialogBox.width<=360&&dialogBox.height<360,'弹窗应轻而紧凑');
    for(const selector of ['#word-count-delete','#word-count-close','#word-count-form [type=submit]'])assert((await page.locator(selector).boundingBox()).height>=44);
    assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
-   if([390,768].includes(width))await page.screenshot({path:`/tmp/daily-plan-word-counts-${width}.png`,fullPage:true});
    await page.locator('#word-count-close').click();await modal.waitFor({state:'hidden'});
    const countBox=await card().locator('.word-count-open').boundingBox(),startBox=await card().locator('.task-start-button').boundingBox();
    assert(countBox.height>=44&&countBox.width<startBox.width&&countBox.x+countBox.width<=startBox.x,'小词数按钮在计时左侧');
    assert(Math.abs(countBox.y-startBox.y)<2,'同排显示');
-   if([390,768].includes(width))await page.screenshot({path:`/tmp/daily-plan-word-entry-${width}.png`,fullPage:true});
   }
   await show();await form.locator('[name=new_words]').fill('77');await page.keyboard.press('Escape');await modal.waitFor({state:'hidden'});
   assert.equal((await api(`vocabulary-counts/${day}`)).vocabulary_counts.new_words,40,'取消不保存');
   await page.goto(`${base}/review?date=${day}`);await page.locator('#daily-word-count-summary').waitFor();
   assert.match(await page.locator('#daily-word-count-summary').innerText(),/新学 40 个 · 复习 150 个/);
+  assert.equal((await api(`vocabulary-counts/${other}`)).vocabulary_counts,null,'其他日期词数严格隔离');
   await open();await page.locator('#word-count-delete').click();await page.locator('#word-count-delete').click();await modal.waitFor({state:'hidden'});
   assert.equal((await api(`vocabulary-counts/${day}`)).vocabulary_counts,null);
   await save('','');assert.equal((await api(`vocabulary-counts/${day}`)).vocabulary_counts.new_words,0);
-  await page.goto(`${base}/execute?date=${other}`);await page.locator('.word-count-open').click();await modal.waitFor();
-  assert.equal(await form.locator('[name=new_words]').inputValue(),'');assert.equal(await form.locator('[name=review_words]').inputValue(),'');
   await open();await page.locator('#word-count-close').click();
   await card().locator('.task-start-button').click();await card().locator('[data-start-label-id=effective_english_words]').click();
   await page.waitForFunction(()=>!document.querySelector('#execute-stop').disabled);
   const active=(await api(`daily-execution/${day}`)).active_segment;assert.equal(active.label_id,'effective_english_words');
+  if(await page.locator('#execution-controls-close').isVisible())await page.locator('#execution-controls-close').click();
   await save(20,100);result=await api(`daily-execution/${day}`);assert.equal(result.active_segment.id,active.id);
   assert.equal(result.duration_records.length,0,'词数不生成分钟记录');
   // 兼容已有分钟记录但不重新提供补录入口，也不删除历史数据。

@@ -32,16 +32,16 @@
 .review-week-step.is-active::before{content:"";position:absolute;top:0;left:16px;right:20px;height:2px;background:var(--accent)}
 .review-week-step.is-active strong{font-weight:650}
 .review-week-step.is-active small{color:var(--accent)}
-.review-week-step.is-today:not(.is-active){color:var(--orange)}
-.review-week-step:focus-visible{outline:0;box-shadow:inset 0 0 0 3px var(--orange)}
+.review-week-step.is-today:not(.is-active){color:var(--accent)}
+.review-week-step:focus-visible{outline:0;box-shadow:inset 0 0 0 2px var(--accent)}
 .review-week-step:disabled{opacity:.45;cursor:default}
 .review-step-dot{width:4px;height:4px;border-radius:50%;background:transparent}
-.has-execution .review-step-dot{background:var(--orange)}
+.has-execution .review-step-dot{background:var(--accent)}
 .has-review .review-step-dot{background:currentColor}
 .replacement-day-link{margin-top:4px;min-height:44px;font-size:13px;color:var(--muted)}
-.review-section-tabs{position:relative;gap:28px;margin-bottom:24px}
-.review-section-tab{border-bottom:0!important;padding:10px 0 13px;background:transparent!important}
-.review-tab-indicator{position:absolute;left:0;bottom:-1px;height:3px;background:var(--orange);transition:transform .34s cubic-bezier(.2,.7,.2,1),width .34s cubic-bezier(.2,.7,.2,1);pointer-events:none}
+.review-section-tabs{position:relative;gap:26px;margin-bottom:20px}
+.review-section-tab{border-bottom:0!important;padding:9px 0;background:transparent!important;font-size:14px}
+.review-tab-indicator{position:absolute;left:0;bottom:-1px;height:2px;background:var(--accent);transition:transform var(--surface-speed,240ms) var(--surface-ease,cubic-bezier(.2,.75,.2,1)),width var(--surface-speed,240ms) var(--surface-ease,cubic-bezier(.2,.75,.2,1));pointer-events:none}
 .review-panel-viewport{overflow-x:clip}
 .review-panel-enter{animation:review-panel-in .34s cubic-bezier(.2,.7,.2,1)}
 @keyframes review-panel-in{from{opacity:.35;transform:translateX(var(--review-panel-shift,32px))}to{opacity:1;transform:translateX(0)}}

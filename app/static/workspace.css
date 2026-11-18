@@ -175,20 +175,11 @@ body[data-page=execute] #execute-task-list .execution-task-card:before{display:n
 body[data-page=execute] #execute-task-list .execution-task-head h3{display:flex;align-items:center;gap:8px;min-width:0}
 body[data-page=execute] #execute-task-list .execution-task-head h3>.project-symbol{color:var(--project-color);flex-shrink:0}
 body[data-page=execute] #execute-task-list .execution-task-head h3>span{min-width:0;overflow-wrap:anywhere}
-/* 空闲优先展示课程；完整执行面板按需就地展开。 */
+/* 空闲优先展示课程；响应式抽屉与右侧常驻面板样式由 surfaces.css 统一定义。 */
 body[data-page=execute] main{padding-top:8px;padding-bottom:110px}
-.execution-controls{display:contents}
-.execution-controls-heading{display:flex;align-items:center;justify-content:space-between;gap:12px;min-height:44px;margin-bottom:5px;scroll-margin-top:calc(var(--execution-header-height,50px) + 8px)}
-.execution-controls-heading .date-chip{margin:0;padding:0;border:0;background:transparent;order:0!important}
-.execution-controls-heading .date-trigger{font-size:13px;min-height:44px;padding:8px 0}
-.execution-controls-heading>button{border:0;background:transparent;min-height:44px;padding:6px 0 6px 10px;font-size:12px;color:var(--muted)}
 body[data-page=execute]:not(.execution-is-running) .execution-current-panel{position:static}
-.execution-controls-fab{position:fixed;right:max(16px,env(safe-area-inset-right));bottom:calc(20px + env(safe-area-inset-bottom));z-index:17;display:flex;align-items:center;justify-content:center;gap:8px;min-height:50px;padding:12px 18px;border:1px solid #73604e;border-radius:28px;background:#554739;color:#fffdf8;font-size:14px;box-shadow:0 3px 12px #55473924}
 .execution-controls-fab>svg{width:22px;height:22px;flex:0 0 22px}
 .execution-controls-fab:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
-.execution-date-note{display:flex;align-items:center;gap:6px;min-height:44px;margin-bottom:6px;font-size:12px;color:var(--muted)}
-.execution-date-note>span{flex:1;min-width:0;overflow-wrap:anywhere}
-.execution-date-note>button{min-height:44px;font-size:12px;padding:6px;border:0;background:transparent;white-space:nowrap}
 body[data-page=execute] #execute-mobile-toolbar{margin:12px 0 0;padding:0 0 10px;min-width:0}
 .chronology-nearby-heading>div{display:flex;align-items:center;gap:8px}
 .chronology-nearby-heading .chronology-add{color:var(--ink)}

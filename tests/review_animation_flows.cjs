@@ -19,7 +19,7 @@ if(!base || !['127.0.0.1','localhost'].includes(new URL(base).hostname))throw Er
    await page.setViewportSize(size);await page.emulateMedia({reducedMotion:'no-preference'});
    await page.waitForTimeout(400);
    await page.locator('#review-reflection-tab').tap();await page.waitForTimeout(60);
-   const forward=await sample();assert(forward.x>0&&forward.x<32,JSON.stringify(forward));assert(forward.duration>=.3);assert(!forward.overflow);
+   const forward=await sample();assert(forward.x>0&&forward.x<32,JSON.stringify(forward));assert(forward.duration>=.2&&forward.duration<=.4);assert(!forward.overflow);
    await page.waitForTimeout(380);
    await page.locator('#daily-review-form [name=tomorrow_focus]').fill('动画切换保留输入');
    const start=await page.locator('.review-tab-indicator').evaluate(el=>new DOMMatrixReadOnly(getComputedStyle(el).transform).m41);

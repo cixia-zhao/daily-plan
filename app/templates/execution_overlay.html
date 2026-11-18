@@ -1,3 +1,4 @@
+{% set ui_sprite = '/static/icons/ui.svg?v=' ~ static_version('icons/ui.svg') %}
 <div id="execution-overlay" class="execution-overlay{% if records_only|default(false) %} records-only{% endif %}{% if inline_records|default(false) %} inline-records{% endif %}">
 <input id="execute-date" type="hidden" value="{{ execution_date|default('') }}">
 <button id="execution-controls-fab" class="execution-controls-fab" type="button" aria-expanded="false" aria-controls="execution-controls" hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="13" r="8"/><path d="M12 9v5l3 2M9 2h6M12 2v3m6 1 2-2"/></svg><span>计时与记录</span></button>
@@ -5,7 +6,7 @@
 <button id="execution-controls-backdrop" class="execution-controls-backdrop" type="button" tabindex="-1" aria-label="收起计时与记录" hidden></button>
 <div id="execution-controls" class="execution-controls" role="{{ 'region' if inline_records|default(false) else 'dialog' }}" aria-labelledby="execution-controls-title" hidden>
   <button id="execution-sheet-handle" class="execution-sheet-handle" type="button" aria-label="收起计时面板"><span></span></button>
-  <div class="execution-controls-heading"><h2 id="execution-controls-title">计时与记录</h2><button id="execution-controls-close" class="ghost-button" type="button" aria-label="收起面板"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button></div>
+  <div class="execution-controls-heading"><h2 id="execution-controls-title">计时与记录</h2><button id="execution-controls-close" class="ui-icon-button" type="button" aria-label="收起面板" title="收起面板"><svg class="ui-icon" aria-hidden="true" focusable="false"><use href="{{ ui_sprite }}#down"></use></svg></button></div>
   <div class="execution-sheet-body"><div id="execution-workpage"><p id="execution-records-empty" class="muted" hidden></p>
 <section id="execute-current-panel" class="panel execution-current-panel hidden" aria-label="当前执行与计时">
   <div class="execution-current">
@@ -48,11 +49,11 @@
         <button id="temporary-open" class="ghost-button" type="button">添加活动</button>
       </div>
       <form id="temporary-form" class="record-form hidden">
-        <h3>临时添加</h3><p class="muted">不改原计划，也不删除已有记录。添加后可以直接开始。</p>
+        <h3>临时添加</h3><p class="muted">不改原计划，已有记录保留。添加后可直接开始。</p>
         <label>活动名称<input name="title" maxlength="100" required></label>
         <label>归入类别<select name="category"></select></label>
         <label>事项类型<select name="task_type"><option value="daily_goal">每日目标</option><option value="habit">习惯</option><option value="todo">具体待办</option></select></label>
-        <button class="primary" type="submit">添加活动</button><button class="ghost-button record-cancel" type="button">取消</button>
+        <div class="actions"><button class="primary" type="submit">添加活动</button><button class="ghost-button record-cancel" type="button">取消</button></div>
       </form>
 </div>
 <section id="execution-records-page" aria-label="全部时间记录" hidden><div id="execution-records-content"></div></section>
@@ -60,7 +61,7 @@
 </div>
 <dialog id="auto-stop-dialog" class="auto-stop-dialog" aria-labelledby="auto-stop-title">
   <form id="auto-stop-form">
-    <div class="segment-dialog-heading"><h2 id="auto-stop-title">自动停止</h2><button id="auto-stop-close" type="button" class="ui-icon-button ui-icon-button-close" aria-label="关闭自动停止设置" title="关闭自动停止设置"><svg class="ui-icon" aria-hidden="true" focusable="false"><use href="/static/icons/ui.svg#close"></use></svg></button></div>
+    <div class="segment-dialog-heading"><h2 id="auto-stop-title">自动停止</h2><button id="auto-stop-close" type="button" class="ui-icon-button ui-icon-button-close" aria-label="关闭自动停止设置" title="关闭自动停止设置"><svg class="ui-icon" aria-hidden="true" focusable="false"><use href="{{ ui_sprite }}#close"></use></svg></button></div>
     <p class="muted">只设置本次计时。提前停止，仍保存实际时长。</p>
     <div class="auto-stop-presets" role="group" aria-label="再计时多少分钟">{% for minutes in [25,45,60] %}<button type="button" data-auto-minutes="{{ minutes }}">{{ minutes }} 分钟</button>{% endfor %}</div>
     <div class="auto-stop-custom"><label>再计时 · 分钟<input id="auto-stop-minutes" type="number" min="1" max="1440" step="1" inputmode="numeric" placeholder="分钟"></label></div>
@@ -72,7 +73,7 @@
 </dialog>
 <dialog id="word-count-dialog" class="word-count-dialog" aria-labelledby="word-count-title">
   <form id="word-count-form">
-    <h3 id="word-count-title">记词数</h3>
+    <div class="segment-dialog-heading"><h3 id="word-count-title">记词数</h3><button id="word-count-dismiss" type="button" class="ui-icon-button ui-icon-button-close" aria-label="关闭记词数" title="关闭记词数"><svg class="ui-icon" aria-hidden="true" focusable="false"><use href="{{ ui_sprite }}#close"></use></svg></button></div>
     <p id="word-count-date" class="muted"></p>
     <div class="word-count-inputs">
       <label>新学<input name="new_words" type="number" min="0" max="10000" step="1" inputmode="numeric" placeholder="0"></label>
@@ -84,7 +85,7 @@
 </dialog>
 
 <dialog id="segment-edit-dialog" class="segment-edit-dialog" aria-labelledby="segment-edit-title">
-  <div class="segment-dialog-heading"><h2 id="segment-edit-title">编辑时间段</h2><button id="segment-edit-close" type="button" class="ui-icon-button ui-icon-button-close" aria-label="关闭时间编辑" title="关闭时间编辑"><svg class="ui-icon" aria-hidden="true" focusable="false"><use href="/static/icons/ui.svg#close"></use></svg></button></div>
+  <div class="segment-dialog-heading"><h2 id="segment-edit-title">编辑时间段</h2><button id="segment-edit-close" type="button" class="ui-icon-button ui-icon-button-close" aria-label="关闭时间编辑" title="关闭时间编辑"><svg class="ui-icon" aria-hidden="true" focusable="false"><use href="{{ ui_sprite }}#close"></use></svg></button></div>
   <p id="segment-edit-context" class="muted"></p>
   <div id="segment-edit-content"></div>
   <p id="segment-edit-error" class="form-error" role="alert" hidden></p>
@@ -92,7 +93,7 @@
 
 <dialog id="quick-correction-dialog" class="quick-correction-dialog" aria-labelledby="quick-correction-title">
   <form id="quick-correction-form" novalidate>
-    <div class="quick-correction-heading"><button id="time-correction-back" type="button" class="ui-icon-button" aria-label="返回上一页" title="返回" hidden><svg class="ui-icon" aria-hidden="true" focusable="false"><use href="/static/icons/ui.svg#back"></use></svg></button><h3 id="quick-correction-title">修正时间</h3><div class="quick-correction-tools" role="group" aria-label="快捷键操作"><button id="time-correction-add" type="button" class="ui-icon-button" data-correction-action="add" aria-label="添加快捷键" title="添加快捷键"><svg class="ui-icon" aria-hidden="true" focusable="false"><use href="/static/icons/ui.svg#plus"></use></svg></button><button id="time-correction-manage" type="button" class="ui-icon-button" data-correction-action="manage" aria-label="编辑快捷键" aria-pressed="false" title="编辑快捷键"><svg class="ui-icon" aria-hidden="true" focusable="false"><use href="/static/icons/ui.svg#edit"></use></svg></button></div><button id="quick-correction-close" type="button" class="ui-icon-button ui-icon-button-close" aria-label="关闭修正时间" title="关闭修正时间"><svg class="ui-icon" aria-hidden="true" focusable="false"><use href="/static/icons/ui.svg#close"></use></svg></button></div>
+    <div class="quick-correction-heading"><button id="time-correction-back" type="button" class="ui-icon-button" aria-label="返回上一页" title="返回" hidden><svg class="ui-icon" aria-hidden="true" focusable="false"><use href="{{ ui_sprite }}#back"></use></svg></button><h3 id="quick-correction-title">修正时间</h3><div class="quick-correction-tools" role="group" aria-label="快捷键操作"><button id="time-correction-add" type="button" class="ui-icon-button" data-correction-action="add" aria-label="添加快捷键" title="添加快捷键"><svg class="ui-icon" aria-hidden="true" focusable="false"><use href="{{ ui_sprite }}#plus"></use></svg></button><button id="time-correction-manage" type="button" class="ui-icon-button" data-correction-action="manage" aria-label="编辑快捷键" aria-pressed="false" title="编辑快捷键"><svg class="ui-icon" aria-hidden="true" focusable="false"><use href="{{ ui_sprite }}#edit"></use></svg></button></div><button id="quick-correction-close" type="button" class="ui-icon-button ui-icon-button-close" aria-label="关闭修正时间" title="关闭修正时间"><svg class="ui-icon" aria-hidden="true" focusable="false"><use href="{{ ui_sprite }}#close"></use></svg></button></div>
     <p id="quick-correction-context" class="muted"></p>
     <div id="time-correction-body" class="time-correction-body"></div>
     <p id="quick-correction-error" class="form-error" role="alert" hidden></p>

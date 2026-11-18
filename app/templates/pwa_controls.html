@@ -1,6 +1,7 @@
+{% set ui_sprite = '/static/icons/ui.svg?v=' ~ static_version('icons/ui.svg') %}
 <div id="pwa-notice" class="pwa-notice" role="status" aria-live="polite" hidden><span id="pwa-notice-message"></span><button id="pwa-reconnect" type="button" hidden>检查连接</button><button id="pwa-update-open" type="button" hidden>查看更新</button></div>
 <dialog id="pwa-dialog" class="pwa-dialog" aria-labelledby="pwa-dialog-title">
-  <div class="pwa-dialog-heading"><img src="/static/pwa/icon-192.png" width="44" height="44" alt=""><button id="pwa-dialog-close" type="button" class="ui-icon-button ui-icon-button-close" aria-label="关闭应用说明" title="关闭应用说明"><svg class="ui-icon" aria-hidden="true" focusable="false"><use href="/static/icons/ui.svg#close"></use></svg></button></div>
+  <div class="pwa-dialog-heading"><img src="/static/pwa/icon-192.png" width="44" height="44" alt=""><button id="pwa-dialog-close" type="button" class="ui-icon-button ui-icon-button-close" aria-label="关闭应用说明" title="关闭应用说明"><svg class="ui-icon" aria-hidden="true" focusable="false"><use href="{{ ui_sprite }}#close"></use></svg></button></div>
   <h2 id="pwa-dialog-title">把今日航线放到桌面</h2>
   <p id="pwa-dialog-description">独立打开，随时回到自己的学习航线。</p>
   <p id="pwa-dialog-detail"></p>

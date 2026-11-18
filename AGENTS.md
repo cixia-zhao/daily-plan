@@ -1,194 +1,77 @@
-# 本项目 AI 开发与规划交互规范
+# AGENTS.md — 开发纪律、架构契约与安全边界
 
-本文件是项目级 AI 协作规范，适用于 Codex、Antigravity IDE 以及其他代码代理。
-所有代理必须优先且严格遵守本项目的开发流程、文档约定、验证要求和语言规范。
+本文件是「今日航线」（`daily-plan`）的最高工程守则。任何 AI 代理或开发者在动手修改前，请按以下顺序快速对齐上下文：
 
-## 当前开发、测试与收尾约定（2026-10-13，用户已确认）
-
-以下约定是当前用户明确指定的工作方式；与后文历史流程冲突时以本节为准。
-
-- 开始开发必须读取本文件、README.md、Tutor.md 和 HANDOFF.md，并检查本地分支及未提交修改，保留已有工作。
-- 开发收尾必须主动更新 `HANDOFF.md`。用户说“今天开发结束”“可以提交／推送／部署”“收尾”等，均表示需要同步维护交接，无须用户再单独要求“写交接文档”。交接维护不扩大 Git 或部署授权：未授权提交、推送或部署时，按实际授权范围完成本地收尾。
-- 交接必须记录本轮修改、验证结果、未完成事项、下一步，以及已提交／已推送／已部署的实际状态。发布前整理开发与验证记录；发布成功后补齐应用版本、发布时间、备份位置、线上验收与回退方式，并随本轮收尾推送。失败或未部署必须如实写明，不能把计划当结果。最新状态置顶，历史记录明确标注；独立发布记录可作详细附件，不能代替更新 `HANDOFF.md`。缺失的历史模板不阻止交接维护。
-- 所有开发、修复与测试（包括页面、交互、接口、业务规则、统计和数据库迁移）默认先在独立开发/测试环境中进行，不需要用户再次提醒。自动化测试使用临时数据库；数据库迁移先在备份副本验证，不直接拿生产环境做实验。
-- 需要浏览器查看或用户试用时，主动检查已有独立预览是否运行并优先复用；没有运行时，在项目目录执行 `./preview-ui.sh --lan`。仅本机查看可省略 `--lan`。纯后端自动化检查无需为了流程而启动网页，但仍须使用隔离环境与数据。
-- 手机与电脑一般通过手机热点或同一 Wi-Fi 预览。使用启动命令实际输出的地址；地址随网络变化，不把历史局域网 IP 当作固定入口。向用户提供可点击地址与具体查看步骤。
-- 预览必须有“UI 预览 · 独立测试数据”标识，只使用 `data/ui-preview.db` 与 `data/ui-preview-backups/`，不连接生产库、不复制真实数据、不调用 AI。不要对预览端口做公网映射。
-- 修改后先在隔离环境运行适用检查；涉及可试用功能时更新独立预览，让用户在本机/手机验证实际操作，再确认发布版本。用户明确要求直接发布时按其授权执行；否则不能为了查看效果就更新正式网站。Commit、Push 与正式部署遵循用户实际授权。
-- 涉及界面与主题时必须先读 DESIGN.md：保留用户认可的布局，参考 Claude Code 产品官网的暖纸色/炭黑/少量陶土色；用户不喜欢绿色主题，不能默默改回绿色或默认彩色徽章。新视觉调整仍先给独立预览。
-- 手机与平板常用流程以一屏完成为优先：目标、开始/停止和确认等主要操作易于找到，详情按需打开。保留正常字体、44px 常用触控区域和必要滚动；不要禁止滚动或把大量历史记录硬塞一屏。
-- 验证手机布局不仅检查整页横向溢出，还要检查草稿主、副航线展开后内部内容与输入框是否被按钮挤窄。现有场景测试见 `tests/mobile_flows.cjs`；测试只能运行在本机隔离数据库。
-- `.agents/skills/...` 历史引用已缺失，不重建、安装或恢复这套历史流程；常规实现自行处理，不因此要求用户重复规划审批。
-
-以下为历史开发规范；与上面的当前约定冲突时，采用当前约定。
+1. **必读顺序**：`AGENTS.md` -> `HANDOFF.md` -> `README.md` -> 按需查阅 `DESIGN.md`、`docs/backend-api.md`、`docs/frontend.md`。
+2. **严禁默认扫描冷归档目录**：
+   - `docs/archive/` 存放早期单次调研稿、十月份旧发布单、历史截图与废弃脚本，**除非用户明确点名查阅历史背景，否则严禁遍历或读取 `docs/archive/`**，以免浪费上下文。
+   - 严禁读取或扫描 `.agents/skills/` 目录。
+   - 根目录下的 `规划文档/` 为用户个人长期规划材料，除非用户主动要求，不要移动或改写。
 
 ---
 
-## 零、当前环境锁定规则（最高优先级）
+## 一、运行环境与工具锁定
 
-本项目同时保存了不同 AI 开发环境的技能文件，但每次会话只能选择一个当前环境。
-
-### 1. 启动时必须先判断当前环境
-代理在读取技能文件前，必须先判断当前运行环境：
-- 如果当前运行在 Antigravity IDE 中，则当前环境为 `Antigravity IDE`。
-- 如果当前运行在 Codex 中，则当前环境为 `Codex / 其他常规环境`。
-- 如果无法明确判断，则默认按 `Codex / 其他常规环境` 处理，但必须在回复中说明该判断。
-- **环境判断纪律**：判断当前环境时，只能依据当前工具能力、IDE 标识、用户说明或运行上下文判断；不得通过扫描另一个平台的技能目录来判断环境。
-
-### 2. 当前环境一旦确定，本轮任务禁止跨平台读取技能
-- `Antigravity IDE` 环境下，只允许读取：
-  - `.gemini/antigravity-ide/skills/`
-- `Codex / 其他常规环境` 环境下，只允许读取：
-  - `.agents/skills/`
-
-除非用户明确要求“同步两个平台的技能”“比较两个平台的技能”“迁移 Antigravity 技能到 Codex”或同等含义，否则禁止读取另一个平台的技能目录，且不要扫描另一个平台的目录。
-
-### 3. 使用统一变量表示技能根目录
-确定当前环境后，代理必须设置并使用唯一的技能根目录：
-- Antigravity IDE：`SKILL_ROOT = .gemini/antigravity-ide/skills`
-- Codex / 其他常规环境：`SKILL_ROOT = .agents/skills`
-
-后续所有技能读取都必须基于 `SKILL_ROOT` 拼接路径，不得同时列出或交替读取两个平台的路径。
+1. **Python 解释器**：
+   - 本机开发、运行 `pytest`、执行 Playwright 隔离测试与启动独立预览服务，**一律使用 `.venv-preview/bin/python`（Python 3.12）**。不要使用根目录旧 `.venv`。
+2. **数据库隔离铁律**：
+   - 自动化测试必须显式指定临时目录中的 SQLite 数据库（如 `/tmp/...`），并设置 `APP_RUNTIME=development`、禁用真实 AI 与真实手机通知。
+   - 独立 UI 预览统一通过 `./preview-ui.sh --lan` 启动，仅读写 `data/ui-preview.db` 与 `data/ui-preview-backups/`。
+   - **生产数据库（`/var/lib/daily-plan/daily_plan.db`）严禁用于任何实验或测试**。
+3. **浏览器测试方式**：
+   - UI 端到端与多视口回归测试统一使用仓库内置的无头隔离运行器：
+     - `.venv-preview/bin/python tests/run_isolated_browser.py tests/<script>.cjs`
+     - `.venv-preview/bin/python tests/run_pwa_browser.py`
 
 ---
 
-## 一、核心工作流：先对齐，再计划，再执行
+## 二、架构分层与反技术债守则
 
-### 第一步：追问对齐（严禁跳过）
-收到新需求、Bug 修复或复杂任务时，禁止直接修改代码。
-1. **必须**先在回复正文中用 1-2 句话复述你对需求的理解。
-2. **必须**至少向用户追问 1 个确认问题以确认核心意图。
-3. 复杂任务**必须**追问 2-4 个问题。
-4. 每个问题**必须**提供 2-4 个具体可选方案，并用 `(推荐)` 标注建议选项。
-5. *环境适配*：
-   - **Antigravity IDE 环境**：优先使用 `ask_question` 工具进行交互追问。
-   - **Codex / 其他常规环境**：若没有 `ask_question` 工具，应在普通会话文本中直接列出问题与选项，禁止声称调用了不存在的工具。
+### 1. 后端分层（`app/`）
+- **入口与中间件**：`app/main.py`（会话认证、私有页 `Cache-Control: no-store`、PWA 公开壳资源、按日期分流当日执行页与历史记录页）。
+- **门面与路由层**：`app/api.py` 仅作为向后兼容导出门面；HTTP 路由按职责拆分在 `app/routers/{plans,execution,reviews,settings}.py`，共享依赖与事务辅助在 `app/routers/deps.py`。
+- **领域引擎与统一基础设施（`app/services/`）**：
+  - `clock.py`：**全站唯一东八区（`Asia/Shanghai`）时间源**。严禁在业务代码中裸调 `date.today()` 或在模块导入期固化当天日期。
+  - `catalog.py`：**全站唯一科目能力目录**（默认标题、默认事项类型、是否计入学习目标、是否支持背单词词数、子科目、常用分钟候选、色板索引与图标键）。严禁在路由或前端散落 `if category == 'math'` 等硬编码魔法分支。
+  - `prompts.py`：集中维护 AI 规划与复盘系统提示词，以及 `parse_llm_json()` 代码围栏剥离解析器。
+  - `execution_engine.py` / `review_engine.py` / `settings_store.py`：核心状态机与聚合逻辑。
+- **并发与事务纪律**：
+  - 所有写接口必须通过 `begin_immediate(connection)`（`BEGIN IMMEDIATE`）获取写锁；**严禁在持有 SQLite 连接或事务期间发起外部 HTTP / LLM 请求**。
+  - **所有 `GET` 请求与 `/return-today` 必须保持 100% 纯只读**，严禁在读请求中隐式 `UPDATE` / `INSERT` 数据库（以确保只读快照对比与备份一致性）。
+  - 后台轮询（`auto_stop.py`、`reminders.py`）先做轻量只读探测，无到期记录绝不开启写事务。
+  - 保持 SQLite 默认 rollback journal + `busy_timeout = 5000`，**不要开启 WAL 模式**（避免破坏 `deploy/release.py` 的 `mode=ro` URI 快照校验）。
 
-### 第二步：生成计划文档（严禁跳过）
-对齐完毕后，在进入代码修改前，**必须**先生成或更新 `implementation_plan.md`。
-1. **必须**读取规划模板：`SKILL_ROOT/workflow-by-cixia/references/plan-template.md`。
-2. **严禁**在计划文档中写闲聊、对话解释或碎碎念，文档只写纯粹的执行蓝图。
-3. 生成的计划文档必须设置 `RequestFeedback = true`（如果在支持的 IDE 属性中）。
-4. **必须**包含「验证计划」章节（仅允许终端命令行、测试脚本自动化测试以及用户手动测试步骤；**禁止**在 UI 验证中使用 `browser_subagent` 进行自动浏览器测试，以节省 Token 并保障准确性）。
-
-### 第三步：等待审批（严禁跳过）
-**严禁在生成计划文档后未经用户审批直接修改代码！**
-必须等待用户明确回复类似以下允许执行的表述后，才能创建/更新 `task.md` 并进入代码执行阶段：
-```text
-可以执行 / approved / 执行吧 / 按计划做
-```
-
-### 轻量化例外机制：低风险小任务
-如果任务仅涉及：解答疑问、查看或运行命令、纯代码格式化、改错别字、补充/修改注释、非功能性文档微调等低风险操作，**可免除**生成完整的 `implementation_plan.md`，但仍必须：
-1. 先在回复正文中用 1-2 句话简短说明理解。
-2. 在修改前明确确认/告知影响范围。
-*注意：若用户明确要求“严格走完整流程”，则无论任务大小均必须按照上述“对齐 -> 计划 -> 审批 -> 执行”的完整流程执行。*
+### 2. 前端模块化与渐进增强（`app/static/` & `app/templates/`）
+- **无构建原生架构**：不使用打包器，也不将浏览器脚本改为 `type="module"`（保持兼容 `node:vm` 单元测试与离线缓存）。全局共享能力收敛在 `app.js`（及 `window.DailyPlan`、`window.PlanUI`、`window.PlanVisuals`），页面逻辑按需加载：
+  - 今天页：`today.js` + `today.css`
+  - 执行页：`execution.js`
+  - 复盘页：`execution.js`（`recordsOnly` 抽屉模式，零常驻轮询）+ `review.js` + `review.css`
+  - 历史执行页：`execution.js`（`recordsOnly` 内联模式）+ `history.js` + `history.css`
+  - 设置页：`settings.js`
+  - GPT 工作台：`workbench.js`
+- **交互铁律**：
+  - 全站严禁调用原生 `window.confirm()`、`window.alert()`、`window.prompt()`，统一使用纸面弹窗或卡片内联编辑器。
+  - 前端获取当天日期统一调用 `todayIso()`（锁定 `Asia/Shanghai` 时区）。
+  - 表单与模板编辑必须兼容中文输入法（`compositionstart` / `compositionend`），自动保存不得在编辑态强制重置输入框光标。
 
 ---
 
-## 二、核心技能使用规则
+## 三、视觉与交互红线（详见 `DESIGN.md`）
 
-本项目技能已升级至 Superpowers v6 架构。代理必须根据"当前环境锁定规则"确定唯一的 `SKILL_ROOT`，然后只从该目录下按需读取技能。
-
-核心技能路径格式统一为：
-`SKILL_ROOT/[技能名称]/SKILL.md`
-
-禁止在同一轮任务中同时读取 `.gemini/antigravity-ide/skills/` 和 `.agents/skills/` 下的同名技能，除非用户明确要求进行平台同步、迁移或对比。
-
-
-### 核心技能映射列表（v6 架构）：
-
-**核心流程技能（每次任务按需加载）：**
-- **需求不清、方案选择**：`brainstorming`
-- **任务规划、拆解步骤**：`writing-plans`（原 `planning-with-files` 已在 v6 中拆分）
-- **执行已有计划**：`executing-plans`
-- **Bug 排查、异常定位**：`systematic-debugging`
-- **新功能或重构**：`test-driven-development`
-- **完成前检查**：`verification-before-completion`
-- **本项目个人工作流**：`workflow-by-cixia`
-
-**按需调用的辅助技能：**
-- **并行多任务**：`dispatching-parallel-agents`
-- **子代理驱动开发**：`subagent-driven-development`
-- **代码审查（发起方）**：`requesting-code-review`
-- **代码审查（接收方）**：`receiving-code-review`
-- **分支合并与收尾**：`finishing-a-development-branch`
-- **Git 工作树隔离**：`using-git-worktrees`
-- **创建自定义技能**：`writing-skills`
-
-### 强制按需加载规则：
-1. 创建或更新 `implementation_plan.md` 前，**必须**读取 `SKILL_ROOT/workflow-by-cixia/references/plan-template.md`。
-2. 处理 Bug 时，**必须**读取 `systematic-debugging` 完整的 `SKILL.md`（路径为 `SKILL_ROOT/systematic-debugging/SKILL.md`）。
-3. 涉及新增功能、重构或测试时，**必须**读取 `test-driven-development` 完整的 `SKILL.md`（路径为 `SKILL_ROOT/test-driven-development/SKILL.md`）。
-4. 完成任务前，**必须**读取或遵守 `verification-before-completion` 完整的 `SKILL.md`（路径为 `SKILL_ROOT/verification-before-completion/SKILL.md`）。
-5. 拆解多步骤计划时，**必须**读取 `writing-plans` 的 `SKILL.md` 再开始写计划。
-6. 执行已批准的计划时，**必须**读取 `executing-plans` 的 `SKILL.md`。
-
+1. **暖沙纸书刊质感**：全站统一使用暖沙纸底 `#f4f1e9`、浅操作面 `#fffdf8`、暖炭黑 `#29251f`、克制陶土强调色 `#ac624a`。**严禁重新引入早期森林绿/薄荷绿色值、毛玻璃发光、彩虹胶囊徽章或层层嵌套大卡片**。
+2. **一屏高度与触控预算**：
+   - 今天页已生成清单在手机（`390×844`）与平板视口必须尽量一屏盛放核心主航线与底部确认按钮。
+   - 常用按钮、输入框、图标按钮触控热区不小于 `44×44px`；移动端表单字号不小于 `16px`（防止 iOS 自动放大视口）。
+   - 全站所有弹窗统一具备右上角线性关闭叉号（`ui-icon-button-close`）、`Esc` 关闭与遮罩外侧点击关闭。
+3. **界面文案**：自然克制的简体中文，删掉自嗨口号与冗余长说明，不在中文标签后附带英文括号注释。
 
 ---
 
-## 三、项目上下文读取规范
+## 四、Git 提交与生产发布规范
 
-每次启动新任务时，必须先恢复项目上下文。
-
-1. **基本原则**：启动新任务时，必须先检查 `docs/` 目录结构（若 `docs/` 不存在，说明情况即可，不要编造项目文档）。
-2. **读取优先级**：
-   - **必读文件**：如果存在 `docs/README.md`、`docs/architecture.md`、`docs/project-overview.md`，必须优先加载以获取全局背景。
-   - **按需读取**：仅读取与当前任务模块、页面、接口或数据结构直接相关的模块文档，避免无差别读取大量无关内容以节省 Token 并防止冲淡任务重点。
-   - **超出限制筛选**：如果文档目录层级或文档过多，应先列出 `docs/` 的目录结构，再根据当前任务筛选最相关的文档进行读取。
-   - **关联代码**：按需读取与当前任务相关的源码和测试文件。
-
----
-
-## 四、文档编写规范引用
-
-- 创建或更新 `implementation_plan.md` 前，**必须**读取 `SKILL_ROOT/workflow-by-cixia/references/plan-template.md`。
-- 创建或更新 `HANDOFF.md` 遵循顶部收尾约定：开发结束、提交推送或正式部署时主动维护，不需要额外的交接授权。内容保持简洁、可接手，只记实际结果；历史模板缺失时直接按本文件规定整理，不重建模板或因此中断收尾。
-- 创建或更新项目模块文档前，**必须**读取 `SKILL_ROOT/workflow-by-cixia/references/module-docs-guide.md`。
-
----
-
-## 五、不同开发环境的工具适配
-
-代理必须根据当前运行环境使用等价能力，不得强行调用不存在的工具或虚构工具调用结果。
-
-### 1. Codex / 其他常规环境
-- **追问**：直接在会话对话中向用户提问，不要使用或声称使用 `ask_question` 工具。
-- **禁止行为**：严禁扫描 `.gemini/antigravity-ide/skills/` 目录。
-- **文件与目录操作**：使用 Codex 自带的文件读取能力或终端命令（如 `cat`、`ls` 等），不要声称使用 `view_file` 或 `list_dir`。
-- **代码修改**：修改后必须运行相关测试、lint、typecheck 或最小可验证命令。
-- **结束汇报**：完成任务时，必须说明修改内容、验证结果和潜在风险。
-
-### 2. Antigravity IDE 环境
-- **追问**：可使用 `ask_question` 进行追问。
-- **禁止行为**：严禁扫描 `.agents/skills/` 目录。
-- **文件与目录操作**：可使用 `view_file` 读取项目文件和技能文件。
-- **目录检查**：可使用 `list_dir` 检查目录结构。
-- **高级技能**：可调用 Antigravity 专属技能（通过 `IsSkillFile=true` 加载）。
-
----
-
-## 六、验证与完成标准
-
-任何代码修改完成前，必须尽力完成验证。
-1. **优先顺序**：运行与修改范围最相关的自动化测试 -> 运行 lint、format、typecheck -> 补充最小验证脚本或说明手动验证步骤。
-2. **无法验证说明**：若由于环境等客观原因无法验证，必须明确说明原因和剩余风险。
-3. **完成回复格式**：必须包含：修改摘要、关键文件、验证结果、未验证项或风险点。
-
----
-
-## 七、语言规范
-
-编写文档、标题、注释、计划、总结时，使用自然、纯正、清晰的中文。
-除非是代码变量、命令、文件名、库名、协议名或没有合适中文译名的专有名词，否则**严禁**在中文后面添加不必要的英文括号解释（例如：写成“计划”，而不是“计划 (Plan)”）。
-
----
-
-## 八、禁止事项
-
-1. 未经对齐确认直接修改代码。
-2. 生成计划后不等用户审批直接执行。
-3. 假装调用了当前环境不存在的工具。
-4. 依赖个人机器上的绝对路径（统一使用项目内相对路径）。
-5. 在计划文档中写闲聊、碎碎念或对话解释。
-6. 为了省事跳过验证步骤。
+1. **先预览、后推送**：日常需求与界面优化必须先在本地通过全套隔离测试并更新 `./preview-ui.sh --lan` 预览环境，**未经用户明确确认授权，不得执行 `git commit`、`git push` 或登录生产服务器部署**。
+2. **生产服务器信息**（仅获授权后执行）：
+   - 主机：`aliyun`（`120.55.53.215`），普通运维用户 `codexdev`，服务 `daily-plan.service`
+   - 目录：入口 `/opt/daily-plan/current`，版本库 `/opt/daily-plan/releases/<commit>`，生产库 `/var/lib/daily-plan/daily_plan.db`，备份 `/var/backups/daily-plan/`
+   - 标准四步发布：`deploy/release.py` 的 `stage` -> `precheck` -> `deploy` -> `verify`（**执行 `deploy` 与 `verify` 必须使用目标发布目录自身的 `.venv/bin/python`**，详见 `docs/releases/2026-11-15-goal-border.md`）。
+   - 严禁读取、打印或将 `/etc/daily-plan/daily-plan.env` 中的任何密钥写入仓库或日志。

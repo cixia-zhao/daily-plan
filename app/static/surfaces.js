@@ -42,11 +42,12 @@ window.PlanUI = (() => {
   }
   function setDate(value) {
     if (!validDate(value)) return;
+    const today = todayIso();
     const paths={today:'/?date=',execute:'/execute?date=',review:'/review?date='};
     links.forEach(link=>{if(paths[link.dataset.nav])link.href=paths[link.dataset.nav]+encodeURIComponent(value);});
-    document.querySelectorAll('[data-return-today]').forEach(link=>link.hidden=value===new Date().toLocaleDateString('en-CA'));
+    document.querySelectorAll('[data-return-today]').forEach(link=>link.hidden=value===today);
   }
-  setDate(new URLSearchParams(location.search).get('date') || new Date().toLocaleDateString('en-CA'));
+  setDate(new URLSearchParams(location.search).get('date') || todayIso());
   return {enter,indicator,tabs,setDate,validDate};
 })();
 

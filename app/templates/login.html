@@ -4,22 +4,25 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   {% include "pwa_head.html" %}
-  <link rel="stylesheet" href="/static/ui-controls.css?v={{ static_version('ui-controls.css') }}">
-  <title>登录 - 今日航线</title>
+  <title>登录 · 今日航线</title>
   <link rel="stylesheet" href="/static/style.css?v={{ static_version('style.css') }}">
+  <link rel="stylesheet" href="/static/surfaces.css?v={{ static_version('surfaces.css') }}">
+  <link rel="stylesheet" href="/static/ui-controls.css?v={{ static_version('ui-controls.css') }}">
 </head>
-<body class="login-page">
+<body class="login-page" data-icon-sprite="/static/icons/ui.svg?v={{ static_version('icons/ui.svg') }}">
   <main class="login-shell">
     <section class="login-card" aria-labelledby="login-title">
-      <span class="brand-mark">✓</span>
-      <p class="confirm-eyebrow">私人入口</p>
-      <h1 id="login-title">今日航线</h1>
-      <p class="login-intro">请输入访问密码继续。</p>
+      <div class="login-brand">
+        <span class="brand-mark" aria-hidden="true">✓</span>
+        <h1 id="login-title">今日航线</h1>
+      </div>
+      <p class="login-intro">输入访问密码，回到你的计划与记录。</p>
       {% if error %}<p class="login-error" role="alert">{{ error }}</p>{% endif %}
       <form action="/login" method="post" class="login-form">
         <input type="hidden" name="next" value="{{ next_path }}">
-        <label for="password">访问密码</label>
-        <input id="password" name="password" type="password" autocomplete="current-password" required autofocus>
+        <label for="password">访问密码
+          <input id="password" name="password" type="password" autocomplete="current-password" required autofocus>
+        </label>
         <button type="submit" class="primary">进入今日航线</button>
       </form>
       <button id="pwa-install" class="pwa-install-login" type="button">安装到桌面</button>

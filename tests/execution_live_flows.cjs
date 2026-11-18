@@ -84,10 +84,12 @@ if(!base || !['127.0.0.1','localhost'].includes(new URL(base).hostname)) throw E
   await page.waitForFunction(()=>document.querySelector('#execute-clock').textContent==='00:23:16');
   for(const [width,height] of [[360,640],[390,844],[768,1024],[1024,680]]) {
    await page.setViewportSize({width,height});await page.evaluate(()=>scrollTo(0,0));
+   await page.clock.runFor(500);
+   await page.waitForTimeout(450);
    assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),'计时区不能横向溢出');
    const stop=await page.locator('#execute-stop').boundingBox(), timer=await page.locator('#execute-clock').boundingBox();
    assert(stop.height>=44 && stop.x>=0 && stop.x+stop.width<=width);
-   assert(timer.y+timer.height<=height && stop.y+stop.height<=height,'计时和停止应在首屏');
+   assert(timer.y+timer.height<=height && stop.y+stop.height<=height,'计时和停止应在首屏 '+JSON.stringify({width,height,timer,stop}));
    assert(Number(await page.locator('#execute-clock').evaluate(e=>getComputedStyle(e).fontSize.replace('px','')))>=36);
    if(width===390) await page.locator('.execution-current').screenshot({path:'/tmp/daily-plan-clock-detail.png'});
    if(width===390||width===768) await page.screenshot({path:`/tmp/daily-plan-live-${width}.png`,fullPage:true});

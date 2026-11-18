@@ -2,8 +2,9 @@
 {% block title %}复盘 · 今日航线{% endblock %}
 {% block page %}review{% endblock %}
 {% block content %}
+{% set ui_sprite = '/static/icons/ui.svg?v=' ~ static_version('icons/ui.svg') %}
 <section class="hero compact">
-  <div><h1 id="review-page-title">日复盘</h1><p id="review-week-range">先看数据，再留下结论与下一步。</p><p id="review-period-status" class="review-period-status" hidden></p></div>
+  <div><h1 id="review-page-title">日复盘</h1><p id="review-week-range" hidden></p><p id="review-period-status" class="review-period-status" hidden></p></div>
   <div class="date-actions">
     <a class="return-today" data-return-today href="/return-today" hidden>回到今天</a>
     <button id="reset-day" class="danger-soft reset-day-button" type="button" aria-label="重置今天">重置</button>
@@ -17,7 +18,14 @@
 
 <section class="review-date-sheet" aria-label="日期与复盘内容">
 <section class="review-week-navigation" aria-label="本周复盘导航">
-  <div class="review-week-heading"><span id="review-selected-label">正在读取…</span><div class="review-week-actions"><button id="review-prev-week" class="ghost-button" type="button" aria-label="上一周">←</button><button id="review-this-week" class="ghost-button" type="button">本周</button><button id="review-next-week" class="ghost-button" type="button" aria-label="下一周">→</button></div></div>
+  <div class="review-week-heading">
+    <span id="review-selected-label">正在读取…</span>
+    <div class="review-week-actions">
+      <button id="review-prev-week" class="ui-icon-button" type="button" aria-label="上一周" title="上一周"><svg class="ui-icon" aria-hidden="true" focusable="false"><use href="{{ ui_sprite }}#back"></use></svg></button>
+      <button id="review-this-week" class="ghost-button" type="button">本周</button>
+      <button id="review-next-week" class="ui-icon-button" type="button" aria-label="下一周" title="下一周"><svg class="ui-icon" aria-hidden="true" focusable="false"><use href="{{ ui_sprite }}#next"></use></svg></button>
+    </div>
+  </div>
   <p id="review-week-scroll-hint" class="review-week-scroll-hint" hidden></p>
   <div id="review-week-steps" class="review-week-steps" role="tablist" aria-label="选择日复盘或周复盘"></div>
 </section>
@@ -61,7 +69,7 @@
 <div id="review-reflection-panel" class="review-tab-panel" role="tabpanel" aria-labelledby="review-reflection-tab" hidden>
 <div id="daily-reflection-content">
 <section class="panel review-closeout">
-  <div class="section-heading"><div><p class="step">收尾</p><h2>留下今天的推进与下一步</h2></div></div>
+  <div class="section-heading"><div><h2>留下今天的推进与下一步</h2></div></div>
   <form id="daily-review-form" class="review-form">
     <label>今天完成的一件事（可选）<input name="learning_outcome" maxlength="300" placeholder="例如：线代第二讲完成，错题归纳 3 条"></label>
     <div id="review-quick-fields" class="form-grid">
@@ -85,7 +93,7 @@
         <label>今天最卡的点<input name="hardest_point" maxlength="300" placeholder="例如：起步太慢，切到数学时一直抗拒"></label>
         <label>今天有效的办法<input name="effective_method" maxlength="300" placeholder="例如：把手机放进书包"></label>
         <label>今天最该优化的小点<input name="optimization_note" maxlength="300" placeholder="例如：晚饭后不要直接开刷短视频"></label>
-        <label>补充复盘正文<textarea name="reflection_text" rows="7" maxlength="4000" placeholder="把今天真实的感受、波动、发现写下来。这里的内容会进入周复盘分析。"></textarea></label>
+        <label>补充复盘正文<textarea name="reflection_text" rows="6" maxlength="4000" placeholder="记录今天真实的感受、波动与发现。"></textarea></label>
       </div>
     </details>
     <p id="daily-review-save-status" class="muted" role="status"></p>
@@ -104,9 +112,8 @@
           <a class="ghost-button link-button" href="/gpt-workbench">GPT 工作台</a>
         </div>
       </div>
-      <p class="muted">项目会先把这一天的事实整理好；复制给 ChatGPT 后，把回复贴回这里留档。</p>
-      <label class="review-form">GPT 回复全文<textarea id="daily-gpt-response" rows="8" placeholder="把 ChatGPT 的回复整段贴回这里。"></textarea></label>
-      <label class="review-form">我准备采用的内容 / 备注<textarea id="daily-gpt-adopted" rows="5" placeholder="把真正准备采纳的动作、提醒或结论留在这里。"></textarea></label>
+      <label class="review-form">GPT 回复全文<textarea id="daily-gpt-response" rows="7" placeholder="粘贴 ChatGPT 的回复留档。"></textarea></label>
+      <label class="review-form">准备采纳的动作 / 备注<textarea id="daily-gpt-adopted" rows="4" placeholder="记录真正准备采纳的动作或结论。"></textarea></label>
       <p id="daily-gpt-save-status" class="muted" role="status"></p>
       <div class="actions"><button id="save-daily-gpt-record" class="secondary" type="button">保存这次 GPT 协作</button></div>
     </div>
@@ -119,8 +126,10 @@
 </div>
 </div>
 </section>
-<div id="review-records-workspace" hidden>{% include "execution_tasks.html" %}</div>
 {% endblock %}
 {% block overlays %}{% with records_only=true %}{% include "execution_overlay.html" %}{% endwith %}{% endblock %}
 {% block page_styles %}<link rel="stylesheet" href="/static/review.css?v={{ static_version('review.css') }}">{% endblock %}
-{% block page_scripts %}<script src="/static/review.js?v={{ static_version('review.js') }}" defer></script>{% endblock %}
+{% block page_scripts %}
+<script src="/static/execution.js?v={{ static_version('execution.js') }}" defer></script>
+<script src="/static/review.js?v={{ static_version('review.js') }}" defer></script>
+{% endblock %}

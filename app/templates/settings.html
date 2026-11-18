@@ -2,22 +2,33 @@
 {% block title %}设置 · 今日航线{% endblock %}
 {% block page %}settings{% endblock %}
 {% block content %}
-<section class="hero compact"><div><h1>任务设置</h1><p>只改真正影响每日清单和执行记录的内容。</p></div><span class="status success">GPT 协作偏好</span></section>
+{% set ui_sprite = '/static/icons/ui.svg?v=' ~ static_version('icons/ui.svg') %}
+<section class="hero compact">
+  <div><h1>任务设置</h1><p>配置每日项目、晨间显示偏好、执行标签与数据备份。</p></div>
+</section>
 <section class="panel">
   <form id="settings-form" class="settings-form">
     <details class="settings-group">
       <summary>日常计划</summary>
       <div class="details-content">
-        <div class="form-grid"><label>当前阶段<input name="current_stage" required maxlength="100"></label><label>AI 项目每周上限<input name="ai_project_weekly_frequency" type="number" min="0" max="7"></label><label>项目起始日<input name="project_start_date" type="date" required></label></div>
-        <label class="alert-check" hidden><input name="rehab_enabled" type="checkbox"><span><strong>主航线包含运动</strong><small>关闭后，草稿不再自动生成运动。</small></span></label>
-        <label class="alert-check"><input name="show_energy_selector" type="checkbox"><span><strong>今天页显示精力档</strong><small>关闭后使用普通精力，不影响手填目标。</small></span></label>
-        <label class="alert-check"><input name="show_day_type_selector" type="checkbox"><span><strong>今天页显示当天类型</strong><small>关闭后使用普通日。</small></span></label>
-        <details><summary>历史精力档参考值（不限制目标）</summary><div class="form-grid"><label>保底档总时间<input name="budget_minimum" type="number" min="30" max="720" step="15" required></label><label>普通档总时间<input name="budget_normal" type="number" min="30" max="720" step="15" required></label><label>充足档总时间<input name="budget_ample" type="number" min="30" max="720" step="15" required></label></div></details>
-        <h2>主航线项目</h2><p class="muted">按这里的顺序生成目标。移出项目只影响以后新建的清单，已有记录保留。</p>
+        <h2>主航线项目</h2>
+        <p class="muted">按此顺序生成晨间目标。移出项目只影响以后新建的清单，历史记录保留。</p>
         <div id="main-project-fields"></div>
         <div class="main-project-add-row"><input id="main-project-new-name" maxlength="100" placeholder="新项目名称，例如吉他" aria-label="新项目名称"><button id="main-project-add" class="ghost-button" type="button">新建项目</button></div>
         <div class="main-project-add-row"><select id="main-project-existing" aria-label="加入已有项目"></select><button id="main-project-add-existing" class="ghost-button" type="button">加入</button></div>
-        <h2>其他活动名称</h2><div id="task-title-fields" class="form-grid"></div>
+
+        <h2>晨间界面与阶段</h2>
+        <label class="alert-check" hidden><input name="rehab_enabled" type="checkbox"><span><strong>主航线包含运动</strong></span></label>
+        <label class="alert-check"><input name="show_energy_selector" type="checkbox"><span><strong>今天页显示精力档</strong><small>默认关闭（按普通精力处理），开启后可在晨间选择保底／普通／充足。</small></span></label>
+        <label class="alert-check"><input name="show_day_type_selector" type="checkbox"><span><strong>今天页显示当天类型</strong><small>默认关闭（按普通日处理），开启后可切换早课日。</small></span></label>
+        <div class="form-grid">
+          <label>当前阶段<input name="current_stage" required maxlength="100"></label>
+          <label>AI 项目每周上限<input name="ai_project_weekly_frequency" type="number" min="0" max="7"></label>
+          <label>项目起始日<input name="project_start_date" type="date" required></label>
+        </div>
+
+        <h2>其他活动名称</h2>
+        <div id="task-title-fields" class="form-grid"></div>
       </div>
     </details>
     <details class="settings-group">
@@ -25,29 +36,34 @@
       <div class="details-content">
         <label>周复盘的位置<select name="weekly_review_mode"><option value="separate">独立周复盘 · 八个标签</option><option value="replace_day">替代某一天 · 七个标签</option></select></label>
         <label id="weekly-review-day-field" hidden>用哪一天的位置显示周复盘<select name="weekly_review_day"><option value="0">星期一</option><option value="1">星期二</option><option value="2">星期三</option><option value="3">星期四</option><option value="4">星期五</option><option value="5">星期六</option><option value="6">星期天</option></select></label>
-        <p class="muted">替代当天的单日看板入口；该日已保存的学习记录仍计入整周，也能通过次要入口查看日复盘。</p>
+        <p class="muted">替代日已保存的学习记录继续计入整周，也可通过次要入口查看该天日复盘。</p>
       </div>
     </details>
     <details class="settings-group">
       <summary>执行标签</summary>
       <div class="details-content">
         <div class="execution-label-heading">
-          <p class="muted">学习与分心计入学习有效率；主动休息、外部打断和生活活动单列。修改归类只影响以后新增的记录。</p>
-          <button id="add-execution-label" class="ui-icon-button" type="button" aria-label="新增执行标签" title="新增执行标签"><svg class="ui-icon" aria-hidden="true" focusable="false"><use href="/static/icons/ui.svg#plus"></use></svg></button>
+          <p class="muted">学习与分心计入有效率；休息、外部打断与生活单列。修改归类只影响后续新记录。</p>
+          <button id="add-execution-label" class="ui-icon-button" type="button" aria-label="新增执行标签" title="新增执行标签"><svg class="ui-icon" aria-hidden="true" focusable="false"><use href="{{ ui_sprite }}#plus"></use></svg></button>
         </div>
         <div id="execution-label-fields" class="stack"></div>
-        <h2>有效细分标签</h2><p class="muted">按任务类别补充细分；不选也能直接开始有效时间。</p><div id="effective-label-category-fields" class="stack"></div>
+        <h2>有效细分标签</h2>
+        <p class="muted">展开科目管理细分；执行台也可随时新建或修改。</p>
+        <div id="effective-label-category-fields" class="stack"></div>
       </div>
     </details>
     <details class="settings-group">
-      <summary>备份与使用说明</summary>
+      <summary>数据备份</summary>
       <div class="details-content">
-        <h2>数据备份</h2><p class="muted">服务器每天自动备份数据库；你也可以在这里手动导出一份。</p><div class="actions"><button id="export-backup" class="ghost-button" type="button">导出数据库备份</button></div>
-        <div class="config-note"><h3>GPT 协作</h3><p>项目整理上下文后复制给 ChatGPT，再把回复贴回项目；模板与历史在 <a href="/gpt-workbench">GPT 工作台</a> 管理。</p></div>
-        <div class="config-note"><h3>云端入口</h3><p>通过公网 HTTPS 入口访问同一份记录，手机和平板无需各自运行程序。</p></div>
+        <p class="muted">随时下载当前 SQLite 数据库完整快照留存备份。</p>
+        <div class="actions"><button id="export-backup" class="ghost-button" type="button">导出数据库备份</button></div>
       </div>
     </details>
-    <div class="actions settings-save"><button class="primary" type="submit">保存设置</button></div>
+    <div class="actions settings-save">
+      <span id="settings-dirty-hint" class="settings-dirty-hint" role="status" hidden>有未保存的设置变更</span>
+      <button class="primary" type="submit">保存设置</button>
+    </div>
   </form>
 </section>
 {% endblock %}
+{% block page_scripts %}<script src="/static/settings.js?v={{ static_version('settings.js') }}" defer></script>{% endblock %}

@@ -9,11 +9,35 @@ import tempfile
 import time
 import urllib.request
 
-root=Path(__file__).resolve().parents[1]
-with tempfile.TemporaryDirectory(prefix='daily-plan-pwa-') as folder:
-    temp=Path(folder)
-    revision=temp/'worker-version.txt';revision.write_text('test-version-one')
-    (temp/'pwa_test_boot.py').write_text('''from app.main import create_app
+
+def _resolve_playwright_env(base_env: dict[str, str]) -> dict[str, str]:
+    env = dict(base_env)
+    if not env.get("NODE_PATH"):
+        candidates = [
+            Path.home() / ".cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules",
+            Path("/usr/lib/node_modules"),
+            Path("/usr/local/lib/node_modules"),
+        ]
+        for candidate in candidates:
+            if (candidate / "playwright").is_dir():
+                env["NODE_PATH"] = str(candidate)
+                break
+    if not env.get("PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH"):
+        for binary in ("chromium", "chromium-browser", "google-chrome", "google-chrome-stable", "/opt/brave-bin/brave", "brave"):
+            found = binary if Path(binary).is_file() else shutil.which(binary)
+            if found:
+                env["PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH"] = found
+                break
+    return env
+
+
+root = Path(__file__).resolve().parents[1]
+with tempfile.TemporaryDirectory(prefix="daily-plan-pwa-") as folder:
+    temp = Path(folder)
+    revision = temp / "worker-version.txt"
+    revision.write_text("test-version-one", encoding="utf-8")
+    (temp / "pwa_test_boot.py").write_text(
+        """from app.main import create_app
 from fastapi.responses import Response
 from pathlib import Path
 import os
@@ -23,26 +47,61 @@ async def test_worker_version(request,call_next):
     if request.url.path=='/execute' and Path(os.environ['PWA_TEST_FAILURE']).exists():
         return Response('temporary unavailable',status_code=503)
     if request.url.path=='/sw.js':
-        source=Path('app/static/pwa/sw.js').read_text().replace('__PWA_VERSION__',Path(os.environ['PWA_TEST_REVISION']).read_text())
+        source=Path('app/static/pwa/sw.js').read_text(encoding='utf-8').replace('__PWA_VERSION__',Path(os.environ['PWA_TEST_REVISION']).read_text(encoding='utf-8'))
         return Response(source,media_type='application/javascript',headers={'Cache-Control':'no-cache','Service-Worker-Allowed':'/'})
     return await call_next(request)
-''')
+""",
+        encoding="utf-8",
+    )
     with socket.socket() as sock:
-        sock.bind(('127.0.0.1',0));port=sock.getsockname()[1]
-    env=dict(os.environ,APP_RUNTIME='development',DATABASE_PATH=str(temp/'test.db'),DAILY_PLAN_BACKUP_DIR=str(temp/'backups'),DEEPSEEK_API_KEY='',DAILY_PLAN_NTFY_URL='',DAILY_PLAN_NTFY_TOPIC='',DAILY_PLAN_NTFY_TOKEN='',PYTHONPATH=os.pathsep.join([str(root),folder,os.environ.get('PYTHONPATH','')]),DAILY_PLAN_TEST_URL=f'http://127.0.0.1:{port}',PWA_TEST_REVISION=str(revision),PWA_TEST_FAILURE=str(temp/'temporary-failure'))
-    with (temp/'server.log').open('w+') as log:
-        server=subprocess.Popen([sys.executable,'-m','uvicorn','pwa_test_boot:app','--host','127.0.0.1','--port',str(port)],cwd=root,env=env,stdout=log,stderr=log)
+        sock.bind(("127.0.0.1", 0))
+        port = sock.getsockname()[1]
+    env = _resolve_playwright_env(
+        dict(
+            os.environ,
+            TZ="Asia/Shanghai",
+            APP_RUNTIME="development",
+            DATABASE_PATH=str(temp / "test.db"),
+            DAILY_PLAN_BACKUP_DIR=str(temp / "backups"),
+            DEEPSEEK_API_KEY="",
+            DAILY_PLAN_NTFY_URL="",
+            DAILY_PLAN_NTFY_TOPIC="",
+            DAILY_PLAN_NTFY_TOKEN="",
+            PYTHONPATH=os.pathsep.join([str(root), folder, os.environ.get("PYTHONPATH", "")]),
+            DAILY_PLAN_TEST_URL=f"http://127.0.0.1:{port}",
+            PWA_TEST_REVISION=str(revision),
+            PWA_TEST_FAILURE=str(temp / "temporary-failure"),
+        )
+    )
+    with (temp / "server.log").open("w+") as log:
+        server = subprocess.Popen(
+            [sys.executable, "-m", "uvicorn", "pwa_test_boot:app", "--host", "127.0.0.1", "--port", str(port)],
+            cwd=root,
+            env=env,
+            stdout=log,
+            stderr=log,
+        )
         try:
             for _ in range(100):
-                try:urllib.request.urlopen(env['DAILY_PLAN_TEST_URL']+'/api/system/health',timeout=.5);break
+                try:
+                    urllib.request.urlopen(env["DAILY_PLAN_TEST_URL"] + "/api/system/health", timeout=0.5)
+                    break
                 except Exception:
-                    if server.poll() is not None:raise RuntimeError('临时测试服务退出')
-                    time.sleep(.1)
-            else:raise RuntimeError('临时测试服务未就绪')
-            subprocess.run([shutil.which('node'),str(root/'tests/pwa_flows.cjs')],cwd=root,env=env,check=True)
+                    if server.poll() is not None:
+                        raise RuntimeError("临时测试服务退出")
+                    time.sleep(0.1)
+            else:
+                raise RuntimeError("临时测试服务未就绪")
+            subprocess.run([shutil.which("node"), str(root / "tests/pwa_flows.cjs")], cwd=root, env=env, check=True)
         except BaseException:
-            log.flush();log.seek(0);print(log.read()[-3000:]);raise
+            log.flush()
+            log.seek(0)
+            print(log.read()[-3000:])
+            raise
         finally:
             server.terminate()
-            try:server.wait(timeout=10)
-            except subprocess.TimeoutExpired:server.kill();server.wait()
+            try:
+                server.wait(timeout=10)
+            except subprocess.TimeoutExpired:
+                server.kill()
+                server.wait()

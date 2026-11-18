@@ -1,7 +1,7 @@
 /* 全站共用暖纸表面、导航、控件与动效。 */
 :root{--paper:#f4f1e9;--surface:#fffdf8;--soft:#e9e2d5;--line:#d8d0c3;--ink:#29251f;--muted:#736b60;--accent:#ac624a;--accent-soft:#f0e2d8;--shadow:0 12px 36px #30271919;--surface-speed:240ms;--surface-ease:cubic-bezier(.2,.75,.2,1)}
 body{background:var(--paper);color:var(--ink)}
-body[data-page] .site-header{min-height:64px;padding-inline:max(24px,calc((100vw - 1160px)/2));background:var(--surface);border-bottom:1px solid var(--line);backdrop-filter:none;gap:18px}
+body[data-page] .site-header{min-height:64px;padding-inline:max(24px,calc((100vw - 1160px)/2));background:var(--surface);border-bottom:1px solid var(--line);gap:18px}
 body[data-page] .site-header .brand{display:inline-flex;font-size:16px;font-weight:600}
 body[data-page] .site-nav,body[data-page] .primary-nav{display:flex;align-items:center;gap:8px}
 body[data-page] .primary-nav{position:relative;align-self:stretch}
@@ -172,7 +172,7 @@ body[data-page=review] .review-records-open{display:inline-flex;margin-left:8px}
 .auto-stop-dialog::backdrop{background:#29231c55}
 .auto-stop-dialog .segment-dialog-heading button{border:0;background:transparent}
 .auto-stop-dialog label{display:grid;gap:8px;font-size:13px;min-width:0}
-.auto-stop-dialog input{width:100%;min-width:0;min-height:44px;box-sizing:border-box;font-size:15px}
+.auto-stop-dialog input{width:100%;min-width:0;min-height:44px;box-sizing:border-box;font-size:16px}
 .auto-stop-dialog p{font-size:13px;line-height:1.7}
 .auto-stop-presets{display:flex;gap:8px;margin:20px 0 16px}
 .auto-stop-presets button{flex:1;min-height:44px;padding:8px 5px;font-size:13px;background:var(--paper);border:1px solid var(--line);border-radius:8px;font-family:inherit;font-weight:500}

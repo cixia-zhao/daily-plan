@@ -3,3 +3,4 @@
 {% block page %}execute{% endblock %}
 {% block content %}<div id="execution-page">{% include "execution_tasks.html" %}</div>{% endblock %}
 {% block overlays %}{% include "execution_overlay.html" %}{% endblock %}
+{% block page_scripts %}<script src="/static/execution.js?v={{ static_version('execution.js') }}" defer></script>{% endblock %}

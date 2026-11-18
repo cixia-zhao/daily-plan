@@ -11,7 +11,7 @@ if(!base || !['127.0.0.1','localhost'].includes(new URL(base).hostname))throw Er
   const api=async(path,method='GET',data)=>{const r=await page.request.fetch(`${base}/api/${path}`,{method,data});assert(r.ok(),await r.text());return r.json();};
   const health=await api('system/health');assert(health.database_path.startsWith('/tmp/')&&!health.ai_enabled);
   const status=await api('notifications/status');assert(status.preview&&!status.configured,'只演示，不外发');
-  const day='2026-10-16';const plan=await api('daily-plans/draft','POST',{date:day,energy:'normal',day_type:'normal',target_minutes:{math:60}});
+  const day=new Date().toLocaleDateString('en-CA',{timeZone:'Asia/Shanghai'});const plan=await api('daily-plans/draft','POST',{date:day,energy:'normal',day_type:'normal',target_minutes:{math:60}});
   await api(`daily-plans/${day}/approve`,'POST');const math=plan.tasks[0];
   for(const [kind,label,category,start,end] of [
    ['effective',null,'learning','09:00:00','10:00:00'],
@@ -62,14 +62,15 @@ if(!base || !['127.0.0.1','localhost'].includes(new URL(base).hostname))throw Er
   await page.waitForFunction(()=>document.querySelector('#review-workspace-content').getAttribute('aria-busy')==='false');
   const summary=await page.locator('#daily-time-summary').innerText();
   for(const name of ['有效学习','分心','主动休息','外部打断','生活活动'])assert(summary.includes(name),name);
-  assert.match(summary,/75%/);assert(summary.includes('未记录的空档不包含在内'));
+  assert.match(await page.locator('#daily-visual-metrics').innerText(),/75%/);assert.match(summary,/空档不推断为休息/);
+  assert(Math.abs((await api(`daily-review/${day}`)).time_summary.effective_ratio-.75)<.001,'实时学习产生的数秒不改变75%的显示口径');
   for(const width of [360,390,768,1024]){
    await page.setViewportSize({width,height:844});assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
    await page.evaluate(()=>scrollTo(0,0));if([390,768].includes(width))await page.screenshot({path:`/tmp/daily-plan-time-categories-${width}.png`,fullPage:true});
   }
   await page.locator('.review-week-step[data-scope=weekly]').click();
   await page.waitForFunction(()=>document.querySelector('#weekly-data-content').hidden===false&&document.querySelector('#review-workspace-content').getAttribute('aria-busy')==='false');
-  assert.match(await page.locator('#weekly-time-summary').innerText(),/75%/);
+  assert.match(await page.locator('#weekly-effective-ratio').innerText(),/75%/);
   assert.deepEqual(errors,[]);console.log('PASS: 五类时间与75%口径、每次选择提醒、取消不切换、分钟校验、刷新持久、停止取消、四视口及预览禁止外发');
  }finally{await browser.close();}
 })().catch(e=>{console.error(e);process.exitCode=1;});

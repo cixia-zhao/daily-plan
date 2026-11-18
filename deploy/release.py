@@ -93,6 +93,7 @@ def verify_http(release):
         settings=client.get('/api/settings').json()
         assert isinstance(settings['main_project_categories'],list)
         assert 'show_energy_selector' in settings and 'show_day_type_selector' in settings
+        assert isinstance(settings.get('category_catalog'),dict) and 'math' in settings['category_catalog']
         notifications=client.get('/api/notifications/status').json()
         assert notifications['configured'] and not notifications['preview']
         paths=client.get('/openapi.json').json()['paths']
@@ -101,10 +102,15 @@ def verify_http(release):
         assert 'auto-stop-dialog' in client.get('/execute').text
         assert 'execution-records-page' in client.get('/execute').text
         execution=client.get('/execute').text
+        assert 'today.js' in today and 'execution.js' in execution
+        assert 'settings.js' in client.get('/settings').text
+        assert 'workbench.js' in client.get('/gpt-workbench').text
         assert 'ui-controls.css' in execution and 'time-correction-add' in execution
         assert 'time-correction-manage' in execution and '返回上一页' in execution
         assert 'network-recovery.js' in execution and 'time-correction.js' in execution
-        current_card=execution.split('id="execute-current-panel"',1)[1].split('</section>',1)[0]
+        panel_match=re.search(r'<section[^>]*id="execute-current-panel"[^>]*>.*?</section>',execution,re.S)
+        assert panel_match is not None,'未找到当前执行计时面板'
+        current_card=panel_match.group(0)
         assert 'id="execute-goal-track"' in current_card and 'class="execution-goal-border"' in current_card
         assert 'id="execute-goal-fill" pathLength="100"' in current_card
         assert 'class="execution-goal-track"' not in execution

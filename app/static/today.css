@@ -10,12 +10,12 @@ body[data-page=today] main { max-width: 980px; padding: 20px 0 16px; }
 .today-secondary-actions { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 6px; }
 #adjust-checkin { min-height: 44px; color: var(--muted); font-weight: 500; border: 0; padding: 8px 0 8px 10px; }
 #adjust-checkin:hover { background: transparent; color: var(--accent); }
-.plan-overview { display: flex; align-items: center; justify-content: space-between; padding: 10px 16px; margin-bottom: 12px; border-radius: 8px; background: #e3dacc; }
+.plan-overview { display: flex; align-items: center; justify-content: space-between; padding: 10px 16px; margin-bottom: 12px; border-radius: 10px; background: var(--soft); }
 .plan-overview > div:first-child { display: flex; align-items: baseline; gap: 14px; }
-.overview-label { font-size: 12px; color: #5e5d59; }
-#plan-total-display { font-size: 24px; line-height: 1.2; font-weight: 650; letter-spacing: -.04em; color: #141413; font-variant-numeric: tabular-nums; }
+.overview-label { font-size: 12px; color: var(--muted); }
+#plan-total-display { font-size: 24px; line-height: 1.2; font-weight: 500; letter-spacing: -.04em; color: var(--ink); font-variant-numeric: tabular-nums; }
 #plan-total-display small { font-size: 12px; font-weight: 400; letter-spacing: 0; }
-.overview-count { margin: 0; font-size: 12px; color: #5e5d59; }
+.overview-count { margin: 0; font-size: 12px; color: var(--muted); }
 .overview-note { display: none; }
 .plan-route-tabs { display: flex; align-items: center; gap: 24px; margin: 0; padding: 0 4px; }
 .plan-route-tab { position: relative; min-height: 44px; padding: 8px 0; border: 0; border-radius: 0; background: transparent; color: var(--muted); font-size: 14px; }
@@ -63,17 +63,16 @@ body[data-page=today] main { max-width: 980px; padding: 20px 0 16px; }
 #save-draft { flex: 1; background: transparent; color: var(--ink); border: 1px solid var(--line); font-weight: 500; }
 #plan-section .plan-methods { margin-top: 6px; border: 0; background: transparent; color: var(--muted); }
 #plan-section .plan-methods summary { min-height: 32px; padding: 6px 4px; font-size: 12px; font-weight: 400; }
-.task-edit-dialog { width: min(460px,calc(100% - 24px)); max-height: calc(100dvh - 32px); overflow: auto; padding: 20px; border: 1px solid var(--line); border-radius: 20px; background: var(--surface); color: var(--ink); box-shadow: var(--shadow); }
-.task-edit-dialog::backdrop { background: rgba(20,20,19,.3); }
-.task-edit-dialog[open] { display: grid; gap: 18px; }
+.task-edit-dialog { width: min(460px,calc(100% - 24px)); max-height: calc(100dvh - 32px); overflow: auto; padding: 20px; border: 1px solid var(--line); border-radius: 16px; background: var(--surface); color: var(--ink); box-shadow: var(--shadow-modal); }
+.task-edit-dialog::backdrop { background: rgba(41,35,28,.28); }
+.task-edit-dialog[open] { display: grid; gap: 16px; }
 .task-edit-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-.task-edit-heading h3 { font-size: 20px; }
-.task-edit-heading button { min-height: 44px; padding: 8px 14px; border: 0; border-radius: 9px; background: var(--accent-soft); color: var(--accent); }
+.task-edit-heading h3 { font-family: var(--font-serif); font-size: 20px; font-weight: 500; margin: 0; }
 .task-edit-dialog .task-type-field { display: grid; gap: 8px; }
 .task-edit-dialog select { width: 100%; min-width: 0; min-height: 44px; }
-#plan-section .task-edit-dialog .task-controls { display: flex; justify-content: flex-start; gap: 8px; border: 0; padding: 0; }
+#plan-section .task-edit-dialog .task-controls { display: flex; align-items: center; justify-content: flex-start; gap: 8px; border: 0; padding: 0; }
 #plan-section .task-edit-dialog button { min-height: 44px; }
-#plan-section .task-edit-dialog .task-archive-note { width: 100%; border: 1px solid var(--line); background: #f5f4ed; border-radius: 9px; padding: 10px; }
+#plan-section .task-edit-dialog .task-archive-note { width: 100%; border: 1px solid var(--line); background: var(--paper); border-radius: 9px; padding: 10px; }
 #plan-section .route-target { grid-column: 2 / -1; min-height: 44px; background: var(--accent-soft); border: 0; border-radius: 8px; color: var(--accent); }
 /* 晨间同一视觉系统，四项目标直接编辑，其余保持轻量。 */
 #today-page-header { margin: 0 0 12px; gap: 10px; }

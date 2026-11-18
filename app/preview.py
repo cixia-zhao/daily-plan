@@ -2,7 +2,9 @@
 from __future__ import annotations
 
 import argparse
+import json
 import socket
+import subprocess
 from pathlib import Path
 
 import uvicorn
@@ -24,25 +26,53 @@ def create_preview_app():
     return app
 
 
-def lan_address():
-    # UDP connect 只查询本机路由，不发送数据；地址随热点/网络变化。
-    with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
-        sock.connect(("1.1.1.1", 80))
-        return sock.getsockname()[0]
+def lan_address() -> str | None:
+    # 优先沿主路由的热点/局域网网关查源地址，避免外网探测被 VPN 接管。
+    probe_host = "1.1.1.1"
+    try:
+        routes = json.loads(subprocess.check_output(
+            ["ip", "-4", "-j", "route", "show", "default"], text=True, timeout=2,
+        ))
+        for route in sorted(routes, key=lambda item: item.get("metric", 0)):
+            if route.get("prefsrc"):
+                return route["prefsrc"]
+            if route.get("gateway"):
+                probe_host = route["gateway"]
+                break
+    except (OSError, subprocess.SubprocessError, ValueError):
+        pass
+    # UDP connect 只查询本机路由，不发送数据；离线环境下安全回退。
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
+            sock.connect((probe_host, 80))
+            return sock.getsockname()[0]
+    except OSError:
+        return None
 
 
 def main():
     parser = argparse.ArgumentParser(description="启动独立 UI 预览，Ctrl+C 停止")
-    parser.add_argument("--lan", action="store_true", help="允许同一 Wi-Fi 或手机热点预览（仅测试数据）")
+    parser.add_argument("--lan", action="store_true", help="允许本机及同一 Wi-Fi / 手机热点同时预览（仅测试数据）")
     parser.add_argument("--port", type=int, default=8765)
     args = parser.parse_args()
     if not 1024 <= args.port <= 65535:
         parser.error("端口须在 1024 到 65535 之间")
-    host = lan_address() if args.lan else "127.0.0.1"
-    print(f"预览地址：http://{host}:{args.port}/", flush=True)
+
+    bind_host = "0.0.0.0" if args.lan else "127.0.0.1"
+    print(f"本机预览地址：http://127.0.0.1:{args.port}/", flush=True)
+    if args.lan:
+        lan_ip = lan_address()
+        if lan_ip and lan_ip != "127.0.0.1":
+            print(f"局域网预览地址：http://{lan_ip}:{args.port}/", flush=True)
     print("独立测试数据；修改后刷新页面查看。Ctrl+C 停止。", flush=True)
-    uvicorn.run("app.preview:create_preview_app", factory=True, host=host, port=args.port,
-                reload=True, reload_dirs=[str(ROOT / "app")])
+    uvicorn.run(
+        "app.preview:create_preview_app",
+        factory=True,
+        host=bind_host,
+        port=args.port,
+        reload=True,
+        reload_dirs=[str(ROOT / "app")],
+    )
 
 
 if __name__ == "__main__":

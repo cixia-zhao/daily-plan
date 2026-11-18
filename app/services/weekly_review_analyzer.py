@@ -1,30 +1,18 @@
 from __future__ import annotations
 
 import json
+import logging
 
 import httpx
 from pydantic import ValidationError
 
 from app.schemas import WeeklyAnalysisResult
+from app.services.prompts import WEEKLY_ANALYSIS_SYSTEM_PROMPT, parse_llm_json
 
+logger = logging.getLogger(__name__)
 
-WEEKLY_REVIEW_SYSTEM_PROMPT = """你是一个帮助用户做周复盘的分析助手。
-你会收到最近 7 天的执行数据和每日复盘内容。
-只输出 JSON，格式必须是：
-{
-  "summary_title": "...",
-  "load_advice": "...",
-  "drag_factors": "...",
-  "effective_patterns": "...",
-  "real_progress_assessment": "...",
-  "next_week_focus": "..."
-}
-要求：
-1. 基于事实，不夸张，不说空话。
-2. 不要替用户自动决定，只给审阅参考。
-3. 优先回答：要不要调量、为什么没完成、什么方法有效、这周是否真实推进、下周该抓什么。
-4. 不要输出 Markdown，不要输出额外解释。
-"""
+# 保持旧常量别名向后兼容
+WEEKLY_REVIEW_SYSTEM_PROMPT = WEEKLY_ANALYSIS_SYSTEM_PROMPT
 
 
 class WeeklyReviewAnalyzer:
@@ -36,7 +24,7 @@ class WeeklyReviewAnalyzer:
         self.transport = transport
 
     def analyze(self, snapshot: dict, custom_prompt: str | None = None) -> tuple[WeeklyAnalysisResult | None, str | None]:
-        system_prompt = custom_prompt or WEEKLY_REVIEW_SYSTEM_PROMPT
+        system_prompt = custom_prompt or WEEKLY_ANALYSIS_SYSTEM_PROMPT
         body = {
             "model": self.model,
             "temperature": 0.2,
@@ -56,9 +44,11 @@ class WeeklyReviewAnalyzer:
                     )
                     if response.status_code < 500 or attempt == 1:
                         break
+                assert response is not None
                 response.raise_for_status()
             content = response.json()["choices"][0]["message"]["content"]
-            parsed = json.loads(content)
+            parsed = parse_llm_json(content)
             return WeeklyAnalysisResult.model_validate(parsed), None
         except (httpx.HTTPError, KeyError, IndexError, TypeError, ValueError, json.JSONDecodeError, ValidationError) as exc:
+            logger.warning("周复盘 AI 分析失败 (%s)", type(exc).__name__)
             return None, type(exc).__name__

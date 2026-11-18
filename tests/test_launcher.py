@@ -2,9 +2,11 @@ from pathlib import Path
 
 from app.launcher import wait_and_open
 
+LEGACY_SCRIPTS_DIR = Path(__file__).parents[1] / "docs/archive/legacy-scripts"
 
-def test_windows_launcher_contains_required_safety_and_startup_steps():
-    launcher = Path(__file__).parents[1] / "启动今日航线.cmd"
+
+def test_archived_windows_launcher_retains_startup_steps():
+    launcher = LEGACY_SCRIPTS_DIR / "启动今日航线.cmd"
     content = launcher.read_text(encoding="utf-8")
 
     assert 'cd /d "%~dp0"' in content
@@ -33,9 +35,9 @@ def test_browser_opens_only_after_service_is_ready(monkeypatch):
     assert opened == ["http://127.0.0.1:8000"]
 
 
-def test_termux_scripts_contain_minimal_mobile_startup_flow():
-    install_script = (Path(__file__).parents[1] / "termux-install.sh").read_text(encoding="utf-8")
-    start_script = (Path(__file__).parents[1] / "termux-start.sh").read_text(encoding="utf-8")
+def test_archived_termux_scripts_retain_mobile_startup_flow():
+    install_script = (LEGACY_SCRIPTS_DIR / "termux-install.sh").read_text(encoding="utf-8")
+    start_script = (LEGACY_SCRIPTS_DIR / "termux-start.sh").read_text(encoding="utf-8")
 
     assert "pkg install -y python git" in install_script
     assert 'python -m pip install -e ".[dev]"' in install_script

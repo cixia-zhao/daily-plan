@@ -6,86 +6,71 @@ from pathlib import Path
 
 from .models import SCHEMA
 
+_COLUMN_MIGRATIONS: dict[str, tuple[tuple[str, str], ...]] = {
+    "tasks": (
+        ("sub_category", "TEXT"),
+        ("is_sub", "INTEGER DEFAULT 0"),
+        ("completion_override", "INTEGER"),
+        ("task_type", "TEXT"),
+        ("habit_status", "TEXT"),
+        ("legacy_actual_minutes", "INTEGER"),
+    ),
+    "task_execution_segments": (
+        ("time_category", "TEXT"),
+        ("included", "INTEGER NOT NULL DEFAULT 1"),
+        ("is_estimated", "INTEGER NOT NULL DEFAULT 0"),
+        ("auto_stop_at", "TEXT"),
+        ("stopped_automatically", "INTEGER NOT NULL DEFAULT 0"),
+    ),
+    "execution_quick_corrections": (
+        ("request_json", "TEXT"),
+        ("original_state_json", "TEXT"),
+    ),
+    "reviews": (
+        ("mood", "TEXT NOT NULL DEFAULT ''"),
+        ("hardest_point", "TEXT NOT NULL DEFAULT ''"),
+        ("optimization_note", "TEXT NOT NULL DEFAULT ''"),
+        ("real_progress", "TEXT NOT NULL DEFAULT ''"),
+        ("reflection_text", "TEXT NOT NULL DEFAULT ''"),
+        ("learning_outcome", "TEXT NOT NULL DEFAULT ''"),
+    ),
+    "gpt_collab_records": (
+        ("date_label", "TEXT NOT NULL DEFAULT ''"),
+        ("prompt_text", "TEXT NOT NULL DEFAULT ''"),
+        ("response_text", "TEXT NOT NULL DEFAULT ''"),
+        ("adopted_text", "TEXT NOT NULL DEFAULT ''"),
+        ("created_at", "TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP"),
+        ("updated_at", "TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP"),
+    ),
+}
+
 
 def initialize(path: str | Path) -> None:
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
-    with sqlite3.connect(path) as connection:
-        connection.executescript(SCHEMA)
+    with sqlite3.connect(path, timeout=15.0) as connection:
+        connection.execute("PRAGMA busy_timeout = 5000")
         cursor = connection.cursor()
-        cursor.execute("PRAGMA table_info(tasks)")
-        columns = [row[1] for row in cursor.fetchall()]
-        if "sub_category" not in columns:
-            cursor.execute("ALTER TABLE tasks ADD COLUMN sub_category TEXT")
-        if "is_sub" not in columns:
-            cursor.execute("ALTER TABLE tasks ADD COLUMN is_sub INTEGER DEFAULT 0")
-        if "completion_override" not in columns:
-            cursor.execute("ALTER TABLE tasks ADD COLUMN completion_override INTEGER")
-        for name, sql_type in [("task_type", "TEXT"), ("habit_status", "TEXT"), ("legacy_actual_minutes", "INTEGER")]:
-            if name not in columns:
-                cursor.execute(f"ALTER TABLE tasks ADD COLUMN {name} {sql_type}")
-        cursor.execute("PRAGMA table_info(task_execution_segments)")
-        segment_columns = [row[1] for row in cursor.fetchall()]
-        if "time_category" not in segment_columns:
-            cursor.execute("ALTER TABLE task_execution_segments ADD COLUMN time_category TEXT")
-        if "included" not in segment_columns:
-            cursor.execute("ALTER TABLE task_execution_segments ADD COLUMN included INTEGER NOT NULL DEFAULT 1")
-        if "is_estimated" not in segment_columns:
-            cursor.execute("ALTER TABLE task_execution_segments ADD COLUMN is_estimated INTEGER NOT NULL DEFAULT 0")
-        if "auto_stop_at" not in segment_columns:
-            cursor.execute("ALTER TABLE task_execution_segments ADD COLUMN auto_stop_at TEXT")
-        if "stopped_automatically" not in segment_columns:
-            cursor.execute("ALTER TABLE task_execution_segments ADD COLUMN stopped_automatically INTEGER NOT NULL DEFAULT 0")
-        correction_columns = {row[1] for row in cursor.execute('PRAGMA table_info(execution_quick_corrections)')}
-        for column in ('request_json', 'original_state_json'):
-            if column not in correction_columns:
-                cursor.execute(f'ALTER TABLE execution_quick_corrections ADD COLUMN {column} TEXT')
-        cursor.execute("PRAGMA table_info(reviews)")
-        review_columns = [row[1] for row in cursor.fetchall()]
-        for name, ddl in [
-            ("mood", "ALTER TABLE reviews ADD COLUMN mood TEXT NOT NULL DEFAULT ''"),
-            ("hardest_point", "ALTER TABLE reviews ADD COLUMN hardest_point TEXT NOT NULL DEFAULT ''"),
-            ("optimization_note", "ALTER TABLE reviews ADD COLUMN optimization_note TEXT NOT NULL DEFAULT ''"),
-            ("real_progress", "ALTER TABLE reviews ADD COLUMN real_progress TEXT NOT NULL DEFAULT ''"),
-            ("reflection_text", "ALTER TABLE reviews ADD COLUMN reflection_text TEXT NOT NULL DEFAULT ''"),
-            ("learning_outcome", "ALTER TABLE reviews ADD COLUMN learning_outcome TEXT NOT NULL DEFAULT ''"),
-        ]:
-            if name not in review_columns:
-                cursor.execute(ddl)
-        cursor.execute("PRAGMA table_info(gpt_collab_records)")
-        gpt_columns = [row[1] for row in cursor.fetchall()]
-        if gpt_columns:
-            for name, ddl in [
-                ("date_label", "ALTER TABLE gpt_collab_records ADD COLUMN date_label TEXT NOT NULL DEFAULT ''"),
-                ("prompt_text", "ALTER TABLE gpt_collab_records ADD COLUMN prompt_text TEXT NOT NULL DEFAULT ''"),
-                ("response_text", "ALTER TABLE gpt_collab_records ADD COLUMN response_text TEXT NOT NULL DEFAULT ''"),
-                ("adopted_text", "ALTER TABLE gpt_collab_records ADD COLUMN adopted_text TEXT NOT NULL DEFAULT ''"),
-                ("created_at", "ALTER TABLE gpt_collab_records ADD COLUMN created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP"),
-                ("updated_at", "ALTER TABLE gpt_collab_records ADD COLUMN updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP"),
-            ]:
-                if name not in gpt_columns:
-                    cursor.execute(ddl)
-        cursor.execute(
-            """CREATE TABLE IF NOT EXISTS task_execution_segments (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                plan_date TEXT NOT NULL,
-                task_id INTEGER NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
-                segment_kind TEXT NOT NULL,
-                label_id TEXT,
-                label_name TEXT,
-                started_at TEXT NOT NULL,
-                ended_at TEXT,
-                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-            )"""
-        )
-        cursor.execute("CREATE INDEX IF NOT EXISTS idx_execution_segments_plan_date ON task_execution_segments(plan_date)")
-        cursor.execute("CREATE INDEX IF NOT EXISTS idx_execution_segments_task_id ON task_execution_segments(task_id)")
+        # 先对已存在的历史表补齐列，再统一创建表与索引（包含依赖新列的局部索引）。
+        existing_tables = {
+            row[0]
+            for row in cursor.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()
+        }
+        for table, additions in _COLUMN_MIGRATIONS.items():
+            if table not in existing_tables:
+                continue
+            columns = {row[1] for row in cursor.execute(f'PRAGMA table_info("{table}")').fetchall()}
+            for name, ddl_suffix in additions:
+                if name not in columns:
+                    cursor.execute(f'ALTER TABLE "{table}" ADD COLUMN "{name}" {ddl_suffix}')
+        connection.executescript(SCHEMA)
 
 
 @contextmanager
 def connect(path: str | Path):
-    connection = sqlite3.connect(path)
+    connection = sqlite3.connect(path, timeout=15.0)
     connection.row_factory = sqlite3.Row
+    connection.execute("PRAGMA busy_timeout = 5000")
     connection.execute("PRAGMA foreign_keys = ON")
     try:
         yield connection

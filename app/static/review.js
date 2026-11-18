@@ -1,8 +1,7 @@
 /* 日复盘与周复盘共用入口；草稿按日期及自然周分别保留。 */
 if (page === 'review') {
   const query = new URLSearchParams(location.search);
-  const validDate = value => /^\d{4}-\d{2}-\d{2}$/.test(value || '') && !Number.isNaN(new Date(`${value}T12:00:00`).getTime());
-  let selectedDate = validDate(query.get('date')) ? query.get('date') : todayIso();
+  let selectedDate = PlanUI.validDate(query.get('date')) ? query.get('date') : todayIso();
   let selectedScope = query.get('scope') === 'weekly' ? 'weekly' : 'daily';
   let weekState = null;
   let reviewState = null;
@@ -13,6 +12,7 @@ if (page === 'review') {
   let serverValues = {};
   const saving = new Set();
   const saveMessages = new Map();
+  const saveErrors = new Set();
   let storageError = false;
   const storageKey = (scope, key) => `daily-plan:review-draft:v1:${scope}:${key}`;
   const groups = {review:'daily-review-save-status', dailyGPT:'daily-gpt-save-status',
@@ -20,8 +20,8 @@ if (page === 'review') {
   function statusTime(value) {
     const time = new Date(value);
     if (Number.isNaN(time.getTime())) return '';
-    const day = time.toLocaleDateString('en-CA');
-    return `${day === todayIso() ? '' : `${day} `}${time.toLocaleTimeString('zh-CN',{hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false})}`;
+    const day = time.toLocaleDateString('en-CA', { timeZone: 'Asia/Shanghai' });
+    return `${day === todayIso() ? '' : `${day} `}${time.toLocaleTimeString('zh-CN',{timeZone:'Asia/Shanghai',hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false})}`;
   }
   function draftTime(draft, fields) {
     const values = typeof draft.updatedAt === 'string' ? [draft.updatedAt]
@@ -53,12 +53,12 @@ if (page === 'review') {
     const scope = loaded.scope, key = scope === 'daily' ? loaded.date : loaded.end;
     const draft = draftFor(scope,key);
     $('#daily-save-summary').hidden = scope !== 'daily';
-    $('#daily-save-summary').classList.toggle('needs-attention', storageError || saving.size > 0 || Object.hasOwn(draft,'review') || [...saveMessages.values()].some(message=>message.startsWith('保存失败')));
+    $('#daily-save-summary').classList.toggle('needs-attention', storageError || saving.size > 0 || Object.hasOwn(draft,'review') || saveErrors.size > 0);
     if (scope === 'daily') {
       $('#daily-record-status').textContent = reviewState?.has_execution ? '学习记录已保存' : '还没有学习记录';
       const id = `daily:${key}:review`;
       $('#daily-review-state').textContent = saving.has(id) ? '复盘保存中…'
-        : saveMessages.get(id)?.startsWith('保存失败') ? '复盘保存失败，草稿已保留'
+        : saveErrors.has(id) ? '复盘保存失败，草稿已保留'
         : Object.hasOwn(draft,'review') ? '复盘有未保存修改'
         : reviewState?.has_review ? '复盘已保存' : '复盘待填写';
     }
@@ -71,12 +71,12 @@ if (page === 'review') {
       const localNote = storageError ? '暂存不可用，请勿关闭页面；请保存到服务器。'
         : `已在此设备暂存${localTime ? ` · ${localTime}` : ''}，尚未保存到服务器。`;
       const readTime = loaded.readAt ? ` · 核对于 ${statusTime(loaded.readAt)}` : '';
-      node.textContent = saving.has(id) ? '保存中…' : saveMessages.get(id)?.startsWith('保存失败') ? saveMessages.get(id) : dirty
+      node.textContent = saving.has(id) ? '保存中…' : saveErrors.has(id) ? saveMessages.get(id) : dirty
         ? localNote
         : saveMessages.get(id) || (group === 'review'
           ? reviewState?.has_review ? `复盘已保存到服务器${readTime}` : '复盘待填写；学习记录会单独保存。'
           : `已从服务器读取${readTime}`);
-      if (saveMessages.get(id)?.startsWith('保存失败')) node.textContent += ` ${localNote}`;
+      if (saveErrors.has(id)) node.textContent += ` ${localNote}`;
     }
   }
 
@@ -134,7 +134,7 @@ if (page === 'review') {
 
   async function saveGroup(scope,key,group,values,operation) {
     const id = `${scope}:${key}:${group}`;
-    saving.add(id); saveMessages.delete(id); renderSaveStatus();
+    saving.add(id); saveMessages.delete(id); saveErrors.delete(id); renderSaveStatus();
     try {
       await operation();
       const draft = draftFor(scope,key);
@@ -146,8 +146,10 @@ if (page === 'review') {
         Object.assign(serverValues,values);
         captureDraft();
       } else persistDraft(scope,key);
+      saveErrors.delete(id);
       saveMessages.set(id,`已保存到服务器 · ${statusTime(new Date().toISOString())}`);
     } catch(error) {
+      saveErrors.add(id);
       saveMessages.set(id,'保存失败；已保留草稿，请重试。');
       throw error;
     } finally { saving.delete(id); renderSaveStatus(); }
@@ -450,7 +452,10 @@ if (page === 'review') {
     if (!target || loaded.scope !== 'daily') return;
     if (!(await resetDailyDataFor(target))) return;
     dailyDrafts.set(target,{});persistDraft('daily',target);
-    for (const group of ['review','dailyGPT']) saveMessages.delete(`daily:${target}:${group}`);
+    for (const group of ['review','dailyGPT']) {
+      saveMessages.delete(`daily:${target}:${group}`);
+      saveErrors.delete(`daily:${target}:${group}`);
+    }
     invalidateCalendarMonth(target);
     if (selectedDate === target && selectedScope === 'daily') await loadWorkspace(target,'daily',false);
     toast('这一天的数据已清空');
@@ -503,8 +508,7 @@ if (page === 'review') {
     });
   };
 
-  api('/api/settings').then(async result => {
-    settings = result;
+  ensureSettings().then(async () => {
     if (!query.has('scope') && !openRequestedRecords && settings.weekly_review_mode === 'replace_day' && weekday(selectedDate) === Number(settings.weekly_review_day)) selectedScope = 'weekly';
     await bindSharedCalendarTrigger(dateButton,()=>selectedDate,nextDate => navigate(nextDate,settings.weekly_review_mode === 'replace_day' && weekday(nextDate) === Number(settings.weekly_review_day) ? 'weekly' : 'daily'),'选择复盘日期');
     await loadWorkspace(selectedDate,selectedScope,false);

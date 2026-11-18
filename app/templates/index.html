@@ -16,11 +16,13 @@
         <span class="carryover-button-label">待审池</span>
         <span id="carryover-dot" class="carryover-dot hidden" aria-hidden="true"></span>
       </button>
-      <div id="carryover-popover" class="carryover-popover hidden" aria-hidden="true">
+      <div id="carryover-popover" class="carryover-popover hidden" role="dialog" aria-label="待审池" aria-hidden="true">
         <div class="carryover-popover-head">
-          <div><p class="step">先处理昨天</p><h2>待审池</h2></div><span id="carryover-count" class="count">0</span></div>
-        <p id="carryover-empty" class="muted hidden">当前没有待审项。今天可以直接开始晨间校准。</p>
-        <p id="carryover-hint" class="muted">未完成不是债务。选择重排、拆小，或者干脆放下。</p>
+          <h2>待审池 <span id="carryover-count" class="count">0</span></h2>
+          <button id="carryover-close" type="button" class="ui-icon-button ui-icon-button-close" aria-label="关闭待审池" title="关闭待审池"><svg class="ui-icon" aria-hidden="true" focusable="false"><use href="/static/icons/ui.svg?v={{ static_version('icons/ui.svg') }}#close"></use></svg></button>
+        </div>
+        <p id="carryover-empty" class="muted hidden">当前没有未完成的具体待办。</p>
+        <p id="carryover-hint" class="muted">选择重排日期、拆小名称或直接放下。</p>
         <div id="carryover-popover-list" class="stack"></div>
       </div>
     </div>
@@ -36,7 +38,7 @@
 
 <div id="today-checkin-stage">
 <section class="panel checkin-panel">
-  <div class="section-heading"><div><p class="step">01 · 晨间校准</p><h2 id="checkin-title">填写今天的目标</h2></div></div>
+  <div class="section-heading"><div><h2 id="checkin-title">填写今天的目标</h2></div></div>
   <p id="target-edit-note" class="target-edit-note" hidden>修改本次清单的目标时长，其他安排保持不变。</p>
   <form id="checkin-form" novalidate>
     <h3>今天想做到多少？</h3><div id="morning-targets" class="form-grid"></div><p id="morning-total" class="time-summary">计划合计 0 分</p>
@@ -81,7 +83,6 @@
       <details id="sub-route-details" class="sub-route-details">
         <summary><span>副航线</span><span id="sub-route-count" class="badge">0 项</span></summary>
         <div class="sub-route-details-content">
-
           <div id="sub-route-list" class="task-list"></div>
         </div>
       </details>
@@ -103,3 +104,4 @@
 </section>
 </div>
 {% endblock %}
+{% block page_scripts %}<script src="/static/today.js?v={{ static_version('today.js') }}" defer></script>{% endblock %}

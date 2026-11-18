@@ -1,14 +1,17 @@
 from __future__ import annotations
 
 import json
+import logging
 from pathlib import Path
 
 import httpx
 from pydantic import ValidationError
 
 from app.schemas import AIPlanResult, MorningCheckIn, TaskDraft
+from app.services.prompts import parse_llm_json
 from app.services.task_rules import validate_ai_tasks
 
+logger = logging.getLogger(__name__)
 
 FALLBACK_SYSTEM_PROMPT = """You arrange a small daily task list from approved candidates.
 Return JSON only: {"tasks": [...]}. Keep every task within the supplied categories and preserve goal minutes.
@@ -29,7 +32,15 @@ def load_system_prompt(prompt_path: Path | None = None) -> str:
 
 
 class AIPlanner:
-    def __init__(self, base_url: str, api_key: str, model: str, timeout: float = 20, transport=None, prompt_path: Path | None = None):
+    def __init__(
+        self,
+        base_url: str,
+        api_key: str,
+        model: str,
+        timeout: float = 20,
+        transport=None,
+        prompt_path: Path | None = None,
+    ):
         self.base_url = base_url.rstrip("/")
         self.api_key = api_key
         self.model = model
@@ -49,7 +60,13 @@ class AIPlanner:
             "temperature": 0.2,
             "messages": [
                 {"role": "system", "content": self.system_prompt},
-                {"role": "user", "content": json.dumps({"state": payload_state, "candidates": [t.model_dump() for t in candidates]}, ensure_ascii=False)},
+                {
+                    "role": "user",
+                    "content": json.dumps(
+                        {"state": payload_state, "candidates": [t.model_dump() for t in candidates]},
+                        ensure_ascii=False,
+                    ),
+                },
             ],
         }
         try:
@@ -63,16 +80,28 @@ class AIPlanner:
                     )
                     if response.status_code < 500 or attempt == 1:
                         break
+                assert response is not None
                 response.raise_for_status()
             content = response.json()["choices"][0]["message"]["content"]
-            parsed = json.loads(content)
+            parsed = parse_llm_json(content)
             tasks = [TaskDraft.model_validate({**item, "source": "ai"}) for item in parsed["tasks"]]
-            if not validate_ai_tasks(tasks, checkin.available_minutes, required_main_categories={task.category for task in candidates if not task.is_sub}):
+            required_cats = {task.category for task in candidates if not task.is_sub}
+            if not validate_ai_tasks(tasks, checkin.available_minutes, required_main_categories=required_cats):
                 raise ValueError("AI task list violates local constraints")
             for candidate in candidates:
-                matching = next((task for task in tasks if task.category == candidate.category and task.is_sub == candidate.is_sub and task.title == candidate.title), None)
+                matching = next(
+                    (
+                        task
+                        for task in tasks
+                        if task.category == candidate.category
+                        and task.is_sub == candidate.is_sub
+                        and task.title == candidate.title
+                    ),
+                    None,
+                )
                 if not matching or matching.estimated_minutes != candidate.estimated_minutes:
                     raise ValueError("AI cannot change user goals")
             return AIPlanResult(tasks=tasks)
         except (httpx.HTTPError, KeyError, IndexError, TypeError, ValueError, json.JSONDecodeError, ValidationError) as exc:
+            logger.warning("AI 排期降级回退本地规则 (%s)", type(exc).__name__)
             return fallback.model_copy(update={"degraded_reason": type(exc).__name__})

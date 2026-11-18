@@ -2,27 +2,34 @@
 window.PlanVisuals = (() => {
   const palette = ['#b66e55','#99816b','#78685d','#a59172','#b29480','#ac8584'];
   function color(category) {
-    const known = {math:0,english:1,computer:2,rehab:3,reading:4,writing:5};
-    let index = known[category];
-    if (index === undefined) index = [...String(category)].reduce((sum,ch)=>sum+ch.charCodeAt(0),0)%palette.length;
-    return palette[index];
+    const meta = typeof categoryMeta === 'function' ? categoryMeta(category) : null;
+    let index = meta?.palette_index ?? {math:0,english:1,computer:2,rehab:3,reading:4,writing:5}[category];
+    if (index === undefined || index === null) {
+      index = [...String(category)].reduce((sum,ch)=>sum+ch.charCodeAt(0),0)%palette.length;
+    }
+    return palette[index % palette.length];
   }
   // 数学／英语采用Lucide Calculator／Languages（ISC），许可见icons/LICENSE.lucide.txt。
   // 图标与任务名称配对，不独自承担分类含义。
   function symbol(category) {
     const paths={
-      math:'<rect width="16" height="20" x="4" y="2" rx="2" /> <line x1="8" x2="16" y1="6" y2="6" /> <line x1="16" x2="16" y1="14" y2="18" /> <path d="M16 10h.01" /> <path d="M12 10h.01" /> <path d="M8 10h.01" /> <path d="M12 14h.01" /> <path d="M8 14h.01" /> <path d="M12 18h.01" /> <path d="M8 18h.01" />',
-      english:'<path d="m5 8 6 6" /> <path d="m4 14 6-6 2-3" /> <path d="M2 5h12" /> <path d="M7 2h1" /> <path d="m22 22-5-10-5 10" /> <path d="M14 18h6" />',
-      computer:'<rect x="3" y="4" width="18" height="13" rx="2"/><path d="M8 21h8M12 17v4"/>',
-      reading:'<path d="M12 6c-3-2-6-2-9-1v14c3-1 6-1 9 1 3-2 6-2 9-1V5c-3-1-6-1-9 1Zm0 0v14"/>',
-      rehab:'<path d="M7 10h10M7 14h10M3 7v10M7 5v14M17 5v14M21 7v10"/>',
-      writing:'<path d="m5 15 10-10 4 4L9 19l-5 1Zm10-10 2-2 4 4-2 2M5 15l4 4"/>',
+      calculator:'<rect width="16" height="20" x="4" y="2" rx="2" /> <line x1="8" x2="16" y1="6" y2="6" /> <line x1="16" x2="16" y1="14" y2="18" /> <path d="M16 10h.01" /> <path d="M12 10h.01" /> <path d="M8 10h.01" /> <path d="M12 14h.01" /> <path d="M8 14h.01" /> <path d="M12 18h.01" /> <path d="M8 18h.01" />',
+      languages:'<path d="m5 8 6 6" /> <path d="m4 14 6-6 2-3" /> <path d="M2 5h12" /> <path d="M7 2h1" /> <path d="m22 22-5-10-5 10" /> <path d="M14 18h6" />',
+      cpu:'<rect x="3" y="4" width="18" height="13" rx="2"/><path d="M8 21h8M12 17v4"/>',
+      book:'<path d="M12 6c-3-2-6-2-9-1v14c3-1 6-1 9 1 3-2 6-2 9-1V5c-3-1-6-1-9 1Zm0 0v14"/>',
+      activity:'<path d="M7 10h10M7 14h10M3 7v10M7 5v14M17 5v14M21 7v10"/>',
+      pen:'<path d="m5 15 10-10 4 4L9 19l-5 1Zm10-10 2-2 4 4-2 2M5 15l4 4"/>',
+      code:'<polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/>',
+      'git-branch':'<line x1="6" x2="6" y1="3" y2="15"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/>',
+      moon:'<path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/>',
+      bookmark:'<path d="m19 21-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16z"/>',
       distraction:'<path d="M4 12c4-7 12-7 16 0a19 19 0 0 1-4 4M4 4l16 16M7 16a14 14 0 0 1-3-4"/><path d="M11 9a3 3 0 0 1 4 4"/>',
       life:'<circle cx="12" cy="5" r="2.5"/><path d="M7 12c0-4 10-4 10 0v3h-2v6h-6v-6H7Z"/>',
       rest:'<path d="M8 5v14M16 5v14"/>',
       external:'<path d="M4 5h16v12H9l-5 4Zm4 4h8m-8 4h5"/>',
     };
-    return `<svg class="project-symbol" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">${paths[category]||'<rect x="4" y="4" width="16" height="16" rx="3"/><path d="M8 9h8m-8 6h5"/>'}</svg>`;
+    const iconKey = paths[category] ? category : (typeof categoryMeta === 'function' ? categoryMeta(category)?.icon_key : null);
+    return `<svg class="project-symbol" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">${paths[iconKey]||paths.bookmark}</svg>`;
   }
   const duration = seconds => formatMinutes(Math.floor(Math.abs(seconds)/60),Math.abs(seconds));
   function elapsed(seconds) {

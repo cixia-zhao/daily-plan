@@ -11,7 +11,7 @@ if(!base || !['127.0.0.1','localhost'].includes(new URL(base).hostname)) throw E
   const api=async(path,method='GET',data)=>{const r=await page.request.fetch(`${base}/api/${path}`,{method,data});assert(r.ok(),await r.text());return r.json();};
   const health=await api('system/health');assert(health.database_path.startsWith('/tmp/')&&!health.ai_enabled);
   const settings=await api('settings');await api('settings','PUT',{...settings,project_start_date:'2026-10-01'});
-  const day=new Date().toLocaleDateString('en-CA',{timeZone:'Asia/Shanghai'}),other='2026-10-13';
+  const day=new Date().toLocaleDateString('en-CA',{timeZone:'Asia/Shanghai'});const previous=new Date(day+'T12:00:00+08:00');previous.setDate(previous.getDate()-1);const other=previous.toLocaleDateString('en-CA',{timeZone:'Asia/Shanghai'});
   const plan=await api('daily-plans/draft','POST',{date:day,energy:'normal',day_type:'normal',target_minutes:{math:60,english:20,computer:0,rehab:0}});
   await api(`daily-plans/${day}/approve`,'POST');
   const math=plan.tasks.find(task=>task.category==='math'&&!task.is_sub);
@@ -22,7 +22,9 @@ if(!base || !['127.0.0.1','localhost'].includes(new URL(base).hostname)) throw E
   const start=async()=>{if(await page.locator('#execution-controls').isVisible()){if(!await page.locator('#execution-controls').evaluate(e=>e.classList.contains('is-closing')))await page.locator('#execution-controls-close').click();await page.locator('#execution-controls').waitFor({state:'hidden'});}await card.locator('.task-start-button').click();await card.locator('[data-start-label-id=""]').click();};
   await start();await page.waitForFunction(()=>document.querySelector('#execute-active-badge').textContent.includes('数学'));
   await page.locator('.chronology-browse').click();
-  const last=page.locator('.chronology-record').last();await page.locator('.execution-sheet-body').evaluate(e=>e.scrollTop=e.scrollHeight);
+  assert.equal(await page.locator('.chronology-record').count(),9,'全部记录页包含历史段与运行段');
+  await page.locator('.chronology-dismiss').click();
+  await page.locator('#execution-workpage').evaluate(n=>{const spacer=document.createElement('div');spacer.dataset.testSpacer='';spacer.style.height='700px';n.append(spacer);});
   for(const [width,height] of [[360,640],[390,844],[768,1024],[1024,680]]) {
    await page.setViewportSize({width,height});await page.waitForTimeout(350);await page.locator('.execution-sheet-body').evaluate(e=>e.scrollTop=e.scrollHeight);
    const header=await page.locator('.site-header').boundingBox(),current=await page.locator('#execute-current-panel').boundingBox(),stop=await page.locator('#execute-stop').boundingBox();
@@ -32,6 +34,7 @@ if(!base || !['127.0.0.1','localhost'].includes(new URL(base).hostname)) throw E
    if(width===390||width===768) await page.screenshot({path:`/tmp/daily-plan-sticky-${width}.png`});
   }
   await page.setViewportSize({width:390,height:844});
+  await page.locator('[data-test-spacer]').evaluate(n=>n.remove());
   assert.equal(await page.locator('#execute-choose-task').count(),0);
   await page.locator('#execution-controls-close').click();await card.scrollIntoViewIfNeeded();await page.locator('#execution-mini-open').click();
   const taskBox=await card.boundingBox(),currentBox=await page.locator('#execute-current-panel').boundingBox();
@@ -61,6 +64,7 @@ if(!base || !['127.0.0.1','localhost'].includes(new URL(base).hostname)) throw E
   await page.route(`**/api/daily-execution/${day}`,async route=>{const response=await route.fetch();const body=await response.json();body.active_segment.task_title='数学线性代数第二讲及配套练习'.repeat(5);body.active_segment.label_name='第二讲与错题整理';await route.fulfill({response,json:body});});
   await page.evaluate(()=>window.dispatchEvent(new Event('focus')));
   await page.waitForFunction(()=>document.querySelector('.execution-current-label')?.textContent.includes('错题整理'));
+  await page.waitForTimeout(450);
   const labelBox=await page.locator('.execution-current-label').boundingBox();
   assert(labelBox.x>=0&&labelBox.x+labelBox.width<=390&&labelBox.height>0);
   assert((await page.locator('#execute-stop').boundingBox()).y+44<=844);
@@ -70,10 +74,10 @@ if(!base || !['127.0.0.1','localhost'].includes(new URL(base).hostname)) throw E
   assert(longHeader.y>=0&&longCurrent.y>=0&&longCurrent.y+longCurrent.height<=844);
   await page.screenshot({path:'/tmp/daily-plan-current-long-name.png'});
   await page.unroute(`**/api/daily-execution/${day}`);
-  // 历史执行地址转到复盘，读取失败显示错误，不残留今天的时钟。
+  // 历史执行页读取失败显示重试入口，不残留今天的时钟。
   await page.route(`**/api/daily-execution/${other}`,route=>route.fulfill({status:503,contentType:'application/json',body:'{"detail":"测试读取失败"}'}));
-  await page.goto(`${base}/execute?date=${other}`);await page.locator('#execution-controls').waitFor();assert(await page.locator('#execute-current-panel').isHidden());assert.match(await page.locator('#execution-records-empty').innerText(),/读取失败/);
-  await page.unroute(`**/api/daily-execution/${other}`);await page.locator('#execution-controls-close').click();await page.locator('#review-records-open').click();await page.waitForFunction(()=>document.querySelector('#execution-records-empty').textContent.includes('没有计划'));
+  await page.goto(`${base}/execute?date=${other}`);await page.locator('#history-error').waitFor();assert(await page.locator('#execute-current-panel').isHidden());assert.match(await page.locator('#history-error').innerText(),/读取失败/);
+  await page.unroute(`**/api/daily-execution/${other}`);await page.locator('#history-retry').click();await page.locator('#history-empty').waitFor();assert.match(await page.locator('#history-empty').innerText(),/没有计划/);
   await api(`daily-execution/${day}/stop`,'POST');
   await api('daily-reviews','POST',{date:day,effective_method:'旧方法',tomorrow_focus:'',reflection_text:'保留原有复盘正文'});
   const ready=()=>page.waitForFunction(()=>document.querySelector('#review-workspace-content')?.getAttribute('aria-busy')==='false'&&!document.querySelector('#review-workspace-content').classList.contains('is-loading'));

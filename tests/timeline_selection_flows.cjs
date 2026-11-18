@@ -22,7 +22,9 @@ if(!base||!['localhost','127.0.0.1'].includes(new URL(base).hostname))throw Erro
  let point=await at(long.id);await page.mouse.click(point.x,point.y);assert(await dialog.isHidden(),'轴上第一次点新记录也仅选中');await page.mouse.click(point.x,point.y);await dialog.waitFor();await page.locator('#segment-edit-close').click();
  point=await at(short.id);await page.mouse.click(point.x,point.y);assert(await dialog.isHidden(),'轴上首次点短段只选中');assert.equal(await page.locator('.chronology-nearby').count(),0,'单击短段不能自动展开记录列表');await page.mouse.click(point.x,point.y);await dialog.waitFor();await page.locator('#segment-edit-close').click();
  const positionBeforeSync=await scroller.evaluate(el=>el.scrollLeft);
- await Promise.all([page.waitForResponse(r=>r.url()===`${base}/api/daily-execution/${day}`&&r.request().method()==='GET'),page.evaluate(()=>window.dispatchEvent(new Event('focus')))]);
+ let focusReads=0;const countFocusReads=r=>{if(r.url()===`${base}/api/daily-execution/${day}`&&r.method()==='GET')focusReads++;};page.on('request',countFocusReads);
+ await page.evaluate(()=>window.dispatchEvent(new Event('focus')));await page.waitForTimeout(300);page.off('request',countFocusReads);assert.equal(focusReads,0,'复盘记录抽屉回前台不常驻轮询');
+ await Promise.all([page.waitForResponse(r=>r.url()===`${base}/api/daily-execution/${day}`&&r.request().method()==='GET'),page.evaluate(day=>window.DailyPlanRecords.open(day),day)]);
  await page.waitForTimeout(100);assert.equal(await page.locator('.chronology-selection').getAttribute('data-segment-id'),String(short.id),'同步保留选择');assert(Math.abs(await scroller.evaluate(el=>el.scrollLeft)-positionBeforeSync)<2,'同步保留浏览位置');
  await page.evaluate(()=>{document.querySelector('.chronology-scroll').scrollLeft=0});await page.waitForTimeout(60);
  const before=await scroller.evaluate(el=>el.scrollLeft);await page.locator('.chronology-next').click();assert(await scroller.evaluate(el=>el.scrollLeft)>before,'箭头平移');

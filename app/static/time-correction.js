@@ -20,11 +20,7 @@ class TimeCorrectionDialog {
     this.back.onclick = () => { if (!this.busy) { if (this.picker) this.picker = null; else this.screen = 'home'; this.show(); } };
     this.dialog.addEventListener('cancel', event => { if (this.busy) event.preventDefault(); });
     this.dialog.addEventListener('close', () => this.opener.focus({preventScroll:true}));
-    this.dialog.addEventListener('click', event => {
-      if (event.target !== this.dialog || this.busy) return;
-      const box = this.dialog.getBoundingClientRect();
-      if (event.clientX < box.left || event.clientX > box.right || event.clientY < box.top || event.clientY > box.bottom) this.dialog.close();
-    });
+    if (typeof bindDialogBackdropClose === 'function') bindDialogBackdropClose(this.dialog, () => Boolean(this.busy));
     this.body.addEventListener('click', event => this.handleClick(event));
     this.body.addEventListener('change', event => {
       if (this.busy) return;
@@ -46,7 +42,7 @@ class TimeCorrectionDialog {
     this.feedback.querySelector('button').onclick = () => this.undo();
   }
   escape(value) { return String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
-  icon(name) { return `<svg class="ui-icon" aria-hidden="true" focusable="false"><use href="/static/icons/ui.svg#${name}"></use></svg>`; }
+  icon(name) { return typeof uiIcon === 'function' ? uiIcon(name) : `<svg class="ui-icon" aria-hidden="true" focusable="false"><use href="/static/icons/ui.svg#${name}"></use></svg>`; }
   get state() { return this.options.state(); }
   get activities() { return this.state?.correction_activities || []; }
   get shortcuts() { return this.state?.correction_shortcuts || []; }

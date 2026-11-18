@@ -32,6 +32,7 @@ CREATE TABLE IF NOT EXISTS tasks (
     sub_category TEXT,
     is_sub INTEGER DEFAULT 0
 );
+CREATE INDEX IF NOT EXISTS idx_tasks_plan_id ON tasks(plan_id);
 CREATE TABLE IF NOT EXISTS carryovers (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     task_id INTEGER NOT NULL UNIQUE REFERENCES tasks(id) ON DELETE CASCADE,
@@ -93,10 +94,14 @@ CREATE TABLE IF NOT EXISTS task_execution_segments (
     ended_at TEXT,
     included INTEGER NOT NULL DEFAULT 1,
     is_estimated INTEGER NOT NULL DEFAULT 0,
+    auto_stop_at TEXT,
+    stopped_automatically INTEGER NOT NULL DEFAULT 0,
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 CREATE INDEX IF NOT EXISTS idx_execution_segments_plan_date ON task_execution_segments(plan_date);
 CREATE INDEX IF NOT EXISTS idx_execution_segments_task_id ON task_execution_segments(task_id);
+CREATE INDEX IF NOT EXISTS idx_execution_segments_time_window ON task_execution_segments(started_at, ended_at);
+CREATE INDEX IF NOT EXISTS idx_execution_segments_active ON task_execution_segments(plan_date, started_at) WHERE ended_at IS NULL;
 CREATE TABLE IF NOT EXISTS execution_quick_corrections (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     plan_date TEXT NOT NULL,
@@ -106,7 +111,9 @@ CREATE TABLE IF NOT EXISTS execution_quick_corrections (
     continuation_segment_id INTEGER NOT NULL REFERENCES task_execution_segments(id) ON DELETE CASCADE,
     minutes INTEGER NOT NULL,
     time_category TEXT NOT NULL,
-    created_at TEXT NOT NULL
+    created_at TEXT NOT NULL,
+    request_json TEXT,
+    original_state_json TEXT
 );
 CREATE TABLE IF NOT EXISTS task_duration_records (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -118,6 +125,7 @@ CREATE TABLE IF NOT EXISTS task_duration_records (
     included INTEGER NOT NULL DEFAULT 1,
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
+CREATE INDEX IF NOT EXISTS idx_duration_records_task_id ON task_duration_records(task_id);
 CREATE TABLE IF NOT EXISTS vocabulary_daily_counts (
     plan_date TEXT PRIMARY KEY,
     new_words INTEGER NOT NULL CHECK(new_words >= 0 AND new_words <= 10000),
@@ -138,7 +146,7 @@ CREATE TABLE IF NOT EXISTS execution_reminders (
     error TEXT,
     claimed_at TEXT
 );
-CREATE INDEX IF NOT EXISTS idx_reminders_due ON execution_reminders(status,due_at);
+CREATE INDEX IF NOT EXISTS idx_reminders_due ON execution_reminders(status, due_at);
 CREATE TABLE IF NOT EXISTS daily_reset_snapshots (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     plan_date TEXT NOT NULL,

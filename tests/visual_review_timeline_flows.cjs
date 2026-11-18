@@ -125,13 +125,13 @@ if(!base||!['127.0.0.1','localhost'].includes(new URL(base).hostname))throw Erro
   assert.match(await page.locator('#segment-edit-error').innerText(),/变化|停止/);
   assert.equal((await api(`daily-execution/${today}`)).active_segment,null);
   await page.locator('#segment-edit-close').click();
-  // 有恢复快照时，两个次要操作仍与日期处于紧凑标题行。
+  // 有恢复快照时，标题与日期操作在手机两行内，保留44px触控区。
   await api(`daily-data/${day}`,'DELETE');
   await page.goto(`${base}/review?date=${day}`);await page.locator('#restore-reset').waitFor({state:'visible'});
   for(const width of [360,390]){
    await page.setViewportSize({width,height:844});
    const hero=await page.locator('.hero').boundingBox(),restore=await page.locator('#restore-reset').boundingBox();
-   assert(hero.height<=54&&restore.height>=44,'恢复记录入口不能重新挤出多行顶部');
+   assert(hero.height<=100&&restore.height>=44,'恢复记录入口与日期保持两行以内 '+JSON.stringify({width,hero,restore}));
    assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
   }
   await page.screenshot({path:'/tmp/daily-plan-refined-restore-390.png'});

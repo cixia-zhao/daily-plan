@@ -1,144 +1,80 @@
-# 今日航线
+# 今日航线（Daily Plan）
 
-> 当前正式版本：2026-11-15 19:50:18（中国时间）应用`a83e9f7`，已上线沿计时卡片圆角边框推进的今日目标进度，目标信息与卡片一起移动；矮屏保留记录及快捷操作的滚动空间。备份、验收及回退见[本轮发布记录](docs/releases/2026-11-15-goal-border.md)。此前各阶段说明按历史理解。
+一套面向个人深度学习与秩序重建的日常闭环 Web 应用。围绕**晨间定目标 → 执行台真实计时 → 日周复盘与 GPT 协作**三条主线运转，采用暖沙纸书刊视觉风格、SQLite 单文件存储与零构建原生前后端架构。
 
-> 历史正式版本（2026-10-17 23:34:35，中国时间）：应用`dc7d39c`已上线时间分类、紧凑时间轴、保存时间、周范围／同期比较、稳定执行区、鱼骨连接与可选成果；HTTPS续期故障已修复。2026-10-18已追加接通正式ntfy提醒，生产configured=true；手机使用流量、代理开启时已确认锁屏收到，到点计时继续。代理关闭与长期省电后台尚未专门测试。备份、验证与回退见[本轮发布记录](docs/releases/2026-10-17-time-review.md)，下方“未部署／预览”按历史理解。
+---
 
-> 调研第一部分五项、第二部分五项及本日执行交互改进已发布；剩余前端与维护建议尚未全部实施，详见HANDOFF.md当前状态。
+## 核心闭环能力
 
-一个单用户的每日计划与执行 Web App，把“早上生成草稿、人工确认、白天记录执行、晚上复盘”串成一条航线。
+1. **今天（`/`）**：按自定主航线科目填写当日目标分钟（支持历史常用分钟快捷候选），一键生成规则或 AI 辅助草稿；支持主副航线互换、子科目切换，以及无原生弹窗的内联纸面待审池（重排、拆小、放下）。
+2. **执行（`/execute`）**：专注课程推进与秒级时间段记录。支持有效学习细分切换、分心与休息/生活活动归类、活动到点提醒（`ntfy`）、计时卡圆角周长目标进度、预设自动停止、一键「修正时间」（支持划出刚才活动或补回已开始学习，可随时撤销）、英语背单词词数累计，以及历史日期只读回顾与时间段补记（`/execute?date=YYYY-MM-DD`）。
+3. **复盘（`/review`）**：同页整合自然周进度条、日复盘与周复盘。自动核算学习有效率（`有效 ÷ (有效 + 分心)`，休息与生活单列不惩罚有效率）、前一日/上周同期对比图表；收尾表单本机防丢暂存，支持一键复制结构化事实与 ChatGPT 深聊并留档。
+4. **GPT 工作台（`/gpt-workbench`）与设置（`/settings`）**：管理单日/单周协作提示词模板（支持防抖自动保存与历史留档查阅）；自定义主航线项目（最多 11 项）、晨间偏好、执行与有效细分标签，随时一键导出完整 SQLite 数据库快照。
+5. **可安装 PWA**：支持桌面与手机主屏幕独立窗口安装、断网友好提示页与网络恢复自动重连探测，绝不在后台偷偷重放写入请求。
 
-## 当前状态
+---
 
-- 线上站点：`https://120.55.53.215/`（2026-10-10 已验证，浏览器收藏此地址）
-- 入口：Nginx + 可信 IP HTTPS 证书，保留原访问密码；旧 Tailscale Funnel 地址目前缺少公共 DNS 记录
-- GitHub：`https://github.com/cixia-zhao/daily-plan`，当前为公开仓库
-- 主分支：`main`
-- 主要开发设备：Arch 主机
-- 接力开发设备：小米平板 Linux
-- 阿里云：只负责运行、数据和备份，不承担日常开发
-- 生产服务：`daily-plan.service`，监听 `127.0.0.1:8000`
-- 生产数据：`/var/lib/daily-plan/daily_plan.db`
-- 自动备份：每天 03:30，保存在 `/var/backups/daily-plan`
+## 目录结构
 
 ```text
-Arch / 小米平板  -- Commit + Push -->  GitHub
-                                            |
-                                            +--> 阿里云部署已确认版本
-
-GitHub：源码版本中心
-阿里云：运行程序 + SQLite 真实数据 + 备份
+daily-plan/
+├── app/
+│   ├── main.py                  # FastAPI 应用工厂、认证与缓存头中间件、页面与 PWA 路由
+│   ├── api.py                   # 兼容导出门面
+│   ├── auth.py                  # 单用户 Argon2 密码校验与签名 Cookie 会话
+│   ├── database.py              # SQLite 连接管理（busy_timeout）与幂等 Schema 演进
+│   ├── models.py                # 完整数据表与索引定义
+│   ├── schemas.py               # Pydantic 请求与响应契约
+│   ├── routers/                 # 按领域拆分的 API 路由（plans / execution / reviews / settings）
+│   ├── services/                # 核心领域服务（clock / catalog / prompts / execution_engine / review_engine 等）
+│   ├── templates/               # Jinja2 服务端模板
+│   └── static/                  # 原生 CSS 设计系统与按需拆分的页面 JS 模块、SVG 精灵图、PWA 资源
+├── deploy/                      # 阿里云 systemd/Nginx 配置、release.py 原子发布与数据零损迁移校验脚本
+├── tests/                       # Pytest 后端/契约测试 + Playwright 隔离多视口回归脚本（.cjs）
+├── docs/                        # 现役架构、接口、设计偏好、运维手册（历史归档位于 docs/archive/）
+├── preview-ui.sh                # 独立测试库 UI 预览启动脚本
+└── HANDOFF.md                   # 当前线上发布状态、回退方式与最新开发交接单
 ```
 
-## 核心使用流程
+---
 
-1. 在“今天”页填写目标分钟，可点常用／历史候选；主项目在设置自由配置。精力与当天类型默认隐藏，设置可分别恢复。
-2. 本地规则生成草稿，修改后点“确认并进入执行台”；只想先存下时点“暂存草稿”。
-3. 执行台显示当前段时分秒与当天项目有效进度；任何已列项目（包括0目标）都能开始。忘切活动可用“修正时间”的快捷项或详细补记划出估计时间并继续学习；英语左侧“记词数”填当天新学／复习累计，不折算分钟。
-4. 晚上进入统一“复盘”页，默认当天；顶部选择本周其他日期或周复盘。
+## 本地开发与独立预览
 
-项目坚持：草稿必须人工确认；计划是目标，执行是实际。习惯、每日目标留在当天，只有用户明确选择的具体待办未完成时进入待审池，仍不自动顺延。
-
-GPT 协作目前是手工链路：复制提示词到外部对话，再把有用结果贴回项目留档；它不会自动替用户做决策。
-
-## 目标与实际记录（2026-10-11）
-
-- 数学 240、英语 30、408 60，合计 330 分钟可直接保存确认；旧可用时间不再限制目标，也不会裁剪目标。
-- 408 目标 0 也可开始和停止计时，原目标保持 0；刷新保留计时，切换自动结束上一段。
-- 执行台“临时添加活动”只追加当天活动，复用现有类别，不重新生成计划。
-- “事项类型”分习惯、每日目标、具体待办。运动默认习惯，日常学习默认每日目标；习惯可记录做了、没做、休息。具体待办必须主动勾完成，花满时间不会代替完成事项。
-- 英语卡片与执行台顶部有“背单词 · 录入分钟”：默认当前查看日期、英语、背单词和墨墨来源。多次录入支持新增、修改、删除；只有分钟数，不生成起止时间。
-- 明确的背单词计时与墨墨记录同时存在时，由用户选择分别学习保留两份、只保留墨墨或只保留计时。英语阅读不视为重复。排除的记录仍保留并标注，不静默删除。
-- 单日、已保存执行记录的周统计和 GPT 导出采用同一口径，英语中的背单词是子集，不能再加到总实际分钟中。
-
-本次产品调整完成开发与验证，未部署；提交与推送由用户另行明确授权。新增持久化字段与时长表采用补字段、补表迁移；上线前必须备份 SQLite，并先对副本迁移验收。历史计划的可用时间、原目标、旧运动记录和已有待审项保留。
-
-## 技术与目录
-
-- FastAPI + Jinja2
-- SQLite
-- 原生 JavaScript + CSS
-- Python 3.11+；生产当前使用 Python 3.12
-
-```text
-app/main.py          应用入口、页面路由和登录
-app/api.py           计划、执行、复盘、设置和备份接口
-app/services/        本地规则与可选 AI 兼容逻辑
-app/templates/       页面模板
-app/static/          前端脚本和样式
-tests/               自动测试
-deploy/              服务器运行、备份与 HTTPS 配置
-```
-
-## 本地开发
-
+### 1. 环境准备（Python 3.12）
 ```bash
-git clone git@github.com:cixia-zhao/daily-plan.git
-cd daily-plan
-python -m venv .venv
-.venv/bin/python -m pip install -e ".[dev]"
-.venv/bin/python -m uvicorn app.main:app --reload
+python3.12 -m venv .venv-preview
+.venv-preview/bin/pip install -e ".[dev]"
+cp -n .env.example .env
 ```
 
-本地默认地址是 `http://127.0.0.1:8000`。开发模式默认不要求生产登录密码。
-
-提交前验证：
-
+### 2. 启动独立 UI 预览（推荐验收方式）
+使用独立预览数据库 `data/ui-preview.db`，与正式数据完全隔离：
 ```bash
-.venv/bin/python -m pytest -q
-node --check app/static/app.js
-.venv/bin/python -m compileall -q app tests
+./preview-ui.sh --lan
+```
+启动后终端会输出本机与局域网访问地址（默认端口 `8765`，页面顶部带有「UI 预览 · 独立测试数据」横幅）。
+
+### 3. 运行隔离测试套件
+```bash
+# 1. JS 语法与前端网络恢复单元测试
+for f in app/static/*.js app/static/pwa/*.js; do node --check "$f"; done
+node tests/network_recovery.cjs
+
+# 2. 全量 Python 单元与接口契约测试（强制使用临时库）
+TMP_DB=$(mktemp -d) && APP_RUNTIME=development DATABASE_PATH="$TMP_DB/test.db" DAILY_PLAN_BACKUP_DIR="$TMP_DB/backups" .venv-preview/bin/python -m pytest -q && rm -rf "$TMP_DB"
+
+# 3. 真实 Chromium 多视口隔离端到端测试
+.venv-preview/bin/python tests/run_isolated_browser.py tests/mobile_flows.cjs
+.venv-preview/bin/python tests/run_pwa_browser.py
+
+# 提醒交互专项：仅在临时库模拟通知，不外发
+.venv-preview/bin/python tests/run_isolated_browser.py tests/notification_time_flows.cjs --preview-notifications
 ```
 
-2026-10-11 开发副本：Python 3.12.14 下 80 项测试通过（含 16 个新增场景）；手机 390×844 浏览器流程通过，详见 HANDOFF。2026-09-27 的服务器 64 项测试为历史结果。Arch 的 Python 3.14 与当前 FastAPI/Starlette `TestClient` 组合会卡住，开发测试建议优先使用与生产一致的 Python 3.12。
+全量浏览器回归覆盖 `tests/*_flows.cjs`：普通场景使用 `run_isolated_browser.py`，`notification_time_flows.cjs` 额外传入 `--preview-notifications`，`pwa_flows.cjs` 使用专用 `run_pwa_browser.py`。局域网预览地址每次按当前默认路由动态识别，切换手机热点后以新启动输出为准。
 
-## 生产环境
+---
 
-“生产环境”是服务器上正在给用户使用的那一份：
+## 生产部署与回退简述
 
-```text
-/srv/workspaces/daily-plan             部署用源码副本，不在这里开发
-/opt/daily-plan/current                正在运行的程序
-/etc/daily-plan/daily-plan.env         生产配置与 Secret
-/var/lib/daily-plan/daily_plan.db      真实运行数据
-/var/backups/daily-plan                服务器本机备份
-```
-
-不要在生产目录直接开发，不要把 `.env`、密码、API Key 或 SQLite 数据库提交到 Git。部署前先备份数据库并确认 GitHub 版本已测试。
-
-## 文档
-
-- [Tutor.md](Tutor.md)：日常操作、多设备接力和 Agent 快速概览
-- [HANDOFF.md](HANDOFF.md)：当前状态、风险和未完成事项
-- [docs/README.md](docs/README.md)：模块文档索引
-- [docs/server-https-entry.md](docs/server-https-entry.md)：当前 HTTPS 入口、服务器维护、证书续期及 2026-10-10 修复记录
-- [docs/cloud-private-deploy.md](docs/cloud-private-deploy.md)：历史 Tailscale 私有部署方案
-- [docs/termux-guide.md](docs/termux-guide.md)：历史手机 Termux 方案，已不是当前主架构
-
-## 所有开发与测试先使用独立环境
-
-本机项目目录运行 `./preview-ui.sh --lan`，终端会给出随当前热点/Wi-Fi 自动检测的预览地址。手机与电脑打开同一个地址，网页顶部显示“UI 预览 · 独立测试数据”。改样式或脚本后刷新；Python 修改会自动重载。结束按 Ctrl+C。
-
-预览服务使用 `data/ui-preview.db` 和 `data/ui-preview-backups/`，不复制服务器数据、不调用 AI。已发现模块导入仍会初始化默认数据库路径，尚未修复，详情见 [审视报告](docs/project-review-2026-10-14.md)。测试记录保留，重启不用重新填；不要在预览中记录正式学习数据。只有本机查看时运行 `./preview-ui.sh`。需要指定解释器可设置 `PREVIEW_PYTHON`，默认使用项目 `.venv/bin/python`。
-
-手机开热点给电脑，或两者连接同一 Wi-Fi 时使用 `--lan`。如果访问不了，先确认手机浏览器/代理允许直连局域网、电脑仍在线，以及路由器没有设备隔离；不要将预览端口映射到公网。局域网预览使用现有开发模式，无须登录，只放测试数据。
-
-固定流程：独立环境开发 → 隔离数据验证 → 需要时本机/手机试用 → 确认发布版本 → 按授权提交推送与正式部署。该约定适用于 UI、接口、业务规则、统计和迁移；自动化测试用临时数据库，迁移先在备份副本验证。纯后端检查不必启动网页。不要为了测试或查看效果而更新正式网站。
-
-### 手机与平板的紧凑今天页（2026-10-11 预览）
-
-晨间四项目标采用两列输入，精力三档横排；草稿和正式清单用主、副航线按钮切换。默认每项显示名称、目标或实际时间以及“设置”，事项类型、完成标准、细分类别、排序与航线调整放在设置弹窗；点“完成”关闭，随后保存或确认清单。调整航线会关闭弹窗并切到另一组，选择“与此项交换”完成调整。
-
-常用默认清单优先在一屏内完成目标填写和确认。保持输入与常用按钮至少 44px，不通过缩小字体或禁止滚动强塞内容。大量临时项目、长说明、异常提示、键盘展开及较矮视口仍可能需要滚动；详细历史和复盘不要求全部塞入一屏。
-
-已用独立数据验证晨间首屏与清单首屏，手机 360×640、390×720，平板 768×1024、1024×680，电脑 1280×720。详细设置、主副交换、保存及原有常用记录流程通过；81 个 Python 3.12 测试、JS 语法和编译检查通过。实体手机/平板效果待用户试用，尚未部署正式站点。
-
-### 今天页视觉层级更新（2026-10-11，独立预览）
-
-手机是紧凑清单，平板是左侧清单与右侧目标概览。绿色“确认计划”是主要操作，“保存修改”和调整目标是次要操作；行尾“···”打开原有详细设置。目标分钟仍可直接编辑。主要安排/其他活动分别对应原主/副航线，不改变业务含义。详见 [设计参考与验证](docs/design-references.md)。
-
-## 暖纸主题与去模板感（2026-10-11，当前预览）
-
-用户认可上一版排版，但不喜欢绿色，指定参考 Claude Code 产品官网。本次实读官网公开 CSS，以 #faf9f5 暖纸色、#141413 炭黑与少量陶土色调整；保留手机清单和平板概览布局。科目标识统一暖灰，移除主按钮阴影与装饰箭头；概览文字改成具体操作说明。标题用系统衬线字体，输入和正文保留系统无衬线。
-
-视觉偏好以根目录 DESIGN.md 为准；此前文档中绿色主题描述是上一版状态。独立预览已更新，81 个 Python 3.12 测试及手机/平板首屏与常用操作流程通过，文字对比度与实际截图已检查。尚未提交、推送或部署；实体设备这一版等待用户查看。
+正式环境运行于阿里云 Linux（`systemd` + `Nginx` + SQLite 单文件）。最新线上提交哈希、备份快照校验与原子回退步骤统一以 [HANDOFF.md](HANDOFF.md) 和 [docs/releases/2026-11-15-goal-border.md](docs/releases/2026-11-15-goal-border.md) 为准。
