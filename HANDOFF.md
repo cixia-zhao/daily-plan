@@ -10,7 +10,7 @@
 
 新增 `floating_control_flows.cjs` 覆盖原问题复现、三视口固定定位、滚动不漂移、鼠标/真实触屏拖动、防误点、位置恢复、屏内边界与键盘打开。顺带修正快捷修正用例对运行中汇总强制等于600秒的跨秒误报，改为验证补回段恰为600秒，且汇总等于600秒加随后继续计时的秒数。
 
-本机234项pytest、31组浏览器场景均已验证通过（快捷修正旧用例修正后重跑通过），JS语法与网络恢复单测通过；独立预览已更新。作为刚发布版本的缺陷修复，沿用用户刚才的推送部署授权，准备同步线上；正式结果将在完成后补记。
+本机234项pytest、31组浏览器场景均已验证通过（快捷修正旧用例修正后重跑通过），JS语法与网络恢复单测通过；独立预览已更新。作为刚发布版本的缺陷修复，沿用用户刚才的推送部署授权，应用提交 `9190b1d0584d5e7a4e4858786ce5b293092ee391` 已推送，于中国时间 **22:38:41** 上线。服务器234项隔离测试通过（48.62秒），备份迁移、独立verify与公网36项静态资源校验均通过，生产配置保持、服务active/running、NRestarts=0。详见 [悬浮入口修复发布单](docs/releases/2026-11-18-floating-control.md)。
 
 ---
 
@@ -57,12 +57,12 @@
 ## 二、当前线上生产环境基线
 
 - **正式网址**：`https://120.55.53.215/`（SSH 别名 `aliyun`，部署用户 `codexdev`）
-- **当前运行版本**：`2295d1744c560c57cb287aef1ba71cc9fabb400e`（2026-11-18 发布：全栈拆分、交互优化、只读保证与文档归档）
-- **程序入口**：`/opt/daily-plan/current -> /opt/daily-plan/releases/2295d1744c560c57cb287aef1ba71cc9fabb400e`
+- **当前运行版本**：`9190b1d0584d5e7a4e4858786ce5b293092ee391`（2026-11-18 22:38 发布：悬浮入口固定定位、纯图标与拖动停靠）
+- **程序入口**：`/opt/daily-plan/current -> /opt/daily-plan/releases/9190b1d0584d5e7a4e4858786ce5b293092ee391`
 - **生产数据库**：`/var/lib/daily-plan/daily_plan.db`
-- **最近生产备份**：`/var/backups/daily-plan/predeploy-pwa-2295d17-20261118-212237.db`
-- **发布结果记录**：`/var/backups/daily-plan/deployment-pwa-2295d17-20261118-212237.json`
-- **上一稳定版本（需要紧急回退时使用）**：`a83e9f7afc05f33d469902080fd7ccdb8b1b4080`
+- **最近生产备份**：`/var/backups/daily-plan/predeploy-pwa-9190b1d-20261118-223838.db`
+- **发布结果记录**：`/var/backups/daily-plan/deployment-pwa-9190b1d-20261118-223838.json`
+- **上一稳定版本（需要紧急回退时使用）**：`2295d1744c560c57cb287aef1ba71cc9fabb400e`
 
 ### 标准生产发布流程（待用户验收预览并明确授权后执行）
 1. 本机确认工作区干净，提交并推送 `main` 分支，记录完整 40 位提交哈希 `<COMMIT>`。
@@ -78,7 +78,7 @@
    ```
 
 ### 生产紧急回退命令
-若需要回退至上一稳定版 `a83e9f7afc05f33d469902080fd7ccdb8b1b4080`，先对上线后的当前库做一致性备份，再经上述授权入口执行以下命令。本轮无破坏性表结构变更，只切换程序，不以旧库覆盖新记录：
+若需要回退至上一稳定版 `2295d1744c560c57cb287aef1ba71cc9fabb400e`，先对上线后的当前库做一致性备份，再经上述授权入口执行以下命令。本轮无破坏性表结构变更，只切换程序，不以旧库覆盖新记录：
 ```bash
-systemctl stop daily-plan.service && ln -sfn /opt/daily-plan/releases/a83e9f7afc05f33d469902080fd7ccdb8b1b4080 /opt/daily-plan/current && systemctl start daily-plan.service && /opt/daily-plan/current/.venv/bin/python /opt/daily-plan/current/deploy/release.py verify a83e9f7afc05f33d469902080fd7ccdb8b1b4080
+systemctl stop daily-plan.service && ln -sfn /opt/daily-plan/releases/2295d1744c560c57cb287aef1ba71cc9fabb400e /opt/daily-plan/current && systemctl start daily-plan.service && /opt/daily-plan/current/.venv/bin/python /opt/daily-plan/current/deploy/release.py verify 2295d1744c560c57cb287aef1ba71cc9fabb400e
 ```
