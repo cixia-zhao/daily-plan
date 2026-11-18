@@ -8,7 +8,7 @@
 - **前端模块与样式契约**：[frontend.md](frontend.md)
 - **个人网页设计偏好**：[personal-web-design-preferences.md](personal-web-design-preferences.md)
 - **运维与手机通知配置**：[server-https-entry.md](server-https-entry.md)、[android-reminders.md](android-reminders.md)
-- **近期生产发布单**：[releases/2026-11-15-goal-border.md](releases/2026-11-15-goal-border.md)、[releases/2026-11-06-time-correction-controls.md](releases/2026-11-06-time-correction-controls.md)
+- **近期生产发布单**：[releases/2026-11-18-full-stack-refactor.md](releases/2026-11-18-full-stack-refactor.md)、[releases/2026-11-15-goal-border.md](releases/2026-11-15-goal-border.md)、[releases/2026-11-06-time-correction-controls.md](releases/2026-11-06-time-correction-controls.md)
 
 ## 冷归档说明（`docs/archive/`）
 - 历史单次调研、十月份旧发布单、过程截图与早期废弃 Windows/Termux 脚本已统一移入 [archive/](archive/README.md)。**日常开发与 AI 代理严禁默认扫描 `docs/archive/`**。

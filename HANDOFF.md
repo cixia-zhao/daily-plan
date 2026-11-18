@@ -6,7 +6,7 @@
 
 ## 接手复核与补修（2026-11-18）
 
-上一代理停在「本地重构完成、等待预览验收」；所有修改仍保留在 `main` 工作区，未提交、未推送、未登录生产服务器。本次根据当前代码重新验证，补齐以下遗漏：
+接手时，上一代理停在「本地重构完成、等待预览验收」，当时所有修改尚未提交、推送或部署。本次根据当前代码重新验证，补齐以下遗漏：
 
 - **GET 到期计时仍会隐式写库**：共享连接入口与 `/return-today` 原本仍会调用自动停止结算。现仅后台与写请求落库，GET 在内存中将到期段投影为停止状态，时长限定在截止时刻，「回到今天」据此正确跳到复盘。只读回归覆盖已结束、运行中、已到期三种状态，逐请求对比数据库完整转储。
 - **计时失败提示被网络恢复提前清除**：被动同步现在保留未确认操作提示，直到用户主动核对、关闭或重新操作；不重放失败的写请求。
@@ -16,13 +16,13 @@
 
 最终复核：`234` 项 pytest、全部 `30` 组浏览器场景（含 PWA 生命周期与通知模拟）、JS 语法与网络恢复单测全部通过；对重构前预览备份执行两次迁移，原字段与记录不变、完整性与外键检查通过。测试均使用 `/tmp` 隔离数据库并关闭真实 AI 与手机通知。浏览器逐项日志位于本机 `/tmp/daily-plan-handoff-final-browser/`（临时目录，不作为长期交接资料）。
 
-交接资料已同步到本文、`README.md`、`docs/backend-api.md` 与 `docs/frontend.md`。2026-11-18 用户已验收并明确授权提交、推送与生产部署，现进入正式发布流程。
+2026-11-18 用户已验收并明确授权提交、推送与生产部署。应用提交 `2295d1744c560c57cb287aef1ba71cc9fabb400e` 已推送 GitHub main，于中国时间 **21:22:41** 完成发布；独立 verify 与公网 HTTPS 只读验收均通过。详细记录见 [本次发布单](docs/releases/2026-11-18-full-stack-refactor.md)。收尾文档提交不改变线上应用版本。
 
 ---
 
-## 一、本轮进展：2026-11-18 全栈架构解耦、书刊化 UI 统一与技术债清理（已验收，准备发布）
+## 一、本轮进展：2026-11-18 全栈架构解耦、书刊化 UI 统一与技术债清理（已发布）
 
-- **当前状态**：**已完成代码重构、老文档归档与全套本地隔离测试，用户已验收并授权推送与部署；发布结果将在流程完成后补记**。
+- **当前状态**：**已完成代码重构、文档归档、用户验收、提交推送与正式部署；服务器 234 项隔离测试、迁移零损校验、36 项静态资源一致性及公网 HTTPS 验收通过，服务 active/running、NRestarts=0**。
 - **本机预览地址**：通过 `./preview-ui.sh --lan` 运行于独立测试库 `data/ui-preview.db`（备份副本位于 `data/ui-preview-backups/pre-refactor-20261118-180950.db`，已通过 `deploy/verify-migration.py` 零损校验）。
 
 ### 核心重构与优化清单
@@ -44,14 +44,15 @@
 
 ---
 
-## 二、当前线上生产环境基线（未变更）
+## 二、当前线上生产环境基线
 
 - **正式网址**：`https://120.55.53.215/`（SSH 别名 `aliyun`，部署用户 `codexdev`）
-- **当前运行版本**：`a83e9f7afc05f33d469902080fd7ccdb8b1b4080`（2026-11-15 发布：执行计时卡目标圆角周长进度与矮屏自适应）
-- **程序入口**：`/opt/daily-plan/current -> /opt/daily-plan/releases/a83e9f7afc05f33d469902080fd7ccdb8b1b4080`
+- **当前运行版本**：`2295d1744c560c57cb287aef1ba71cc9fabb400e`（2026-11-18 发布：全栈拆分、交互优化、只读保证与文档归档）
+- **程序入口**：`/opt/daily-plan/current -> /opt/daily-plan/releases/2295d1744c560c57cb287aef1ba71cc9fabb400e`
 - **生产数据库**：`/var/lib/daily-plan/daily_plan.db`
-- **最近生产备份**：`/var/backups/daily-plan/predeploy-pwa-a83e9f7-20261115-195016.db`
-- **上一稳定版本（需要紧急回退时使用）**：`d1ac39e0136734b3ad76b9abc7be36e5da6805c2`
+- **最近生产备份**：`/var/backups/daily-plan/predeploy-pwa-2295d17-20261118-212237.db`
+- **发布结果记录**：`/var/backups/daily-plan/deployment-pwa-2295d17-20261118-212237.json`
+- **上一稳定版本（需要紧急回退时使用）**：`a83e9f7afc05f33d469902080fd7ccdb8b1b4080`
 
 ### 标准生产发布流程（待用户验收预览并明确授权后执行）
 1. 本机确认工作区干净，提交并推送 `main` 分支，记录完整 40 位提交哈希 `<COMMIT>`。
@@ -59,15 +60,15 @@
    ```bash
    python3 /opt/daily-plan/current/deploy/release.py stage <COMMIT> --source-archive /tmp/daily-plan-release-source.tar --archive-sha <SHA256> --wheel-archive <WHEELS_TAR> --wheel-sha <WHEELS_SHA>
    ```
-3. 使用新版本目录自身的 `.venv/bin/python` 执行只读备份预检与正式原子切换（内置自动迁移双重核对与失败自动回滚）：
+3. 经 [已验证的服务器授权管理入口](docs/server-https-entry.md#服务器维护授权入口) 进入 root 管理会话，使用新版本目录自身的 `.venv/bin/python` 执行只读备份预检与正式原子切换（内置自动迁移双重核对与失败自动回滚）：
    ```bash
-   sudo /opt/daily-plan/releases/<COMMIT>/.venv/bin/python /opt/daily-plan/releases/<COMMIT>/deploy/release.py precheck <COMMIT>
-   sudo /opt/daily-plan/releases/<COMMIT>/.venv/bin/python /opt/daily-plan/releases/<COMMIT>/deploy/release.py deploy <COMMIT>
-   sudo /opt/daily-plan/releases/<COMMIT>/.venv/bin/python /opt/daily-plan/releases/<COMMIT>/deploy/release.py verify <COMMIT>
+   /opt/daily-plan/releases/<COMMIT>/.venv/bin/python /opt/daily-plan/releases/<COMMIT>/deploy/release.py precheck <COMMIT>
+   /opt/daily-plan/releases/<COMMIT>/.venv/bin/python /opt/daily-plan/releases/<COMMIT>/deploy/release.py deploy <COMMIT>
+   /opt/daily-plan/releases/<COMMIT>/.venv/bin/python /opt/daily-plan/releases/<COMMIT>/deploy/release.py verify <COMMIT>
    ```
 
 ### 生产紧急回退命令
-若新版本上线后需要回退至当前稳定版 `a83e9f7afc05f33d469902080fd7ccdb8b1b4080`（本轮无破坏性表结构变更，可直接切回软链）：
+若需要回退至上一稳定版 `a83e9f7afc05f33d469902080fd7ccdb8b1b4080`，先对上线后的当前库做一致性备份，再经上述授权入口执行以下命令。本轮无破坏性表结构变更，只切换程序，不以旧库覆盖新记录：
 ```bash
-ssh aliyun 'sudo systemctl stop daily-plan.service && sudo ln -sfn /opt/daily-plan/releases/a83e9f7afc05f33d469902080fd7ccdb8b1b4080 /opt/daily-plan/current && sudo systemctl start daily-plan.service && sudo /opt/daily-plan/current/.venv/bin/python /opt/daily-plan/current/deploy/release.py verify a83e9f7afc05f33d469902080fd7ccdb8b1b4080'
+systemctl stop daily-plan.service && ln -sfn /opt/daily-plan/releases/a83e9f7afc05f33d469902080fd7ccdb8b1b4080 /opt/daily-plan/current && systemctl start daily-plan.service && /opt/daily-plan/current/.venv/bin/python /opt/daily-plan/current/deploy/release.py verify a83e9f7afc05f33d469902080fd7ccdb8b1b4080
 ```

@@ -77,4 +77,4 @@ TMP_DB=$(mktemp -d) && APP_RUNTIME=development DATABASE_PATH="$TMP_DB/test.db" D
 
 ## 生产部署与回退简述
 
-正式环境运行于阿里云 Linux（`systemd` + `Nginx` + SQLite 单文件）。最新线上提交哈希、备份快照校验与原子回退步骤统一以 [HANDOFF.md](HANDOFF.md) 和 [docs/releases/2026-11-15-goal-border.md](docs/releases/2026-11-15-goal-border.md) 为准。
+正式环境运行于阿里云 Linux（`systemd` + `Nginx` + SQLite 单文件）。最新线上提交哈希、备份快照校验与原子回退步骤统一以 [HANDOFF.md](HANDOFF.md) 和 [docs/releases/2026-11-18-full-stack-refactor.md](docs/releases/2026-11-18-full-stack-refactor.md) 为准。
